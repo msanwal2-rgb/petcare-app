@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Leash — Pet Care Marketplace (Frontend MVP)
 
-## Getting Started
+A two-sided marketplace connecting **pet owners** with **caretakers** for
+walking, sitting, boarding, and daycare. This is a **frontend-only** build on
+realistic mock data, structured so a real backend can be swapped in without
+touching page or component code.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16 (App Router) + React 19 + TypeScript** — the brief specified
+  "Next.js 14+"; npm's `latest` now ships 16, which uses the same App Router
+  APIs.
+- **Tailwind CSS v4** — design tokens live in `app/globals.css` under `@theme`
+  (v4 is CSS-first; there is no `tailwind.config.js`).
+- **Framer Motion** — page transitions, scroll reveals, the animated leash line,
+  micro-interactions (all honor `prefers-reduced-motion`).
+- **sonner** — toast notifications. **React Hook Form + Zod** — forms.
+  **Zustand** — mock session + booking-in-progress state.
+- **next/image** for every photo, with blur placeholders and fixed aspect
+  ratios (no layout shift).
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # production build
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+No environment variables or backend required.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Trying it out
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+There's no real auth. Use the **Dev account switcher** (bottom-left, marked
+`DEV`) to jump between sample accounts, or use the demo buttons on `/login`:
 
-## Learn More
+- **Maya Chen** — owner with pets and active bookings
+- **Elena Petrova** — 5.0★ caretaker with incoming requests
+- Several dual-role accounts exist too (owner + caretaker toggle in the header)
 
-To learn more about Next.js, take a look at the following resources:
+Every `BookingStatus` and empty-data state is represented in the seed data, so
+all UI states are visible without manual setup.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+app/                     Routes (landing, search, caretaker, booking, dashboard, auth…)
+components/              Reusable UI (cards, skeletons, leash progress, calendar…)
+  ui/                    Primitives (Button, Field, Skeleton, Reveal, icons)
+lib/
+  api/                   Data layer — one file per domain. Pages call ONLY these.
+  mock-data/             Seed records + curated Unsplash photo constants
+  store/                 Zustand: session + booking draft
+  hooks/                 useAsync (loading→data→error)
+  utils.ts               Formatting, distance, labels
+types/                   Domain models (User, Pet, CaretakerProfile, Booking, Review)
+API_CONTRACTS.md         ← the backend handoff: every endpoint the API layer implies
+```
 
-## Deploy on Vercel
+## For the backend team
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Start with **`API_CONTRACTS.md`**. It lists every endpoint implied by
+`/lib/api/*` — method, path, request/response shapes, and which pages call each.
+Each function in `/lib/api` also carries a JSDoc block naming the real endpoint
+it stands in for. Replacing a mock implementation with real `fetch` calls is a
+one-file change per domain; the function signatures and return types stay
+identical.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Out of scope (mocked or omitted)
+
+Real auth, real payments (a mock "Confirm & Pay" step only), in-app messaging,
+background-check / ID-verification integrations, and any backend/database. See
+`docs/` for the original product foundation and build brief.
