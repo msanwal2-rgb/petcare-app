@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Neon integration local artifacts (not needed in repo)
+.agents/
+.claude/
+skills-lock.json

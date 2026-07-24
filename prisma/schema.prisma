@@ -1,0 +1,141 @@
+// Prisma schema for the Pet Care Marketplace ("Leash") backend.
+//
+// Design notes:
+// - Temporal fields (createdAt, dob, availability date, booking start/end) are
+//   stored as ISO *strings*, exactly as the frontend produces and consumes
+//   them. ISO-8601 sorts lexicographically = chronologically, so ordering and
+//   range filters work on strings without any timezone drift.
+// - Postgres string arrays back the small enum-ish lists (roles, species, etc.);
+//   values are validated with Zod at the API boundary.
+// - The response shapes in /types are reconstructed by the serializers in
+//   /lib/server/serialize.ts (nested address, vetContact, homeEnvironment,
+//   priceRange, distanceMiles).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id           String            @id
+  name         String
+  email        String            @unique
+  phone        String            @default("")
+  avatarUrl    String
+  roles        String[] // "owner" | "caretaker"
+  addressCity  String
+  addressState String
+  lat          Float
+  lng          Float
+  verified     Boolean           @default(false)
+  createdAt    String
+  pets         Pet[]
+  caretaker    CaretakerProfile?
+
+  @@map("users")
+}
+
+model Pet {
+  id                  String   @id
+  ownerId             String
+  owner               User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name                String
+  species             String // "dog" | "cat" | "other"
+  breed               String
+  sex                 String // "male" | "female"
+  dob                 String
+  weightLbs           Int
+  photoUrl            String
+  vaccinated          Boolean
+  allergies           String[]
+  medications         String[]
+  behaviorNotes       String
+  feedingInstructions String
+  vetName             String
+  vetPhone            String
+
+  @@index([ownerId])
+  @@map("pets")
+}
+
+model CaretakerProfile {
+  id                  String            @id
+  userId              String            @unique
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                 String
+  servicesOffered     String[] // ServiceType[]
+  serviceRadiusMiles  Int
+  acceptedSpecies     String[] // Species[]
+  fencedYard          Boolean
+  hasOtherPets        Boolean
+  smokeFree           Boolean
+  certifications      String[]
+  backgroundCheckStatus String // "verified" | "pending" | "none"
+  rating              Float
+  reviewCount         Int
+  responseRatePct     Int
+  pricing             PricingEntry[]
+  availability        AvailabilityDay[]
+
+  @@map("caretaker_profiles")
+}
+
+model PricingEntry {
+  id          String           @id @default(cuid())
+  caretakerId String
+  caretaker   CaretakerProfile @relation(fields: [caretakerId], references: [id], onDelete: Cascade)
+  serviceType String
+  unit        String // "hour" | "day"
+  rate        Float
+
+  @@index([caretakerId])
+  @@map("pricing_entries")
+}
+
+model AvailabilityDay {
+  id          String           @id @default(cuid())
+  caretakerId String
+  caretaker   CaretakerProfile @relation(fields: [caretakerId], references: [id], onDelete: Cascade)
+  date        String
+  slots       Json // { start: string; end: string }[]
+
+  @@index([caretakerId])
+  @@map("availability_days")
+}
+
+model Booking {
+  id            String   @id
+  ownerId       String
+  caretakerId   String // CaretakerProfile.id
+  petIds        String[]
+  serviceType   String
+  startDateTime String
+  endDateTime   String
+  notes         String   @default("")
+  status        String   @default("requested")
+  priceTotal    Float
+  createdAt     String
+
+  @@index([ownerId])
+  @@index([caretakerId])
+  @@map("bookings")
+}
+
+model Review {
+  id        String @id
+  bookingId String
+  fromUserId String
+  toUserId  String
+  rating    Float
+  comment   String
+  createdAt String
+
+  @@index([toUserId])
+  @@index([bookingId])
+  @@map("reviews")
+}

@@ -3,38 +3,21 @@
  */
 
 import type { Review } from "@/types";
-import { db, delay, nextId } from "./_db";
+import { getJson, postJson } from "./_client";
 
-/**
- * GET /api/users/:userId/reviews          (reviews written ABOUT this user)
- * 200 -> Review[]  (newest first)
- * Used on: /caretaker/[id] (caretaker's reviews), profile pages
- */
+/** GET /api/users/:userId/reviews -> Review[] (about this user, newest first) */
 export async function getReviewsForUser(userId: string): Promise<Review[]> {
-  return delay(
-    db.reviews
-      .filter((r) => r.toUserId === userId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  );
+  return getJson<Review[]>(`/api/users/${userId}/reviews`);
 }
 
-/**
- * GET /api/bookings/:bookingId/reviews
- * 200 -> Review[]
- * Used on: /booking/[id] (post-completion reviews)
- */
+/** GET /api/bookings/:bookingId/reviews -> Review[] */
 export async function getReviewsForBooking(
   bookingId: string
 ): Promise<Review[]> {
-  return delay(db.reviews.filter((r) => r.bookingId === bookingId));
+  return getJson<Review[]>(`/api/bookings/${bookingId}/reviews`);
 }
 
-/**
- * POST /api/bookings/:bookingId/reviews
- * Body: { fromUserId, toUserId, rating, comment }
- * 201 -> Review
- * Used on: /booking/[id] (leave a review after completion)
- */
+/** POST /api/bookings/:bookingId/reviews -> Review (201) */
 export async function createReview(input: {
   bookingId: string;
   fromUserId: string;
@@ -42,11 +25,6 @@ export async function createReview(input: {
   rating: number;
   comment: string;
 }): Promise<Review> {
-  const review: Review = {
-    ...input,
-    id: nextId("r"),
-    createdAt: "2026-07-08T12:00:00Z",
-  };
-  db.reviews.push(review);
-  return delay(review);
+  const { bookingId, ...body } = input;
+  return postJson<Review>(`/api/bookings/${bookingId}/reviews`, body);
 }
