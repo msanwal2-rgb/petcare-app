@@ -23,8 +23,24 @@ _Last updated: 2026-07-24. Written for the next session to hit the ground runnin
 - This is a **modified Next.js 16** — read `node_modules/next/dist/docs/` before using a framework feature. (Gotchas already hit: `middleware`→`proxy.ts`; async route `params`; Prisma pinned to 6.x because 7 needs Node ≥20.19.)
 
 ## Immediate activation items (need user credentials — quick)
-1. **Google sign-in** — user creates a Google OAuth app (redirect `https://petcare-app-drab.vercel.app/api/auth/callback/google`); set `AUTH_GOOGLE_ID` + `AUTH_GOOGLE_SECRET` on all Vercel scopes. Code already handles it; button auto-appears.
-2. **Real email delivery** — user creates a Resend account + verified sender; set `RESEND_API_KEY` + `EMAIL_FROM`; then flip `EMAIL_DEV_MODE=false`. Until then, verify/reset links are logged / surfaced in dev mode.
+
+### 1. Google sign-in (code 100% done — button already on /login AND /signup, hidden until configured)
+User deferred the OAuth-app setup but wants it. All that's left is credentials. Free, browser-only (~5–10 min):
+1. https://console.cloud.google.com → new project (e.g. "Leash").
+2. **APIs & Services → OAuth consent screen**: External; app name + support/dev email; no extra scopes needed; add your Google email(s) under **Test users** (Testing mode only lets test users in — fine for now; "Publish app" later to open to everyone, also free).
+3. **APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application**:
+   - **Authorized JavaScript origins:** `https://petcare-app-drab.vercel.app` and `http://localhost:3000`
+   - **Authorized redirect URIs:** `https://petcare-app-drab.vercel.app/api/auth/callback/google` and `http://localhost:3000/api/auth/callback/google` (exact — https, no trailing slash, or `redirect_uri_mismatch`).
+4. Copy **Client ID** + **Client Secret**, hand to the agent.
+5. Agent runs (all Vercel scopes + `.env.local`), then redeploys:
+   ```
+   printf '<ID>'     | vercel env add AUTH_GOOGLE_ID production   # + preview + development
+   printf '<SECRET>' | vercel env add AUTH_GOOGLE_SECRET production # + preview + development
+   ```
+   Button then appears automatically on both pages (provider detected via `getProviders()`); OAuth users are upserted into the `users` table by email in the `signIn` callback (`auth.ts`).
+
+### 2. Real email delivery
+User creates a Resend account + verified sender; set `RESEND_API_KEY` + `EMAIL_FROM` on all Vercel scopes; then flip `EMAIL_DEV_MODE=false`. Until then, verify/reset links are logged server-side / surfaced in dev mode.
 
 ## Phase 4 — Stripe payments (recommended next build)
 Goal: replace the mock "Confirm & Pay" with real Stripe Connect escrow (see `docs/pet-care-marketplace-foundation.md` §3/§5).

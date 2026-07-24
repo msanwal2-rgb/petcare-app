@@ -30,6 +30,10 @@ remember this is a modified Next.js 16 — read the relevant guide under
 `lib/server/*` structure. Add tests and run `npm test` (note: slow, ~18 min).
 Push to `main` to deploy, then smoke-test the live URL.
 
-Two smaller activation items you can knock out if I provide credentials:
-- **Google sign-in:** set `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+Two smaller activation items, both fully coded and just waiting on credentials I'll
+provide (see `next_plan.md` for exact steps):
+- **Google sign-in:** the "Continue with Google" button is already on both /login and
+  /signup (hidden until configured). I still need to create the Google OAuth app — when
+  I give you the Client ID + Secret, set `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` on all
+  Vercel scopes and redeploy.
 - **Real email:** set `RESEND_API_KEY` + `EMAIL_FROM`, then `EMAIL_DEV_MODE=false`.
