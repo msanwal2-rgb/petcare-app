@@ -33,6 +33,17 @@ export async function createUser(input: {
   return postJson<User>(`/api/users`, input);
 }
 
+/** POST /api/signup -> User (201) — creates an email/password account. */
+export async function registerAccount(input: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  roles?: UserRole[];
+}): Promise<User> {
+  return postJson<User>(`/api/signup`, input);
+}
+
 /** PATCH /api/users/:id -> User */
 export async function updateUser(
   id: string,

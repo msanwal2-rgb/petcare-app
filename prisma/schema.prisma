@@ -34,6 +34,9 @@ model User {
   lng          Float
   verified     Boolean           @default(false)
   createdAt    String
+  // Bcrypt hash for email/password login. Null for accounts created purely via
+  // an OAuth provider (e.g. Google) that never set a password.
+  passwordHash String?
   pets         Pet[]
   caretaker    CaretakerProfile?
 

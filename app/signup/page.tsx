@@ -6,8 +6,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { createUser } from "@/lib/api/users";
-import { useSession } from "@/lib/store/session";
+import { registerAccount } from "@/lib/api/users";
+import { loginWithPassword } from "@/lib/auth/session-client";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -21,7 +21,6 @@ type FormValues = z.infer<typeof schema>;
 
 export default function SignupPage() {
   const router = useRouter();
-  const { setUser } = useSession();
   const {
     register,
     handleSubmit,
@@ -30,17 +29,23 @@ export default function SignupPage() {
 
   async function onSubmit(values: FormValues) {
     try {
-      const user = await createUser({
+      await registerAccount({
         name: values.name,
         email: values.email,
+        password: values.password,
         phone: values.phone,
         roles: [],
       });
-      setUser(user);
+      // Establish a real session, then continue to role selection.
+      await loginWithPassword(values.email, values.password);
       toast.success("Account created — one quick step to go.");
       router.push("/onboarding");
-    } catch {
-      toast.error("Couldn’t create your account. Try again.");
+    } catch (e) {
+      const msg =
+        e instanceof Error && e.message.includes("already exists")
+          ? "That email is already registered. Try logging in."
+          : "Couldn’t create your account. Try again.";
+      toast.error(msg);
     }
   }
 

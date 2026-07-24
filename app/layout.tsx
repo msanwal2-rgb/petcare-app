@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PageTransition } from "@/components/PageTransition";
 import { ToastProvider } from "@/components/ToastProvider";
+import { SessionSync } from "@/components/SessionSync";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -45,6 +46,7 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${inter.variable} ${plexMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col bg-fog text-charcoal">
+        <SessionSync />
         <SiteHeader />
         <main className="flex-1 flex flex-col">
           <PageTransition>{children}</PageTransition>

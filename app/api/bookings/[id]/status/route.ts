@@ -1,12 +1,29 @@
-import { updateBookingStatus } from "@/lib/server/bookings";
+import { getBookingById, updateBookingStatus } from "@/lib/server/bookings";
 import { updateBookingStatusSchema } from "@/lib/validation/schemas";
-import { error, notFound, ok, parseBody } from "@/lib/server/http";
+import { error, forbidden, notFound, ok, parseBody } from "@/lib/server/http";
+import {
+  currentUserId,
+  ownsCaretakerProfile,
+  unauthorized,
+} from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// PATCH /api/bookings/:id/status -> Booking | 404 | 409 (invalid transition)
+// PATCH /api/bookings/:id/status -> Booking | 401 | 403 | 404 | 409
+// Auth: only a participant (owner or the caretaker) can change status.
 export async function PATCH(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
+  const uid = await currentUserId();
+  if (!uid) return unauthorized();
+
+  const booking = await getBookingById(id);
+  if (!booking) return notFound(`Booking ${id} not found`);
+  const isOwner = booking.ownerId === uid;
+  const isCaretaker = isOwner
+    ? false
+    : await ownsCaretakerProfile(uid, booking.caretakerId);
+  if (!isOwner && !isCaretaker) return forbidden();
+
   const parsed = await parseBody(request, updateBookingStatusSchema);
   if ("response" in parsed) return parsed.response;
 

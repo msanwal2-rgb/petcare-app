@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { toast } from "sonner";
 import { useSession } from "@/lib/store/session";
 import { listUsers } from "@/lib/api/users";
+import { loginAsDemo } from "@/lib/auth/session-client";
 import type { User } from "@/types";
 import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
 import { ChevronDownIcon, XIcon } from "./ui/icons";
@@ -15,15 +17,28 @@ import { cn } from "@/lib/utils";
  * every UI state. Clearly marked; would be removed once real auth lands.
  */
 export function DevAccountSwitcher() {
-  const { currentUser, setUser, hasHydrated } = useSession();
+  const { currentUser, hasHydrated } = useSession();
   const [open, setOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (open && users.length === 0) listUsers().then(setUsers);
   }, [open, users.length]);
 
   if (!hasHydrated) return null;
+
+  async function switchTo(u: User) {
+    setSwitching(true);
+    try {
+      await loginAsDemo(u.email); // establishes a real session
+      setOpen(false);
+    } catch {
+      toast.error("Couldn’t switch account.");
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   const roleLabel = (u: User) =>
     u.roles.length === 2 ? "owner + caretaker" : u.roles[0];
@@ -42,10 +57,8 @@ export function DevAccountSwitcher() {
             {users.map((u) => (
               <button
                 key={u.id}
-                onClick={() => {
-                  setUser(u);
-                  setOpen(false);
-                }}
+                onClick={() => switchTo(u)}
+                disabled={switching}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-fog",
                   currentUser?.id === u.id && "bg-fog ring-1 ring-mist"

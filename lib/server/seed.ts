@@ -12,6 +12,8 @@ import {
   reviews as seedReviews,
   users as seedUsers,
 } from "@/lib/mock-data";
+import { hashPassword } from "./auth-logic";
+import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
 /** Delete every row, in FK-safe order. */
 export async function resetDatabase(db: PrismaClient) {
@@ -28,6 +30,10 @@ export async function resetDatabase(db: PrismaClient) {
 export async function seedDatabase(db: PrismaClient) {
   await resetDatabase(db);
 
+  // One bcrypt hash of the shared demo password, reused for every seed user
+  // (bcrypt.compare still validates it — the salt is embedded in the hash).
+  const demoHash = await hashPassword(DEMO_PASSWORD);
+
   await db.user.createMany({
     data: seedUsers.map((u) => ({
       id: u.id,
@@ -42,6 +48,7 @@ export async function seedDatabase(db: PrismaClient) {
       lng: u.address.lng,
       verified: u.verified,
       createdAt: u.createdAt,
+      passwordHash: demoHash,
     })),
   });
 

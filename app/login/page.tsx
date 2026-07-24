@@ -4,10 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getProviders } from "next-auth/react";
 import { toast } from "sonner";
 import type { User } from "@/types";
-import { getUserById, listUsers } from "@/lib/api/users";
-import { useSession } from "@/lib/store/session";
+import { getUserById } from "@/lib/api/users";
+import {
+  loginAsDemo,
+  loginWithGoogle,
+  loginWithPassword,
+} from "@/lib/auth/session-client";
+import { DEMO_PASSWORD } from "@/lib/auth/demo";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
@@ -17,9 +23,10 @@ const DEMO = { owner: "u1", caretaker: "u10" };
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser } = useSession();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [samples, setSamples] = useState<Record<string, User>>({});
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,25 +38,35 @@ export default function LoginPage() {
         setSamples(map);
       }
     );
+    // Only show the Google button when the OAuth provider is configured.
+    getProviders().then((p) => setGoogleEnabled(Boolean(p?.google)));
   }, []);
 
-  function loginAs(user: User) {
-    setUser(user);
-    toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
-    router.push("/dashboard");
+  async function demoLogin(user: User) {
+    setLoading(true);
+    try {
+      await loginAsDemo(user.email);
+      toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
+      router.push("/dashboard");
+    } catch {
+      toast.error("Demo login failed. Try re-seeding the database.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const users = await listUsers();
-    const match = users.find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase()
-    );
-    setLoading(false);
-    if (match) loginAs(match);
-    else
-      toast.error("No account with that email. Try a demo account or sign up.");
+    try {
+      const user = await loginWithPassword(email.trim(), password);
+      toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
+      router.push("/dashboard");
+    } catch {
+      toast.error("No account matches that email and password.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -60,6 +77,25 @@ export default function LoginPage() {
       </p>
 
       <div className="mt-6 rounded-2xl border border-mist bg-white p-6">
+        {googleEnabled && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={loginWithGoogle}
+              disabled={loading}
+            >
+              Continue with Google
+            </Button>
+            <div className="my-5 flex items-center gap-3 text-xs text-charcoal/40">
+              <span className="h-px flex-1 bg-mist" />
+              or with email
+              <span className="h-px flex-1 bg-mist" />
+            </div>
+          </>
+        )}
+
         <form onSubmit={submit} className="space-y-4">
           <Field label="Email" htmlFor="email">
             <Input
@@ -69,10 +105,19 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
+              required
             />
           </Field>
-          <Field label="Password" htmlFor="password" hint="Mock — anything works">
-            <Input id="password" type="password" placeholder="••••••••" />
+          <Field label="Password" htmlFor="password">
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+            />
           </Field>
           <Button type="submit" variant="cta" className="w-full" disabled={loading}>
             {loading ? "Logging in…" : "Log in"}
@@ -91,8 +136,8 @@ export default function LoginPage() {
             return (
               <button
                 key={role}
-                onClick={() => u && loginAs(u)}
-                disabled={!u}
+                onClick={() => u && demoLogin(u)}
+                disabled={!u || loading}
                 className="flex w-full items-center gap-3 rounded-xl border border-mist bg-white p-2.5 text-left transition-colors hover:border-ink/30 disabled:opacity-50"
               >
                 <span className="relative h-9 w-9 overflow-hidden rounded-full">
@@ -120,6 +165,9 @@ export default function LoginPage() {
             );
           })}
         </div>
+        <p className="mt-3 text-center font-mono text-[10px] text-charcoal/40">
+          demo password: {DEMO_PASSWORD}
+        </p>
       </div>
 
       <p className="mt-5 text-center text-sm text-charcoal/60">

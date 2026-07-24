@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSession } from "@/lib/store/session";
+import { logout as endSession } from "@/lib/auth/session-client";
 import { ButtonLink } from "@/components/ui/Button";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { RoleToggle } from "./RoleToggle";
@@ -32,8 +33,14 @@ const NAV = [
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { currentUser, hasHydrated, logout } = useSession();
+  const router = useRouter();
+  const { currentUser, hasHydrated } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  async function handleLogout() {
+    await endSession();
+    router.push("/");
+  }
 
   return (
     <>
@@ -83,7 +90,7 @@ export function SiteHeader() {
                   </span>
                 </Link>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="text-sm text-charcoal/60 transition-colors hover:text-ink"
                 >
                   Log out
@@ -134,7 +141,7 @@ export function SiteHeader() {
                   {currentUser.roles.length === 2 && <RoleToggle />}
                   <button
                     onClick={() => {
-                      logout();
+                      void handleLogout();
                       setMobileOpen(false);
                     }}
                     className="text-sm text-charcoal/70"

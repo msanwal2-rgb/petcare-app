@@ -14,6 +14,8 @@ export function error(message: string, status: number, extra?: object): Response
 }
 
 export const notFound = (message = "Not found") => error(message, 404);
+export const unauthorized = (message = "You must be signed in") => error(message, 401);
+export const forbidden = (message = "Not allowed") => error(message, 403);
 
 /**
  * Parse and validate a JSON request body. Returns either the typed value or a
