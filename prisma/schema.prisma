@@ -119,10 +119,11 @@ model Booking {
   serviceType   String
   startDateTime String
   endDateTime   String
-  notes         String   @default("")
-  status        String   @default("requested")
+  notes         String    @default("")
+  status        String    @default("requested")
   priceTotal    Float
   createdAt     String
+  messages      Message[]
 
   @@index([ownerId])
   @@index([caretakerId])
@@ -141,4 +142,32 @@ model Review {
   @@index([toUserId])
   @@index([bookingId])
   @@map("reviews")
+}
+
+// Booking-scoped chat between the owner and the caretaker (foundation §4).
+model Message {
+  id         String  @id @default(cuid())
+  bookingId  String
+  booking    Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromUserId String
+  body       String
+  createdAt  String
+  readAt     String?
+
+  @@index([bookingId])
+  @@map("messages")
+}
+
+// Single-use, expiring tokens for email verification and password reset. Only
+// the SHA-256 hash of the token is stored; the raw token lives in the email link.
+model VerificationToken {
+  id         String @id @default(cuid())
+  identifier String // userId (verify_email) or email (reset_password)
+  tokenHash  String @unique
+  type       String // "verify_email" | "reset_password"
+  expiresAt  String
+  createdAt  String
+
+  @@index([identifier])
+  @@map("verification_tokens")
 }

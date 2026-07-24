@@ -12,6 +12,7 @@ import type {
   AvailabilityDay as DbAvailabilityDay,
   Booking as DbBooking,
   CaretakerProfile as DbCaretaker,
+  Message as DbMessage,
   Pet as DbPet,
   PricingEntry as DbPricingEntry,
   Review as DbReview,
@@ -22,6 +23,7 @@ import type {
   Booking,
   CaretakerProfile,
   CaretakerWithUser,
+  Message,
   Pet,
   PricingEntry,
   Review,
@@ -166,5 +168,16 @@ export function toReview(r: DbReview): Review {
     rating: r.rating,
     comment: r.comment,
     createdAt: r.createdAt,
+  };
+}
+
+export function toMessage(m: DbMessage): Message {
+  return {
+    id: m.id,
+    bookingId: m.bookingId,
+    fromUserId: m.fromUserId,
+    body: m.body,
+    createdAt: m.createdAt,
+    readAt: m.readAt,
   };
 }

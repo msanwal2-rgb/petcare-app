@@ -17,6 +17,8 @@ import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
 /** Delete every row, in FK-safe order. */
 export async function resetDatabase(db: PrismaClient) {
+  await db.message.deleteMany();
+  await db.verificationToken.deleteMany();
   await db.review.deleteMany();
   await db.booking.deleteMany();
   await db.availabilityDay.deleteMany();
@@ -135,11 +137,24 @@ export async function seedDatabase(db: PrismaClient) {
     })),
   });
 
+  // A little chat history on the two in-progress bookings so the thread isn't
+  // empty in the demo. b7: owner u1 ↔ caretaker u8; b8: owner u14 ↔ caretaker u11.
+  await db.message.createMany({
+    data: [
+      { id: "msg1", bookingId: "b7", fromUserId: "u1", body: "Hi! Miso can be shy at first — thanks for taking such good care of her.", createdAt: "2026-07-06T12:30:00Z", readAt: "2026-07-06T12:45:00Z" },
+      { id: "msg2", bookingId: "b7", fromUserId: "u8", body: "Of course! She's already found the sunny spot by the window 🐱", createdAt: "2026-07-06T13:05:00Z", readAt: "2026-07-06T13:20:00Z" },
+      { id: "msg3", bookingId: "b7", fromUserId: "u1", body: "That's her favorite. You're the best!", createdAt: "2026-07-06T13:22:00Z", readAt: null },
+      { id: "msg4", bookingId: "b8", fromUserId: "u14", body: "Duke's had breakfast — no beef, all good. He loves the yard!", createdAt: "2026-07-07T09:30:00Z", readAt: "2026-07-07T10:00:00Z" },
+      { id: "msg5", bookingId: "b8", fromUserId: "u11", body: "He's a champ. We did a long fetch session this morning 🎾", createdAt: "2026-07-07T11:15:00Z", readAt: null },
+    ],
+  });
+
   return {
     users: seedUsers.length,
     pets: seedPets.length,
     caretakers: seedCaretakers.length,
     bookings: seedBookings.length,
     reviews: seedReviews.length,
+    messages: 5,
   };
 }

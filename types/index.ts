@@ -107,6 +107,15 @@ export interface Review {
   createdAt: string; // ISO 8601
 }
 
+export interface Message {
+  id: string;
+  bookingId: string;
+  fromUserId: string;
+  body: string;
+  createdAt: string; // ISO 8601
+  readAt: string | null;
+}
+
 /* ── Request/params shapes used by the data layer (brief §7) ──── */
 
 export interface SearchParams {

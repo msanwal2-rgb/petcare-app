@@ -122,6 +122,14 @@ export default function LoginPage() {
           <Button type="submit" variant="cta" className="w-full" disabled={loading}>
             {loading ? "Logging in…" : "Log in"}
           </Button>
+          <p className="text-right text-xs">
+            <Link
+              href="/forgot-password"
+              className="text-charcoal/55 hover:text-ink hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </p>
         </form>
 
         <div className="my-5 flex items-center gap-3 text-xs text-charcoal/40">

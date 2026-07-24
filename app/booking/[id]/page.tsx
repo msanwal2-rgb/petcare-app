@@ -18,6 +18,7 @@ import { PetCard } from "@/components/PetCard";
 import { ReviewCard } from "@/components/ReviewCard";
 import { EmptyState } from "@/components/EmptyState";
 import { LeaveReview } from "@/components/booking/LeaveReview";
+import { MessageThread } from "@/components/booking/MessageThread";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
@@ -295,6 +296,27 @@ export default function BookingDetailPage() {
               </p>
             )}
         </div>
+      )}
+
+      {/* Messages (participants only) */}
+      {(isOwner || isCaretaker) && currentUser && (owner || caretaker) && (
+        <MessageThread
+          bookingId={booking.id}
+          currentUserId={currentUser.id}
+          people={{
+            ...(owner
+              ? { [owner.id]: { name: owner.name, avatarUrl: owner.avatarUrl } }
+              : {}),
+            ...(caretaker
+              ? {
+                  [caretaker.user.id]: {
+                    name: caretaker.user.name,
+                    avatarUrl: caretaker.user.avatarUrl,
+                  },
+                }
+              : {}),
+          }}
+        />
       )}
 
       {/* Reviews */}

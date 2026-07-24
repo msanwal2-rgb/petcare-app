@@ -6,6 +6,7 @@ import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
 import { AuthRequired } from "@/components/AuthRequired";
 import { EmptyState } from "@/components/EmptyState";
 import { RoleToggle } from "@/components/RoleToggle";
+import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function DashboardPage() {
@@ -43,6 +44,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-4 py-10 sm:px-6">
+      <VerifyEmailBanner />
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-leash">
