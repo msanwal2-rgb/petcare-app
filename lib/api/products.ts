@@ -34,3 +34,13 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
 export async function listBrands(): Promise<string[]> {
   return getJson<string[]>(`/api/brands`);
 }
+
+/**
+ * GET /api/pets/:petId/recommendations -> Product[]
+ * Suited to this pet's species, age and allergies. Owner-only.
+ */
+export async function getRecommendationsForPet(
+  petId: string
+): Promise<Product[]> {
+  return getJson<Product[]>(`/api/pets/${petId}/recommendations`);
+}

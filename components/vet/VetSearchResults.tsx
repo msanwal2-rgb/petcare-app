@@ -36,8 +36,11 @@ export function VetSearchResults() {
   const [location, setLocation] = useState(params.get("location") ?? "");
   const [specialty, setSpecialty] = useState(params.get("specialty") ?? "");
   const [species, setSpecies] = useState(params.get("species") ?? "");
-  const [mode, setMode] = useState("");
-  const [emergencyOnly, setEmergencyOnly] = useState(false);
+  const [mode, setMode] = useState(params.get("mode") ?? "");
+  // /pet-health links straight here for the emergency list.
+  const [emergencyOnly, setEmergencyOnly] = useState(
+    params.get("emergencyOnly") === "true"
+  );
 
   const origin = useMemo(() => coordsFor(location), [location]);
 

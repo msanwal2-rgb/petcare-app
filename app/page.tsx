@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { HeroSection } from "@/components/HeroSection";
 import { FeaturedCaretakers } from "@/components/FeaturedCaretakers";
 import { Reveal, RevealGroup } from "@/components/ui/Reveal";
@@ -8,6 +9,9 @@ import {
   CalendarIcon,
   ShieldCheckIcon,
   HeartIcon,
+  StethoscopeIcon,
+  BagIcon,
+  ChevronRightIcon,
 } from "@/components/ui/icons";
 import { unsplash, CTA_PHOTO, BLUR_DATA_URL } from "@/lib/mock-data/photos";
 
@@ -26,6 +30,30 @@ const STEPS = [
     icon: HeartIcon,
     title: "Relax — they’ve got it",
     body: "Your caretaker confirms, cares for your pet, and you both leave a review afterward.",
+  },
+];
+
+const PILLARS = [
+  {
+    icon: HeartIcon,
+    title: "Day-to-day care",
+    body: "Vetted local caretakers for walking, sitting, boarding and daycare — who can see your pet's feeding, medical and behaviour notes before day one.",
+    cta: "Find a caretaker",
+    href: "/search",
+  },
+  {
+    icon: StethoscopeIcon,
+    title: "Licensed vets",
+    body: "Book in-clinic, video or home visits. Notes, vaccinations and prescriptions land in your pet's health record instead of a paper folder.",
+    cta: "Find a vet",
+    href: "/vets",
+  },
+  {
+    icon: BagIcon,
+    title: "Food & supplies",
+    body: "Filtered to your pet's species and age, with their allergens flagged and their prescribed diets unlocked. Tracked to your door.",
+    cta: "Visit the store",
+    href: "/store",
   },
 ];
 
@@ -62,6 +90,54 @@ export default function LandingPage() {
             </Reveal>
           ))}
         </RevealGroup>
+      </section>
+
+      {/* The three things Leash does, and how they connect */}
+      <section className="border-y border-mist bg-white">
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-20 sm:px-6">
+          <Reveal>
+            <p className="font-mono text-xs uppercase tracking-widest text-leash">
+              One record, three services
+            </p>
+            <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+              Care, health and food that actually know about each other.
+            </h2>
+            <p className="mt-3 max-w-2xl text-charcoal/70">
+              Your vet writes into your pet&apos;s health record. Your caretaker
+              reads it. The store honours the prescriptions in it. Nothing has to
+              be explained twice.
+            </p>
+          </Reveal>
+
+          <RevealGroup className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {PILLARS.map((pillar, i) => (
+              <Reveal key={pillar.title} delay={i * 0.08}>
+                <Link
+                  href={pillar.href}
+                  className="group flex h-full flex-col rounded-2xl border border-mist bg-fog/60 p-7 transition-all hover:-translate-y-1 hover:border-ink/25 hover:shadow-lg hover:shadow-ink/5"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-white">
+                    <pillar.icon width={22} height={22} />
+                  </div>
+                  <h3 className="mt-5 text-lg font-semibold text-ink">
+                    {pillar.title}
+                  </h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-charcoal/70">
+                    {pillar.body}
+                  </p>
+                  <span className="mt-4 flex items-center gap-1 text-sm font-medium text-leash">
+                    {pillar.cta}
+                    <ChevronRightIcon
+                      width={15}
+                      height={15}
+                      className="transition-transform group-hover:translate-x-0.5"
+                    />
+                  </span>
+                </Link>
+              </Reveal>
+            ))}
+          </RevealGroup>
+        </div>
       </section>
 
       {/* Featured caretakers */}
@@ -133,15 +209,19 @@ export default function LandingPage() {
             Your pet deserves someone who shows up.
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-charcoal/70">
-            Join Leash as an owner to book care, or as a caretaker to earn doing
-            what you love. It takes about a minute.
+            Join as an owner to book care and vet visits, as a caretaker to earn
+            doing what you love, or as a vet to see patients here. It takes about
+            a minute.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <ButtonLink href="/search" variant="cta" size="lg">
               Find a caretaker
             </ButtonLink>
+            <ButtonLink href="/vets" variant="outline" size="lg">
+              Find a vet
+            </ButtonLink>
             <ButtonLink href="/signup" variant="outline" size="lg">
-              Become a caretaker
+              Join Leash
             </ButtonLink>
           </div>
         </Reveal>

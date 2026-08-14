@@ -15,18 +15,34 @@ export function SiteFooter() {
               </span>
             </div>
             <p className="mt-3 text-sm text-charcoal/65">
-              Trusted local pet care — walking, sitting, boarding, and daycare.
-              Hand off the leash to someone competent.
+              Trusted local pet care, licensed vets, and the food they
+              recommend — in one place, so your pet&apos;s history follows them.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
             <FooterCol
               title="Care"
               links={[
                 ["Find a caretaker", "/search"],
                 ["How it works", "/#how"],
                 ["Become a caretaker", "/signup"],
+              ]}
+            />
+            <FooterCol
+              title="Health"
+              links={[
+                ["Find a vet", "/vets"],
+                ["Emergency signs", "/pet-health#emergencies"],
+                ["Vaccination schedules", "/pet-health#vaccinations"],
+              ]}
+            />
+            <FooterCol
+              title="Store"
+              links={[
+                ["Food & supplies", "/store"],
+                ["Your orders", "/store/orders"],
+                ["Your cart", "/store/cart"],
               ]}
             />
             <FooterCol
@@ -37,19 +53,14 @@ export function SiteFooter() {
                 ["Sign up", "/signup"],
               ]}
             />
-            <FooterCol
-              title="Company"
-              links={[
-                ["Trust & safety", "/#trust"],
-                ["Contact", "/#"],
-                ["Terms", "/#"],
-              ]}
-            />
           </div>
         </div>
         <div className="mt-10 flex flex-col gap-2 border-t border-mist pt-6 text-xs text-charcoal/50 sm:flex-row sm:justify-between">
-          <p>© 2026 Leash. A demo marketplace — no real bookings or payments.</p>
-          <p className="font-mono">Frontend MVP · mock data</p>
+          <p>
+            © 2026 Leash. A demo marketplace — bookings, appointments and
+            orders are real records; payments and delivery are simulated.
+          </p>
+          <p className="font-mono">Care · Vets · Store</p>
         </div>
       </div>
     </footer>
