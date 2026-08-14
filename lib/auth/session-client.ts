@@ -7,29 +7,53 @@
  */
 
 import { signIn, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useSession as useStore } from "@/lib/store/session";
 import type { User } from "@/types";
 import { DEMO_PASSWORD } from "./demo";
 
 /**
- * Navigate after signing in or out.
- *
- * Not just `router.push`. The App Router caches prefetched routes, and a
- * protected route prefetched while signed out caches `proxy.ts`'s redirect to
- * /login. A plain push afterwards replays that stale redirect and the user
- * never leaves the login page — which is exactly the bug this exists to stop.
- * `refresh()` drops the cache so the push is evaluated against the new session.
- *
- * Every sign-in and sign-out goes through here; none of them should call
- * `router.push` directly.
+ * Only same-origin paths. `callbackUrl` comes off the query string, so treating
+ * it as a destination without this check is an open redirect.
  */
-export function useAuthNavigate(): (href: string) => void {
-  const router = useRouter();
-  return (href: string) => {
-    router.refresh();
-    router.push(href);
-  };
+function safeInternalPath(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Navigate after signing in or out. A full document load, deliberately.
+ *
+ * Client-side routing cannot be trusted across an auth change. Visiting a
+ * guarded route while signed out — by clicking it, or by Next prefetching it —
+ * makes `proxy.ts` answer with a redirect to /login, and the App Router caches
+ * that redirect against the route. `router.push` afterwards replays the cached
+ * redirect and the user is bounced straight back to the login page, still
+ * signed in, with no error to explain it. `router.refresh()` does not evict
+ * that entry, and Next exposes no API that does.
+ *
+ * So we hand the URL to the browser instead. It discards every client cache and
+ * the middleware re-evaluates against the new cookie. The cost is one page load
+ * per sign-in, which is a fair price for the destination actually loading.
+ *
+ * `callbackUrl` is honoured on the way in, so someone bounced off /booking/new
+ * lands back there rather than on a generic dashboard. Sign-out passes
+ * `honorCallback: false` — a stale callbackUrl must not drag them back into
+ * the app they just left.
+ */
+export function navigateAfterAuth(
+  fallback: string,
+  { honorCallback = true }: { honorCallback?: boolean } = {}
+): void {
+  const requested = honorCallback
+    ? safeInternalPath(new URLSearchParams(window.location.search).get("callbackUrl"))
+    : null;
+  window.location.assign(requested ?? fallback);
 }
 
 /** Pull the authenticated user from the server and push it into the store. */

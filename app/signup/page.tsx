@@ -11,7 +11,7 @@ import { registerAccount } from "@/lib/api/users";
 import {
   loginWithGoogle,
   loginWithPassword,
-  useAuthNavigate,
+  navigateAfterAuth,
 } from "@/lib/auth/session-client";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -25,7 +25,6 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function SignupPage() {
-  const navigateAfterAuth = useAuthNavigate();
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const {
     register,

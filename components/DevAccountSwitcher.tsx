@@ -5,7 +5,7 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { useSession } from "@/lib/store/session";
 import { listUsers } from "@/lib/api/users";
-import { loginAsDemo } from "@/lib/auth/session-client";
+import { loginAsDemo, navigateAfterAuth } from "@/lib/auth/session-client";
 import type { User } from "@/types";
 import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { ChevronDownIcon, XIcon } from "./ui/icons";
@@ -36,10 +36,13 @@ export function DevAccountSwitcher() {
     setSwitching(true);
     try {
       await loginAsDemo(u.email); // establishes a real session
-      setOpen(false);
+      // Reload the page under the new session. Switching accounts changes what
+      // every guarded route is allowed to render, and the client router still
+      // holds the previous user's answers — including any redirect cached
+      // while signed out.
+      navigateAfterAuth(window.location.pathname, { honorCallback: false });
     } catch {
       toast.error("Couldn’t switch account.");
-    } finally {
       setSwitching(false);
     }
   }

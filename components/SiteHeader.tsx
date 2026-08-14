@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSession } from "@/lib/store/session";
-import { logout as endSession, useAuthNavigate } from "@/lib/auth/session-client";
+import { logout as endSession, navigateAfterAuth } from "@/lib/auth/session-client";
 import { useScrolled } from "@/lib/hooks/useScrolled";
 import { ButtonLink } from "@/components/ui/Button";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
@@ -53,7 +53,6 @@ function isCurrent(pathname: string, href: string): boolean {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const navigateAfterAuth = useAuthNavigate();
   const { currentUser, hasHydrated } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -66,7 +65,7 @@ export function SiteHeader() {
 
   async function handleLogout() {
     await endSession();
-    navigateAfterAuth("/");
+    navigateAfterAuth("/", { honorCallback: false });
   }
 
   return (

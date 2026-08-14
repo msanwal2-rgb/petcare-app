@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import type { UserRole } from "@/types";
 import { updateUser } from "@/lib/api/users";
 import { useSession } from "@/lib/store/session";
-import { useAuthNavigate } from "@/lib/auth/session-client";
+import { navigateAfterAuth } from "@/lib/auth/session-client";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -51,7 +51,6 @@ function nextStepFor(roles: UserRole[]): string {
 }
 
 export default function OnboardingPage() {
-  const navigateAfterAuth = useAuthNavigate();
   const { currentUser, setUser, hasHydrated } = useSession();
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [saving, setSaving] = useState(false);

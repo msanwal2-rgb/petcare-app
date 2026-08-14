@@ -11,7 +11,7 @@ import {
   loginAsDemo,
   loginWithGoogle,
   loginWithPassword,
-  useAuthNavigate,
+  navigateAfterAuth,
 } from "@/lib/auth/session-client";
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, type DemoRole } from "@/lib/auth/demo";
 import { Field, Input } from "@/components/ui/Field";
@@ -20,7 +20,6 @@ import { BLUR_DATA_URL } from "@/lib/media/photos";
 
 
 export default function LoginPage() {
-  const navigateAfterAuth = useAuthNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [samples, setSamples] = useState<Partial<Record<DemoRole, User>>>({});
