@@ -3,7 +3,7 @@
  * shapes, and Zod-validated body parsing.
  */
 
-import type { ZodType } from "zod";
+import type { ZodIssue, ZodType } from "zod";
 
 export function ok<T>(data: T, status = 200): Response {
   return Response.json(data as unknown as object, { status });
@@ -16,6 +16,16 @@ export function error(message: string, status: number, extra?: object): Response
 export const notFound = (message = "Not found") => error(message, 404);
 export const unauthorized = (message = "You must be signed in") => error(message, 401);
 export const forbidden = (message = "Not allowed") => error(message, 403);
+
+export const badRequest = (message: string, extra?: object) =>
+  error(message, 400, extra);
+
+/** Turn a Zod failure into the standard 400 shape. */
+function validationFailed(message: string, issues: ZodIssue[]): Response {
+  return badRequest(message, {
+    issues: issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+  });
+}
 
 /**
  * Parse and validate a JSON request body. Returns either the typed value or a
@@ -33,13 +43,21 @@ export async function parseBody<T>(
   }
   const result = schema.safeParse(raw);
   if (!result.success) {
+    return { response: validationFailed("Validation failed", result.error.issues) };
+  }
+  return { data: result.data };
+}
+
+/** The same contract as `parseBody`, for query strings. */
+export function parseQuery<T>(
+  request: Request,
+  schema: ZodType<T>
+): { data: T } | { response: Response } {
+  const raw = Object.fromEntries(new URL(request.url).searchParams.entries());
+  const result = schema.safeParse(raw);
+  if (!result.success) {
     return {
-      response: error("Validation failed", 400, {
-        issues: result.error.issues.map((i) => ({
-          path: i.path.join("."),
-          message: i.message,
-        })),
-      }),
+      response: validationFailed("Invalid search parameters", result.error.issues),
     };
   }
   return { data: result.data };

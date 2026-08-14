@@ -73,6 +73,11 @@ export function patchJson<T>(path: string, body: unknown): Promise<T> {
   return request<T>("PATCH", path, body);
 }
 
+/** DELETE, for endpoints that answer 204. */
+export function deleteJson(path: string): Promise<void> {
+  return request<void>("DELETE", path);
+}
+
 /** Build a query string from defined params only. */
 export function qs(params: Record<string, unknown>): string {
   const entries = Object.entries(params).filter(

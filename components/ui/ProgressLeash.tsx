@@ -6,23 +6,29 @@ import { cn } from "@/lib/utils";
 
 /**
  * The signature motif (brief §3): a gently curved, dashed "leash line" that
- * connects the booking steps and *draws itself in* as the user progresses,
- * with a small spring bounce on each completed node. It's the one distinctive
- * element — deliberately not repeated elsewhere in the UI.
+ * connects the steps of a journey and *draws itself in* as the user
+ * progresses, with a small spring bounce on each completed node.
+ *
+ * Used for every multi-step journey in the app — requesting a booking, a vet
+ * appointment's lifecycle, an order's route to the door — so those three read
+ * as the same product rather than three bolted-together modules.
  *
  * Implemented as two identical dashed paths (mist track + leash overlay); the
  * leash overlay is revealed left-to-right by an animated clip rect, so the
  * dashes stay crisp while the line appears to draw. Honors reduced motion via
  * the global MotionConfig.
  */
-export function BookingProgressLeash({
+export function ProgressLeash({
   steps,
   activeIndex,
+  label = "Step",
   className,
 }: {
   steps: string[];
   /** 0-based index of the current step. */
   activeIndex: number;
+  /** Noun for the screen-reader read-out, e.g. "Booking step". */
+  label?: string;
   className?: string;
 }) {
   const uid = useId().replace(/:/g, "");
@@ -52,7 +58,7 @@ export function BookingProgressLeash({
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
         role="img"
-        aria-label={`Booking step ${activeIndex + 1} of ${n}: ${steps[activeIndex]}`}
+        aria-label={`${label} ${activeIndex + 1} of ${n}: ${steps[activeIndex]}`}
       >
         <defs>
           <clipPath id={`leash-clip-${uid}`}>
@@ -131,7 +137,7 @@ export function BookingProgressLeash({
       </svg>
       {/* Accessible, non-visual step read-out for screen readers */}
       <span className="sr-only" aria-live="polite">
-        Step {activeIndex + 1} of {n}: {steps[activeIndex]}
+        {label} {activeIndex + 1} of {n}: {steps[activeIndex]}
       </span>
     </div>
   );

@@ -130,12 +130,122 @@ export const createReviewSchema = z.object({
   comment: z.string(),
 });
 
-/* ── Search query parsing ───────────────────────────────────────────── */
+/* ── Query-string coercion ──────────────────────────────────────────────
+   Query params arrive as strings; these turn them back into the types the
+   search functions expect, failing loudly on garbage rather than silently
+   producing NaN. */
 
 const numeric = z
   .string()
   .transform((v) => Number(v))
   .refine((n) => !Number.isNaN(n), "must be a number");
+
+const boolish = z
+  .string()
+  .transform((v) => v === "true" || v === "1")
+  .pipe(z.boolean());
+
+/* ── Vet care ───────────────────────────────────────────────────────── */
+
+export const vetSpecialty = z.enum([
+  "general",
+  "dermatology",
+  "dentistry",
+  "surgery",
+  "emergency",
+  "nutrition",
+  "behavior",
+  "exotics",
+]);
+export const consultMode = z.enum(["in_clinic", "video", "home_visit"]);
+export const appointmentStatus = z.enum([
+  "requested",
+  "confirmed",
+  "declined",
+  "in_progress",
+  "completed",
+  "cancelled",
+]);
+export const medicalRecordType = z.enum([
+  "visit_note",
+  "vaccination",
+  "prescription",
+  "lab_result",
+  "weight",
+  "allergy",
+]);
+
+/**
+ * Note what's missing: rating, reviewCount and responseRatePct. Those are
+ * derived from real activity, so a vet cannot patch their own reputation.
+ */
+export const vetPatchSchema = z
+  .object({
+    bio: z.string(),
+    specialties: z.array(vetSpecialty),
+    licenseNumber: z.string(),
+    licenseState: z.string(),
+    yearsExperience: z.number().int().min(0).max(70),
+    acceptedSpecies: z.array(species),
+    consultModes: z.array(consultMode),
+    consultFee: z.number().min(0),
+    emergencyAvailable: z.boolean(),
+    clinic: z.object({
+      name: z.string(),
+      city: z.string(),
+      state: z.string(),
+      lat: z.number(),
+      lng: z.number(),
+    }),
+    availability: z.array(availabilityDay),
+  })
+  .partial();
+
+/** `fee` is absent by design — the server reads it off the vet's profile. */
+export const createAppointmentSchema = z.object({
+  ownerId: z.string(),
+  vetId: z.string(),
+  petId: z.string(),
+  mode: consultMode,
+  reason: z.string().min(1),
+  symptoms: z.array(z.string()),
+  startDateTime: z.string(),
+  endDateTime: z.string(),
+  notes: z.string(),
+});
+
+export const updateAppointmentStatusSchema = z.object({
+  status: appointmentStatus,
+});
+
+export const medicalRecordSchema = z.object({
+  type: medicalRecordType,
+  title: z.string().min(1),
+  details: z.string().default(""),
+  occurredAt: z.string(),
+  appointmentId: z.string().nullable().default(null),
+  nextDueAt: z.string().nullable().default(null),
+  medicationName: z.string().nullable().default(null),
+  dosage: z.string().nullable().default(null),
+  refillsLeft: z.number().int().min(0).nullable().default(null),
+  expiresAt: z.string().nullable().default(null),
+  productSlugs: z.array(z.string()).default([]),
+});
+
+export const medicalRecordPatchSchema = medicalRecordSchema.partial();
+
+export const vetSearchQuerySchema = z.object({
+  location: z.string().optional(),
+  lat: numeric.optional(),
+  lng: numeric.optional(),
+  radiusMiles: numeric.optional(),
+  specialty: vetSpecialty.optional(),
+  species: species.optional(),
+  mode: consultMode.optional(),
+  emergencyOnly: boolish.optional(),
+});
+
+/* ── Search query parsing ───────────────────────────────────────────── */
 
 export const searchQuerySchema = z.object({
   location: z.string().optional(),
@@ -157,3 +267,6 @@ export type PetPatchBody = z.infer<typeof petPatchSchema>;
 export type CaretakerPatchBody = z.infer<typeof caretakerPatchSchema>;
 export type CreateBookingBody = z.infer<typeof createBookingSchema>;
 export type CreateReviewBody = z.infer<typeof createReviewSchema>;
+export type VetPatchBody = z.infer<typeof vetPatchSchema>;
+export type CreateAppointmentBody = z.infer<typeof createAppointmentSchema>;
+export type MedicalRecordBody = z.infer<typeof medicalRecordSchema>;

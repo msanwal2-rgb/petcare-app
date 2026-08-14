@@ -11,7 +11,7 @@ import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { useBookingDraft } from "@/lib/store/booking-draft";
 import type { ServiceType } from "@/types";
-import { BookingProgressLeash } from "@/components/BookingProgressLeash";
+import { ProgressLeash } from "@/components/ui/ProgressLeash";
 import { PetCard } from "@/components/PetCard";
 import { PetCardSkeleton } from "@/components/PetCardSkeleton";
 import { EmptyState } from "@/components/EmptyState";
@@ -154,7 +154,7 @@ export function BookingNewClient() {
         </div>
       </div>
 
-      <BookingProgressLeash steps={STEPS} activeIndex={stepIndex} className="my-4" />
+      <ProgressLeash steps={STEPS} activeIndex={stepIndex} label="Booking step" className="my-4" />
 
       <div className="rounded-2xl border border-mist bg-white p-6">
         {draft.step === "details" && (

@@ -1,8 +1,10 @@
 "use client";
 
+import type { UserRole } from "@/types";
 import { useSession } from "@/lib/store/session";
 import { OwnerDashboard } from "@/components/dashboard/OwnerDashboard";
 import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
+import { VetDashboard } from "@/components/dashboard/VetDashboard";
 import { AuthRequired } from "@/components/AuthRequired";
 import { EmptyState } from "@/components/EmptyState";
 import { RoleToggle } from "@/components/RoleToggle";
@@ -35,12 +37,20 @@ export default function DashboardPage() {
       </div>
     );
 
-  const both = currentUser.roles.length === 2;
-  // Which view: dual-role users follow the header toggle; single-role users
-  // see their only role regardless of the stored activeRole.
-  const view = both
-    ? activeRole
-    : currentUser.roles[0];
+  // Which view: multi-role users follow the header toggle; single-role users
+  // see their only role. The `includes` guard matters because activeRole is a
+  // cached client value that can outlive a role being removed.
+  const canSwitch = currentUser.roles.length > 1;
+  const view =
+    canSwitch && currentUser.roles.includes(activeRole)
+      ? activeRole
+      : currentUser.roles[0];
+
+  const HEADINGS: Record<UserRole, string> = {
+    owner: "Owner dashboard",
+    caretaker: "Caretaker dashboard",
+    vet: "Vet dashboard",
+  };
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-4 py-10 sm:px-6">
@@ -48,13 +58,13 @@ export default function DashboardPage() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-xs uppercase tracking-widest text-leash">
-            {view === "owner" ? "Owner dashboard" : "Caretaker dashboard"}
+            {HEADINGS[view]}
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">
             Welcome back, {currentUser.name.split(" ")[0]}
           </h1>
         </div>
-        {both && (
+        {canSwitch && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-charcoal/50">Viewing as</span>
             <RoleToggle />
@@ -62,11 +72,9 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {view === "owner" ? (
-        <OwnerDashboard user={currentUser} />
-      ) : (
-        <CaretakerDashboard user={currentUser} />
-      )}
+      {view === "owner" && <OwnerDashboard user={currentUser} />}
+      {view === "caretaker" && <CaretakerDashboard user={currentUser} />}
+      {view === "vet" && <VetDashboard user={currentUser} />}
     </div>
   );
 }

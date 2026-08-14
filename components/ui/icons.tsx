@@ -116,3 +116,61 @@ export const HomeIcon = (p: P) => (
     <path d="M6 10v9h12v-9" />
   </svg>
 );
+export const StethoscopeIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M6 3v5a4 4 0 0 0 8 0V3" />
+    <path d="M6 3H4.5M14 3h1.5" />
+    <path d="M10 12v2.5a5 5 0 0 0 5 5 4 4 0 0 0 4-4V14" />
+    <circle cx="19" cy="12" r="2" />
+  </svg>
+);
+export const PillIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)" />
+    <path d="m9 9 6 6" />
+  </svg>
+);
+export const SyringeIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="m14 4 6 6M17.5 6.5 20.5 3.5" />
+    <path d="m5.5 18.5 9-9 3 3-9 9H5.5v-3Z" />
+    <path d="m10 11 2 2M12.5 8.5l2 2" />
+  </svg>
+);
+export const VideoIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <rect x="3" y="6" width="12" height="12" rx="2.5" />
+    <path d="m15 10.5 6-3.5v10l-6-3.5z" />
+  </svg>
+);
+export const BagIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M5 8h14l-1 12H6L5 8Z" />
+    <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+  </svg>
+);
+export const TruckIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M3 6h11v11H3zM14 10h4l3 3v4h-7z" />
+    <circle cx="7" cy="18" r="1.8" />
+    <circle cx="17" cy="18" r="1.8" />
+  </svg>
+);
+export const PackageIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z" />
+    <path d="m4 7 8 4 8-4M12 11v10" />
+  </svg>
+);
+export const AlertIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M12 4.5 21 19H3L12 4.5Z" />
+    <path d="M12 10v4M12 16.5h.01" />
+  </svg>
+);
+export const TrashIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+    <path d="M10 11v6M14 11v6" />
+  </svg>
+);

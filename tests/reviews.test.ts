@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { testPrisma as db } from "./helpers/testdb";
-import { seedDatabase } from "@/lib/server/seed";
+import { resetToSnapshot, testPrisma as db } from "./helpers/testdb";
 import {
   createReview,
   getReviewsForBooking,
@@ -8,7 +7,7 @@ import {
 } from "@/lib/server/reviews";
 
 beforeEach(async () => {
-  await seedDatabase(db);
+  await resetToSnapshot(db);
 });
 afterAll(async () => {
   await db.$disconnect();

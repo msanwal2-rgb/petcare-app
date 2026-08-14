@@ -12,17 +12,25 @@ import type {
   AvailabilityDay as DbAvailabilityDay,
   Booking as DbBooking,
   CaretakerProfile as DbCaretaker,
+  MedicalRecord as DbMedicalRecord,
   Message as DbMessage,
   Pet as DbPet,
   PricingEntry as DbPricingEntry,
   Review as DbReview,
   User as DbUser,
+  VetAppointment as DbVetAppointment,
+  VetAvailabilityDay as DbVetAvailabilityDay,
+  VetProfile as DbVet,
 } from "@prisma/client";
 import type {
+  AppointmentStatus,
   AvailabilityDay,
   Booking,
   CaretakerProfile,
   CaretakerWithUser,
+  ConsultMode,
+  MedicalRecord,
+  MedicalRecordType,
   Message,
   Pet,
   PricingEntry,
@@ -32,6 +40,10 @@ import type {
   Sex,
   User,
   UserRole,
+  VetAppointment,
+  VetProfile,
+  VetSpecialty,
+  VetWithUser,
   BackgroundCheckStatus,
   PricingUnit,
   BookingStatus,
@@ -85,7 +97,10 @@ function toPricing(rows: DbPricingEntry[]): PricingEntry[] {
   }));
 }
 
-function toAvailability(rows: DbAvailabilityDay[]): AvailabilityDay[] {
+/** Shared by caretaker and vet availability — identical row shape. */
+function toAvailability(
+  rows: (DbAvailabilityDay | DbVetAvailabilityDay)[]
+): AvailabilityDay[] {
   return rows
     .map((r) => ({
       date: r.date,
@@ -167,6 +182,91 @@ export function toReview(r: DbReview): Review {
     toUserId: r.toUserId,
     rating: r.rating,
     comment: r.comment,
+    createdAt: r.createdAt,
+  };
+}
+
+/* ── Vet care ─────────────────────────────────────────────────────────── */
+
+type DbVetWithRelations = DbVet & { availability: DbVetAvailabilityDay[] };
+
+export function toVetProfile(v: DbVetWithRelations): VetProfile {
+  return {
+    id: v.id,
+    userId: v.userId,
+    clinicName: v.clinicName,
+    bio: v.bio,
+    specialties: v.specialties as VetSpecialty[],
+    licenseNumber: v.licenseNumber,
+    licenseState: v.licenseState,
+    yearsExperience: v.yearsExperience,
+    acceptedSpecies: v.acceptedSpecies as Species[],
+    consultModes: v.consultModes as ConsultMode[],
+    consultFee: v.consultFee,
+    emergencyAvailable: v.emergencyAvailable,
+    clinic: {
+      name: v.clinicName,
+      city: v.clinicCity,
+      state: v.clinicState,
+      lat: v.lat,
+      lng: v.lng,
+    },
+    rating: v.rating,
+    reviewCount: v.reviewCount,
+    responseRatePct: v.responseRatePct,
+    availability: toAvailability(v.availability),
+  };
+}
+
+export function toVetWithUser(
+  v: DbVetWithRelations & { user: DbUser },
+  origin?: { lat: number; lng: number }
+): VetWithUser {
+  const profile = toVetProfile(v);
+  return {
+    ...profile,
+    user: toUser(v.user),
+    // Distance is to the clinic, not the vet's home address — that's the
+    // address an owner actually has to drive to.
+    distanceMiles: origin ? distanceMiles(origin, profile.clinic) : undefined,
+  };
+}
+
+export function toAppointment(a: DbVetAppointment): VetAppointment {
+  return {
+    id: a.id,
+    ownerId: a.ownerId,
+    vetId: a.vetId,
+    petId: a.petId,
+    mode: a.mode as ConsultMode,
+    reason: a.reason,
+    symptoms: a.symptoms,
+    startDateTime: a.startDateTime,
+    endDateTime: a.endDateTime,
+    status: a.status as AppointmentStatus,
+    fee: a.fee,
+    notes: a.notes,
+    createdAt: a.createdAt,
+  };
+}
+
+export function toMedicalRecord(r: DbMedicalRecord): MedicalRecord {
+  return {
+    id: r.id,
+    petId: r.petId,
+    appointmentId: r.appointmentId,
+    vetId: r.vetId,
+    authorUserId: r.authorUserId,
+    type: r.type as MedicalRecordType,
+    title: r.title,
+    details: r.details,
+    occurredAt: r.occurredAt,
+    nextDueAt: r.nextDueAt,
+    medicationName: r.medicationName,
+    dosage: r.dosage,
+    refillsLeft: r.refillsLeft,
+    expiresAt: r.expiresAt,
+    productSlugs: r.productSlugs,
     createdAt: r.createdAt,
   };
 }

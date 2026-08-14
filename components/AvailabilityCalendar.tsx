@@ -21,17 +21,24 @@ export function AvailabilityCalendar({
   availability,
   selectedDate,
   onSelectDate,
+  onSelectSlot,
+  selectedSlot,
+  emptyLabel = "This caretaker hasn’t published their availability yet.",
   className,
 }: {
   availability: AvailabilityDay[];
   selectedDate?: string;
   onSelectDate?: (date: string) => void;
+  /** When provided, the time slots become selectable rather than decorative. */
+  onSelectSlot?: (slot: { start: string; end: string }) => void;
+  selectedSlot?: { start: string; end: string };
+  emptyLabel?: string;
   className?: string;
 }) {
   if (availability.length === 0) {
     return (
       <p className="rounded-[12px] border border-dashed border-mist bg-white/60 px-4 py-6 text-center text-sm text-charcoal/60">
-        This caretaker hasn’t published their availability yet.
+        {emptyLabel}
       </p>
     );
   }
@@ -109,14 +116,34 @@ export function AvailabilityCalendar({
             Times on {selected.date}
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {selected.slots.map((s, i) => (
-              <span
-                key={i}
-                className="rounded-full border border-mist bg-fog px-2.5 py-1 font-mono text-[11px] text-charcoal"
-              >
-                {s.start}–{s.end}
-              </span>
-            ))}
+            {selected.slots.map((s, i) => {
+              const chosen =
+                selectedSlot?.start === s.start && selectedSlot?.end === s.end;
+              const label = `${s.start}–${s.end}`;
+              return onSelectSlot ? (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onSelectSlot(s)}
+                  aria-pressed={chosen}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 font-mono text-[11px] transition-colors",
+                    chosen
+                      ? "border-leash bg-leash text-white"
+                      : "border-mist bg-fog text-charcoal hover:border-ink"
+                  )}
+                >
+                  {label}
+                </button>
+              ) : (
+                <span
+                  key={i}
+                  className="rounded-full border border-mist bg-fog px-2.5 py-1 font-mono text-[11px] text-charcoal"
+                >
+                  {label}
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { testPrisma as db } from "./helpers/testdb";
-import { seedDatabase } from "@/lib/server/seed";
+import { resetToSnapshot, testPrisma as db } from "./helpers/testdb";
 import { createToken, consumeToken } from "@/lib/server/tokens";
 import {
   requestPasswordReset,
@@ -15,7 +14,7 @@ const ORIGIN = "http://test.local";
 const tokenFromLink = (link: string) => new URL(link).searchParams.get("token")!;
 
 beforeEach(async () => {
-  await seedDatabase(db);
+  await resetToSnapshot(db);
 });
 afterAll(async () => {
   await db.$disconnect();

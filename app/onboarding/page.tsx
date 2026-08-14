@@ -9,7 +9,7 @@ import { useSession } from "@/lib/store/session";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { HomeIcon, PawIcon, CheckIcon } from "@/components/ui/icons";
+import { HomeIcon, PawIcon, CheckIcon, StethoscopeIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: {
@@ -30,7 +30,25 @@ const OPTIONS: {
     body: "List your services and availability, and earn money doing what you love.",
     icon: HomeIcon,
   },
+  {
+    role: "vet",
+    title: "I'm a veterinarian",
+    body: "List your practice, take appointments, and write straight into your patients' health records.",
+    icon: StethoscopeIcon,
+  },
 ];
+
+/**
+ * Where to land after choosing roles. A caretaker or vet is invisible in search
+ * until their profile exists, so send them there first; anyone who is also an
+ * owner has a dashboard worth seeing immediately.
+ */
+function nextStepFor(roles: UserRole[]): string {
+  if (roles.includes("owner")) return "/dashboard";
+  if (roles.includes("vet")) return "/dashboard/vet-profile";
+  if (roles.includes("caretaker")) return "/dashboard/caretaker-profile";
+  return "/dashboard";
+}
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -61,9 +79,8 @@ export default function OnboardingPage() {
       const updated = await updateUser(currentUser!.id, { roles });
       setUser(updated);
       toast.success("You’re all set!");
-      router.push(roles.includes("caretaker") && !roles.includes("owner")
-        ? "/dashboard/caretaker-profile"
-        : "/dashboard");
+      // Send professionals straight to the profile they can't be found without.
+      router.push(nextStepFor(roles));
     } catch {
       toast.error("Couldn’t save. Try again.");
       setSaving(false);
@@ -79,7 +96,7 @@ export default function OnboardingPage() {
         How will you use Leash?
       </h1>
       <p className="mt-1 text-sm text-charcoal/60">
-        Pick one or both — you can change this anytime.
+        Pick any that apply — you can change this anytime.
       </p>
 
       <div className="mt-6 space-y-3">

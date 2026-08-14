@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { testPrisma as db } from "./helpers/testdb";
-import { seedDatabase } from "@/lib/server/seed";
+import { resetToSnapshot, testPrisma as db } from "./helpers/testdb";
 import {
   createUser,
   getUserById,
@@ -8,9 +7,11 @@ import {
   listUsers,
   updateUser,
 } from "@/lib/server/users";
+import { users as seedUsers } from "@/lib/mock-data";
+import { vetUsers } from "@/lib/mock-data/vets";
 
 beforeEach(async () => {
-  await seedDatabase(db);
+  await resetToSnapshot(db);
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -44,7 +45,9 @@ describe("users", () => {
   });
 
   it("lists all seeded users", async () => {
-    expect((await listUsers(db)).length).toBe(16);
+    // Derived, not a magic number — adding a seed user shouldn't fail this.
+    const expected = seedUsers.length + vetUsers.length + 1; // +1 store ops account
+    expect((await listUsers(db)).length).toBe(expected);
   });
 
   it("creates a user with sensible defaults", async () => {

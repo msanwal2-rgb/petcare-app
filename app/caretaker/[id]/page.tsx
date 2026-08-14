@@ -15,6 +15,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
+import { Panel, Stat } from "@/components/ui/Panel";
 import {
   MapPinIcon,
   ShieldCheckIcon,
@@ -287,32 +288,6 @@ export default function CaretakerDetailPage() {
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-mist bg-white px-4 py-3">
-      <p className="font-mono text-lg font-semibold text-ink">{value}</p>
-      <p className="text-xs text-charcoal/60">{label}</p>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  children,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("rounded-2xl border border-mist bg-white p-5", className)}>
-      <h3 className="mb-3 text-sm font-semibold text-ink">{title}</h3>
-      {children}
     </div>
   );
 }

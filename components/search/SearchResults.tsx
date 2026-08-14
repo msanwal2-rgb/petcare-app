@@ -13,24 +13,10 @@ import { RevealItem } from "@/components/ui/Reveal";
 import { Field, Select } from "@/components/ui/Field";
 import { SearchIcon } from "@/components/ui/icons";
 import { SERVICE_LABELS, SPECIES_LABELS, formatCurrency } from "@/lib/utils";
-
-/** Approximate coordinates for the demo cities so radius/distance sorting works
- *  without a geocoder. A real build would call a geocoding API. */
-const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
-  austin: { lat: 30.2672, lng: -97.7431 },
-  denver: { lat: 39.7392, lng: -104.9903 },
-  portland: { lat: 45.5152, lng: -122.6784 },
-};
+import { coordsFor } from "@/lib/geo";
 
 const SERVICES: ServiceType[] = ["walking", "sitting", "boarding", "daycare"];
 const SPECIES: Species[] = ["dog", "cat", "other"];
-
-function coordsFor(location?: string) {
-  if (!location) return undefined;
-  const key = location.toLowerCase();
-  const match = Object.keys(CITY_COORDS).find((c) => key.includes(c));
-  return match ? CITY_COORDS[match] : undefined;
-}
 
 export function SearchResults() {
   const params = useSearchParams();

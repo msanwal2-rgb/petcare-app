@@ -27,7 +27,7 @@ function Logo() {
 
 const NAV = [
   { href: "/search", label: "Find care" },
-  { href: "/#how", label: "How it works" },
+  { href: "/vets", label: "Vets" },
   { href: "/dashboard", label: "Dashboard" },
 ];
 

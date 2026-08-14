@@ -1,12 +1,21 @@
 /**
  * Vitest global setup: provision the isolated `test` schema on the Neon
- * database (production data lives in `public` and is never touched), then push
- * the Prisma schema into it. Runs once before the whole suite.
+ * database (production data lives in `public` and is never touched), push the
+ * Prisma schema into it, seed it once, and snapshot the result.
+ *
+ * Seeding here rather than per-test is what makes the suite quick: tests call
+ * `resetToSnapshot()`, which restores this exact state in one round trip.
  */
 
 import { execSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
-import { baseDbUrl, withSchema, TEST_SCHEMA } from "./testdb";
+import { seedDatabase } from "@/lib/server/seed";
+import {
+  baseDbUrl,
+  captureSnapshot,
+  withSchema,
+  TEST_SCHEMA,
+} from "./testdb";
 
 export default async function setup() {
   const base = baseDbUrl();
@@ -30,4 +39,13 @@ export default async function setup() {
       POSTGRES_URL_NON_POOLING: testUrl,
     },
   });
+
+  // Seed once, then snapshot it for the per-test restore.
+  const db = new PrismaClient({ datasources: { db: { url: testUrl } } });
+  try {
+    await seedDatabase(db);
+    await captureSnapshot(db);
+  } finally {
+    await db.$disconnect();
+  }
 }
