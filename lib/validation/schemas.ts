@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-export const userRole = z.enum(["owner", "caretaker"]);
+export const userRole = z.enum(["owner", "caretaker", "vet"]);
 export const species = z.enum(["dog", "cat", "other"]);
 export const sex = z.enum(["male", "female"]);
 export const serviceType = z.enum(["walking", "sitting", "boarding", "daycare"]);

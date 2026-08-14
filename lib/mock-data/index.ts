@@ -37,13 +37,13 @@ const other = (i: number) => unsplash(OTHER_PHOTOS[i % OTHER_PHOTOS.length], 900
    so the UI can exercise both a wide-open caretaker and a fully-booked one. */
 type AvailPattern = "open" | "busy" | "booked" | "weekends";
 
-function addDays(iso: string, n: number): string {
+export function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
-function generateAvailability(
+export function generateAvailability(
   start: string,
   days: number,
   pattern: AvailPattern

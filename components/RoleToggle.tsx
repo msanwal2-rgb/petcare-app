@@ -1,33 +1,38 @@
 "use client";
 
 import { useSession } from "@/lib/store/session";
-import type { UserRole } from "@/types";
-import { cn } from "@/lib/utils";
+import { ROLE_LABELS, cn } from "@/lib/utils";
 
-const OPTIONS: { role: UserRole; label: string }[] = [
-  { role: "owner", label: "Owner" },
-  { role: "caretaker", label: "Caretaker" },
-];
+/**
+ * Segmented role switch, driving the role-aware dashboard (brief §5).
+ *
+ * Renders one option per role the signed-in user actually holds, in a stable
+ * order, and renders nothing at all for single-role users — so callers can
+ * drop it in unconditionally.
+ */
+const ORDER = ["owner", "caretaker", "vet"] as const;
 
-/** Segmented owner/caretaker switch for dual-role users — drives the
- *  role-aware dashboard (brief §5). Only rendered when the user holds both. */
 export function RoleToggle() {
-  const { activeRole, setActiveRole } = useSession();
+  const { currentUser, activeRole, setActiveRole } = useSession();
+
+  const roles = ORDER.filter((r) => currentUser?.roles.includes(r));
+  if (roles.length < 2) return null;
+
   return (
     <div className="inline-flex rounded-full border border-mist bg-white p-0.5">
-      {OPTIONS.map((opt) => (
+      {roles.map((role) => (
         <button
-          key={opt.role}
-          onClick={() => setActiveRole(opt.role)}
-          aria-pressed={activeRole === opt.role}
+          key={role}
+          onClick={() => setActiveRole(role)}
+          aria-pressed={activeRole === role}
           className={cn(
             "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-            activeRole === opt.role
+            activeRole === role
               ? "bg-ink text-white"
               : "text-charcoal/60 hover:text-ink"
           )}
         >
-          {opt.label}
+          {ROLE_LABELS[role]}
         </button>
       ))}
     </div>

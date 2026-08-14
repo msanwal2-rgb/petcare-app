@@ -69,7 +69,8 @@ export function SiteHeader() {
               <div className="h-9 w-40" />
             ) : currentUser ? (
               <>
-                {currentUser.roles.length === 2 && <RoleToggle />}
+                {/* renders nothing for single-role users */}
+                <RoleToggle />
                 <Link
                   href="/dashboard"
                   className="flex items-center gap-2 rounded-full border border-mist bg-white py-1 pl-1 pr-3 transition-colors hover:border-ink/30"
@@ -138,7 +139,7 @@ export function SiteHeader() {
             <div className="mt-3 flex items-center gap-3 border-t border-mist pt-3">
               {hasHydrated && currentUser ? (
                 <>
-                  {currentUser.roles.length === 2 && <RoleToggle />}
+                  <RoleToggle />
                   <button
                     onClick={() => {
                       void handleLogout();

@@ -12,11 +12,30 @@ import {
   reviews as seedReviews,
   users as seedUsers,
 } from "@/lib/mock-data";
+import {
+  appointments as seedAppointments,
+  medicalRecords as seedMedicalRecords,
+  vets as seedVets,
+  vetUsers as seedVetUsers,
+} from "@/lib/mock-data/vets";
+import {
+  opsUser as seedOpsUser,
+  orders as seedOrders,
+  products as seedProducts,
+} from "@/lib/mock-data/store";
 import { hashPassword } from "./auth-logic";
 import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
 /** Delete every row, in FK-safe order. */
 export async function resetDatabase(db: PrismaClient) {
+  await db.orderEvent.deleteMany();
+  await db.orderItem.deleteMany();
+  await db.order.deleteMany();
+  await db.product.deleteMany();
+  await db.medicalRecord.deleteMany();
+  await db.vetAppointment.deleteMany();
+  await db.vetAvailabilityDay.deleteMany();
+  await db.vetProfile.deleteMany();
   await db.message.deleteMany();
   await db.verificationToken.deleteMany();
   await db.review.deleteMany();
@@ -36,8 +55,10 @@ export async function seedDatabase(db: PrismaClient) {
   // (bcrypt.compare still validates it — the salt is embedded in the hash).
   const demoHash = await hashPassword(DEMO_PASSWORD);
 
+  // Owners/caretakers, vets, and the store's ops account all share one table.
+  const allUsers = [...seedUsers, ...seedVetUsers, seedOpsUser];
   await db.user.createMany({
-    data: seedUsers.map((u) => ({
+    data: allUsers.map((u) => ({
       id: u.id,
       name: u.name,
       email: u.email,
@@ -51,6 +72,7 @@ export async function seedDatabase(db: PrismaClient) {
       verified: u.verified,
       createdAt: u.createdAt,
       passwordHash: demoHash,
+      isOps: u.id === seedOpsUser.id,
     })),
   });
 
@@ -149,12 +171,66 @@ export async function seedDatabase(db: PrismaClient) {
     ],
   });
 
+  /* ── Vet care ─────────────────────────────────────────────────────── */
+
+  for (const v of seedVets) {
+    await db.vetProfile.create({
+      data: {
+        id: v.id,
+        userId: v.userId,
+        clinicName: v.clinicName,
+        bio: v.bio,
+        specialties: v.specialties,
+        licenseNumber: v.licenseNumber,
+        licenseState: v.licenseState,
+        yearsExperience: v.yearsExperience,
+        acceptedSpecies: v.acceptedSpecies,
+        consultModes: v.consultModes,
+        consultFee: v.consultFee,
+        emergencyAvailable: v.emergencyAvailable,
+        clinicCity: v.clinic.city,
+        clinicState: v.clinic.state,
+        lat: v.clinic.lat,
+        lng: v.clinic.lng,
+        rating: v.rating,
+        reviewCount: v.reviewCount,
+        responseRatePct: v.responseRatePct,
+        availability: {
+          create: v.availability.map((d) => ({ date: d.date, slots: d.slots })),
+        },
+      },
+    });
+  }
+
+  await db.vetAppointment.createMany({ data: seedAppointments });
+  await db.medicalRecord.createMany({ data: seedMedicalRecords });
+
+  /* ── Store ────────────────────────────────────────────────────────── */
+
+  await db.product.createMany({ data: seedProducts });
+
+  for (const o of seedOrders) {
+    const { items, events, ...order } = o;
+    await db.order.create({
+      data: {
+        ...order,
+        items: { create: items },
+        events: { create: events },
+      },
+    });
+  }
+
   return {
-    users: seedUsers.length,
+    users: allUsers.length,
     pets: seedPets.length,
     caretakers: seedCaretakers.length,
     bookings: seedBookings.length,
     reviews: seedReviews.length,
     messages: 5,
+    vets: seedVets.length,
+    appointments: seedAppointments.length,
+    medicalRecords: seedMedicalRecords.length,
+    products: seedProducts.length,
+    orders: seedOrders.length,
   };
 }

@@ -27,7 +27,7 @@ model User {
   email        String            @unique
   phone        String            @default("")
   avatarUrl    String
-  roles        String[] // "owner" | "caretaker"
+  roles        String[] // "owner" | "caretaker" | "vet"
   addressCity  String
   addressState String
   lat          Float
@@ -37,16 +37,21 @@ model User {
   // Bcrypt hash for email/password login. Null for accounts created purely via
   // an OAuth provider (e.g. Google) that never set a password.
   passwordHash String?
+  // Store operations staff: may advance order fulfillment. Not a marketplace
+  // role — it never appears in `roles` or the role toggle.
+  isOps        Boolean           @default(false)
   pets         Pet[]
   caretaker    CaretakerProfile?
+  vet          VetProfile?
+  orders       Order[]
 
   @@map("users")
 }
 
 model Pet {
-  id                  String   @id
+  id                  String           @id
   ownerId             String
-  owner               User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner               User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   name                String
   species             String // "dog" | "cat" | "other"
   breed               String
@@ -61,29 +66,31 @@ model Pet {
   feedingInstructions String
   vetName             String
   vetPhone            String
+  appointments        VetAppointment[]
+  medicalRecords      MedicalRecord[]
 
   @@index([ownerId])
   @@map("pets")
 }
 
 model CaretakerProfile {
-  id                  String            @id
-  userId              String            @unique
-  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio                 String
-  servicesOffered     String[] // ServiceType[]
-  serviceRadiusMiles  Int
-  acceptedSpecies     String[] // Species[]
-  fencedYard          Boolean
-  hasOtherPets        Boolean
-  smokeFree           Boolean
-  certifications      String[]
+  id                    String            @id
+  userId                String            @unique
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                   String
+  servicesOffered       String[] // ServiceType[]
+  serviceRadiusMiles    Int
+  acceptedSpecies       String[] // Species[]
+  fencedYard            Boolean
+  hasOtherPets          Boolean
+  smokeFree             Boolean
+  certifications        String[]
   backgroundCheckStatus String // "verified" | "pending" | "none"
-  rating              Float
-  reviewCount         Int
-  responseRatePct     Int
-  pricing             PricingEntry[]
-  availability        AvailabilityDay[]
+  rating                Float
+  reviewCount           Int
+  responseRatePct       Int
+  pricing               PricingEntry[]
+  availability          AvailabilityDay[]
 
   @@map("caretaker_profiles")
 }
@@ -112,7 +119,7 @@ model AvailabilityDay {
 }
 
 model Booking {
-  id            String   @id
+  id            String    @id
   ownerId       String
   caretakerId   String // CaretakerProfile.id
   petIds        String[]
@@ -131,13 +138,17 @@ model Booking {
 }
 
 model Review {
-  id        String @id
-  bookingId String
+  id         String @id
+  // The engagement being reviewed: a Booking id, or a VetAppointment id when
+  // `kind` is "vet_appointment". Deliberately not a FK — reviews outlive the
+  // engagement and the same table serves both sides of the marketplace.
+  bookingId  String
+  kind       String @default("booking") // "booking" | "vet_appointment"
   fromUserId String
-  toUserId  String
-  rating    Float
-  comment   String
-  createdAt String
+  toUserId   String
+  rating     Float
+  comment    String
+  createdAt  String
 
   @@index([toUserId])
   @@index([bookingId])
@@ -156,6 +167,208 @@ model Message {
 
   @@index([bookingId])
   @@map("messages")
+}
+
+/**
+ * ── Vet care ─────────────────────────────────────────────────────────────
+ * Vets are the third side of the marketplace. A VetProfile mirrors
+ * CaretakerProfile (user-linked, availability days, rating); appointments
+ * mirror bookings (ISO-string times, server-enforced status transitions);
+ * medical records are the durable output that the store reads for Rx gating.
+ */
+
+model VetProfile {
+  id                 String               @id
+  userId             String               @unique
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinicName         String
+  bio                String
+  specialties        String[] // VetSpecialty[]
+  licenseNumber      String
+  licenseState       String
+  yearsExperience    Int
+  acceptedSpecies    String[] // Species[]
+  consultModes       String[] // ConsultMode[]
+  consultFee         Float
+  emergencyAvailable Boolean              @default(false)
+  clinicCity         String
+  clinicState        String
+  lat                Float
+  lng                Float
+  rating             Float                @default(0)
+  reviewCount        Int                  @default(0)
+  responseRatePct    Int                  @default(100)
+  availability       VetAvailabilityDay[]
+  appointments       VetAppointment[]
+
+  @@map("vet_profiles")
+}
+
+model VetAvailabilityDay {
+  id    String     @id @default(cuid())
+  vetId String
+  vet   VetProfile @relation(fields: [vetId], references: [id], onDelete: Cascade)
+  date  String
+  slots Json // { start: string; end: string }[]
+
+  @@index([vetId])
+  @@map("vet_availability_days")
+}
+
+model VetAppointment {
+  id            String          @id
+  ownerId       String
+  vetId         String
+  vet           VetProfile      @relation(fields: [vetId], references: [id], onDelete: Cascade)
+  petId         String
+  pet           Pet             @relation(fields: [petId], references: [id], onDelete: Cascade)
+  mode          String // ConsultMode
+  reason        String
+  symptoms      String[]
+  startDateTime String
+  endDateTime   String
+  status        String          @default("requested")
+  fee           Float
+  notes         String          @default("")
+  createdAt     String
+  records       MedicalRecord[]
+
+  @@index([ownerId])
+  @@index([vetId])
+  @@index([petId])
+  @@map("vet_appointments")
+}
+
+model MedicalRecord {
+  id             String          @id
+  petId          String
+  pet            Pet             @relation(fields: [petId], references: [id], onDelete: Cascade)
+  appointmentId  String?
+  appointment    VetAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  vetId          String? // VetProfile.id, when authored by a vet
+  authorUserId   String
+  type           String // MedicalRecordType
+  title          String
+  details        String          @default("")
+  occurredAt     String
+  nextDueAt      String? // next booster / follow-up
+  // Prescription-only fields. A record of type "prescription" that is
+  // unexpired is what unlocks Rx-only products in the store.
+  medicationName String?
+  dosage         String?
+  refillsLeft    Int?
+  expiresAt      String?
+  productSlugs   String[] // store products recommended by the vet
+  createdAt      String
+
+  @@index([petId])
+  @@index([appointmentId])
+  @@map("medical_records")
+}
+
+/**
+ * ── Store ────────────────────────────────────────────────────────────────
+ * Money is integer cents everywhere in this domain — floats drift under
+ * arithmetic and an order total must not. Order line items snapshot the
+ * product's name/brand/price at purchase so history never rewrites itself.
+ */
+
+model Product {
+  id                   String      @id
+  slug                 String      @unique
+  name                 String
+  brand                String
+  description          String
+  category             String // ProductCategory
+  species              String[] // Species[]
+  lifeStage            String[] // LifeStage[]
+  sizeLabel            String
+  weightLbs            Float
+  priceCents           Int
+  compareAtPriceCents  Int?
+  imageUrl             String
+  ingredients          String[]
+  allergens            String[] // matched against Pet.allergies
+  requiresPrescription Boolean     @default(false)
+  stockQty             Int         @default(0)
+  active               Boolean     @default(true)
+  rating               Float       @default(0)
+  reviewCount          Int         @default(0)
+  createdAt            String
+  orderItems           OrderItem[]
+
+  @@index([category])
+  @@index([active])
+  @@map("products")
+}
+
+model Order {
+  id                   String       @id
+  userId               String
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status               String       @default("pending_payment")
+  paymentStatus        String       @default("unpaid")
+  paymentRef           String?
+  subtotalCents        Int
+  shippingCents        Int
+  taxCents             Int
+  totalCents           Int
+  shipName             String
+  shipLine1            String
+  shipLine2            String       @default("")
+  shipCity             String
+  shipState            String
+  shipPostalCode       String
+  shipCountry          String       @default("US")
+  shipPhone            String       @default("")
+  deliveryInstructions String       @default("")
+  carrier              String?
+  trackingNumber       String?
+  placedAt             String
+  estimatedDeliveryAt  String?
+  deliveredAt          String?
+  items                OrderItem[]
+  events               OrderEvent[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String  @id @default(cuid())
+  orderId        String
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  // Snapshots — deliberately duplicated from Product so a later edit to the
+  // catalog can never change what a customer was charged or shipped.
+  name           String
+  brand          String
+  imageUrl       String
+  slug           String
+  unitPriceCents Int
+  quantity       Int
+  lineTotalCents Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// One step in the order's journey from the store to the recipient's home.
+// Append-only: the timeline is the audit trail for the tracking page.
+model OrderEvent {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      String // OrderStatus at the time of the event
+  label       String
+  description String  @default("")
+  location    String?
+  occurredAt  String
+
+  @@index([orderId])
+  @@map("order_events")
 }
 
 // Single-use, expiring tokens for email verification and password reset. Only
