@@ -1,7 +1,7 @@
 /**
- * Seed / reset helpers. Ports the deterministic mock data in /lib/mock-data
- * into Postgres. Exposed as functions (taking a PrismaClient) so both the
- * `prisma db seed` script and the test suite can reuse them.
+ * Seed / reset helpers. Loads the deterministic fixtures in /lib/seed-data into
+ * Postgres. Exposed as a function taking a PrismaClient so both the
+ * `prisma db seed` script and the test suite's global setup can reuse it.
  */
 
 import type { PrismaClient } from "@prisma/client";
@@ -11,23 +11,23 @@ import {
   pets as seedPets,
   reviews as seedReviews,
   users as seedUsers,
-} from "@/lib/mock-data";
+} from "@/lib/seed-data";
 import {
   appointments as seedAppointments,
   medicalRecords as seedMedicalRecords,
   vets as seedVets,
   vetUsers as seedVetUsers,
-} from "@/lib/mock-data/vets";
+} from "@/lib/seed-data/vets";
 import {
   opsUser as seedOpsUser,
   orders as seedOrders,
   products as seedProducts,
-} from "@/lib/mock-data/store";
+} from "@/lib/seed-data/store";
 import { hashPassword } from "./auth-logic";
 import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
 /** Delete every row, in FK-safe order. */
-export async function resetDatabase(db: PrismaClient) {
+async function resetDatabase(db: PrismaClient) {
   await db.orderEvent.deleteMany();
   await db.orderItem.deleteMany();
   await db.order.deleteMany();

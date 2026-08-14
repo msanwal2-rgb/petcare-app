@@ -18,27 +18,22 @@ import { PetShoppingBar } from "./PetShoppingBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
+import { SelectFilter } from "@/components/ui/SelectFilter";
 import { RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SearchIcon } from "@/components/ui/icons";
 import {
   CATEGORY_LABELS,
+  CATEGORY_OPTIONS,
   LIFE_STAGE_LABELS,
+  LIFE_STAGE_OPTIONS,
   SPECIES_LABELS,
+  SPECIES_OPTIONS,
   formatCents,
 } from "@/lib/utils";
 
-const CATEGORIES: ProductCategory[] = [
-  "dry_food",
-  "wet_food",
-  "treats",
-  "supplements",
-  "prescription_diet",
-  "dental",
-  "accessories",
-];
-const SPECIES: Species[] = ["dog", "cat", "other"];
-const STAGES: LifeStage[] = ["puppy", "kitten", "adult", "senior"];
+/** "all" is a property of a product, not something a shopper filters by. */
+const STAGE_OPTIONS = LIFE_STAGE_OPTIONS.filter((s) => s !== "all");
 const SORTS: { value: ProductSort; label: string }[] = [
   { value: "featured", label: "Featured" },
   { value: "price_asc", label: "Price: low to high" },
@@ -91,7 +86,8 @@ export function StoreCatalog() {
         q: q.trim() || undefined,
         category: (category || undefined) as ProductCategory | undefined,
         // Shopping "for Bruno" implies his species without asking twice.
-        species: (pet?.species ?? species ?? undefined) as Species | undefined,
+        // `||` not `??`: the filter's "no selection" value is "", not null.
+        species: (pet?.species || species || undefined) as Species | undefined,
         lifeStage: (lifeStage || undefined) as LifeStage | undefined,
         brand: brand || undefined,
         maxPriceCents: maxPrice < MAX_PRICE_CENTS ? maxPrice : undefined,
@@ -149,67 +145,47 @@ export function StoreCatalog() {
                 />
               </Field>
 
-              <Field label="Category" htmlFor="p-cat">
-                <Select
-                  id="p-cat"
-                  value={category}
-                  onChange={(e) => onFilter(setCategory)(e.target.value)}
-                >
-                  <option value="">All categories</option>
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="p-cat"
+                label="Category"
+                anyLabel="All categories"
+                options={CATEGORY_OPTIONS}
+                optionLabel={(c) => CATEGORY_LABELS[c]}
+                value={category}
+                onChange={onFilter(setCategory)}
+              />
 
               {!pet && (
-                <Field label="Pet type" htmlFor="p-species">
-                  <Select
-                    id="p-species"
-                    value={species}
-                    onChange={(e) => onFilter(setSpecies)(e.target.value)}
-                  >
-                    <option value="">Any pet</option>
-                    {SPECIES.map((s) => (
-                      <option key={s} value={s}>
-                        {SPECIES_LABELS[s]}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                <SelectFilter
+                  id="p-species"
+                  label="Pet type"
+                  anyLabel="Any pet"
+                  options={SPECIES_OPTIONS}
+                  optionLabel={(s) => SPECIES_LABELS[s]}
+                  value={species}
+                  onChange={onFilter(setSpecies)}
+                />
               )}
 
-              <Field label="Life stage" htmlFor="p-stage">
-                <Select
-                  id="p-stage"
-                  value={lifeStage}
-                  onChange={(e) => onFilter(setLifeStage)(e.target.value)}
-                >
-                  <option value="">Any age</option>
-                  {STAGES.map((s) => (
-                    <option key={s} value={s}>
-                      {LIFE_STAGE_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="p-stage"
+                label="Life stage"
+                anyLabel="Any age"
+                options={STAGE_OPTIONS}
+                optionLabel={(s) => LIFE_STAGE_LABELS[s]}
+                value={lifeStage}
+                onChange={onFilter(setLifeStage)}
+              />
 
-              <Field label="Brand" htmlFor="p-brand">
-                <Select
-                  id="p-brand"
-                  value={brand}
-                  onChange={(e) => onFilter(setBrand)(e.target.value)}
-                >
-                  <option value="">All brands</option>
-                  {(brands ?? []).map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="p-brand"
+                label="Brand"
+                anyLabel="All brands"
+                options={brands ?? []}
+                optionLabel={(b) => b}
+                value={brand}
+                onChange={onFilter(setBrand)}
+              />
 
               <Field
                 label="Max price"

@@ -29,8 +29,8 @@ export function baseDbUrl(): string {
 }
 
 export const TEST_SCHEMA = "test";
-export const SNAPSHOT_SCHEMA = "test_snapshot";
-export const TEST_DATABASE_URL = withSchema(baseDbUrl(), TEST_SCHEMA);
+const SNAPSHOT_SCHEMA = "test_snapshot";
+const TEST_DATABASE_URL = withSchema(baseDbUrl(), TEST_SCHEMA);
 
 export const testPrisma = new PrismaClient({
   datasources: { db: { url: TEST_DATABASE_URL } },
@@ -41,7 +41,7 @@ export const testPrisma = new PrismaClient({
  * it references. TRUNCATE ... CASCADE handles teardown regardless of order, so
  * only the insert direction matters here.
  */
-export const SEED_TABLES = [
+const SEED_TABLES = [
   "users",
   "pets",
   "caretaker_profiles",

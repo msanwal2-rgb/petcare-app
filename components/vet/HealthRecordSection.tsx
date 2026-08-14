@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { toast } from "sonner";
 import type { MedicalRecord, Pet } from "@/types";
-import { getRecordsForPet } from "@/lib/api/medical-records";
+import { deleteRecord, getRecordsForPet } from "@/lib/api/medical-records";
 import { getAppointmentsByOwner } from "@/lib/api/appointments";
 import { useAsync } from "@/lib/hooks/useAsync";
+import { useSession } from "@/lib/store/session";
 import { MedicalRecordCard } from "./MedicalRecordCard";
 import { VisitSummaryForm } from "./VisitSummaryForm";
 import { AppointmentStatusBadge } from "./AppointmentStatusBadge";
@@ -41,6 +43,7 @@ function activePrescriptions(records: MedicalRecord[], now = new Date()) {
  * prescriptions here trustworthy enough for the store to act on.
  */
 export function HealthRecordSection({ pet }: { pet: Pet }) {
+  const { currentUser } = useSession();
   const { data: records, loading, reload } = useAsync(
     () => getRecordsForPet(pet.id),
     [pet.id]
@@ -62,6 +65,19 @@ export function HealthRecordSection({ pet }: { pet: Pet }) {
   const due = dueSoon(records);
   const active = activePrescriptions(records);
   const petAppointments = (appointments ?? []).filter((a) => a.petId === pet.id);
+
+  async function remove(record: MedicalRecord) {
+    try {
+      await deleteRecord(record.id);
+      toast.success("Removed from the health record");
+      reload();
+    } catch (e) {
+      toast.error("Couldn't remove that entry", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
+  }
+
   const upcoming = petAppointments.filter((a) =>
     ["requested", "confirmed", "in_progress"].includes(a.status)
   );
@@ -163,7 +179,13 @@ export function HealthRecordSection({ pet }: { pet: Pet }) {
         ) : (
           <div className="space-y-3">
             {records.map((r) => (
-              <MedicalRecordCard key={r.id} record={r} />
+              <MedicalRecordCard
+                key={r.id}
+                record={r}
+                onDelete={
+                  r.authorUserId === currentUser?.id ? () => remove(r) : undefined
+                }
+              />
             ))}
           </div>
         )}

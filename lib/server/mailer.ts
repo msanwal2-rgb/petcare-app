@@ -7,7 +7,7 @@
  * sender), then emails go out for real — no code change needed.
  */
 
-export function mailerConfigured(): boolean {
+function mailerConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 

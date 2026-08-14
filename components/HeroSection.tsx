@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { SearchBar } from "./SearchBar";
-import { unsplash, HERO_PHOTO, BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { unsplash, HERO_PHOTO, BLUR_DATA_URL } from "@/lib/media/photos";
 
 /**
  * Landing hero (brief §3, §6): one strong real photo filling most of the

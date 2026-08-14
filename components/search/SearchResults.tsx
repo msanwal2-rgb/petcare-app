@@ -7,16 +7,18 @@ import { searchCaretakers } from "@/lib/api/caretakers";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { CaretakerCard } from "@/components/CaretakerCard";
 import { CaretakerCardSkeleton } from "@/components/CaretakerCardSkeleton";
-import { EmptyState } from "@/components/EmptyState";
 import { SearchBar } from "@/components/SearchBar";
-import { RevealItem } from "@/components/ui/Reveal";
-import { Field, Select } from "@/components/ui/Field";
-import { SearchIcon } from "@/components/ui/icons";
-import { SERVICE_LABELS, SPECIES_LABELS, formatCurrency } from "@/lib/utils";
+import { ResultsGrid } from "@/components/ui/ResultsGrid";
+import { Field } from "@/components/ui/Field";
+import { SelectFilter } from "@/components/ui/SelectFilter";
+import {
+  SERVICE_LABELS,
+  SERVICE_OPTIONS,
+  SPECIES_LABELS,
+  SPECIES_OPTIONS,
+  formatCurrency,
+} from "@/lib/utils";
 import { coordsFor } from "@/lib/geo";
-
-const SERVICES: ServiceType[] = ["walking", "sitting", "boarding", "daycare"];
-const SPECIES: Species[] = ["dog", "cat", "other"];
 
 export function SearchResults() {
   const params = useSearchParams();
@@ -63,35 +65,25 @@ export function SearchResults() {
           <div className="rounded-2xl border border-mist bg-white p-5">
             <h2 className="text-sm font-semibold text-ink">Filters</h2>
             <div className="mt-4 space-y-4">
-              <Field label="Service" htmlFor="f-service">
-                <Select
-                  id="f-service"
-                  value={service}
-                  onChange={(e) => setService(e.target.value)}
-                >
-                  <option value="">Any service</option>
-                  {SERVICES.map((s) => (
-                    <option key={s} value={s}>
-                      {SERVICE_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="f-service"
+                label="Service"
+                anyLabel="Any service"
+                options={SERVICE_OPTIONS}
+                optionLabel={(s) => SERVICE_LABELS[s]}
+                value={service}
+                onChange={setService}
+              />
 
-              <Field label="Pet type" htmlFor="f-species">
-                <Select
-                  id="f-species"
-                  value={species}
-                  onChange={(e) => setSpecies(e.target.value)}
-                >
-                  <option value="">Any pet</option>
-                  {SPECIES.map((s) => (
-                    <option key={s} value={s}>
-                      {SPECIES_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="f-species"
+                label="Pet type"
+                anyLabel="Any pet"
+                options={SPECIES_OPTIONS}
+                optionLabel={(s) => SPECIES_LABELS[s]}
+                value={species}
+                onChange={setSpecies}
+              />
 
               <Field
                 label="Max price"
@@ -137,29 +129,16 @@ export function SearchResults() {
             )}
           </div>
 
-          {loading || data === null ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <CaretakerCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : results.length === 0 ? (
-            <EmptyState
-              icon={<SearchIcon width={40} height={40} />}
-              title="No caretakers match those filters"
-              description="Try widening your price range, clearing the pet-type filter, or searching a nearby city."
-              actionLabel="Reset filters"
-              actionHref="/search"
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((c) => (
-                <RevealItem key={c.id}>
-                  <CaretakerCard caretaker={c} />
-                </RevealItem>
-              ))}
-            </div>
-          )}
+          <ResultsGrid
+            items={data}
+            loading={loading}
+            skeleton={<CaretakerCardSkeleton />}
+            renderItem={(caretaker) => <CaretakerCard caretaker={caretaker} />}
+            emptyTitle="No caretakers match those filters"
+            emptyDescription="Try widening your price range, clearing the pet-type filter, or searching a nearby city."
+            emptyActionLabel="Reset filters"
+            emptyActionHref="/search"
+          />
         </section>
       </div>
     </div>

@@ -1,31 +1,31 @@
 # API Contracts — Pet Care Marketplace
 
-This is the checklist the backend team builds from. Every function in
-`/lib/api/*` is a stand-in for one real HTTP endpoint. The frontend calls
-**only** these functions (never the mock data directly), so replacing each
-mock body with a real `fetch` is a one-file change per domain — no page or
-component code changes.
+Every endpoint the app exposes. Each function in `/lib/api/*` wraps exactly one
+of these, and pages call **only** those functions.
 
-- **Base URL (proposed):** `/api`
-- **Auth:** all endpoints except search/detail assume an authenticated user
-  (JWT/session). Not enforced in the mock.
+- **Base URL:** `/api`
+- **Auth:** enforced server-side in the route handlers, not in the client. Each
+  table below names the rule. `401` when signed out, `403` when signed in as
+  the wrong person, `409` on an illegal state transition.
 - **Content type:** `application/json`
 - **Types:** every shape below is defined in [`/types/index.ts`](./types/index.ts).
-  `CaretakerWithUser` is `CaretakerProfile` joined with its `User`, plus a
-  computed `priceRange` and optional `distanceMiles`.
-- **Latency:** the mock simulates ~600ms so loading skeletons are exercised.
+  `CaretakerWithUser` / `VetWithUser` are the profile joined with its `User`
+  plus computed `priceRange` / `distanceMiles`.
+- **Money:** booking and appointment prices are USD floats (legacy); everything
+  in the store is **integer cents**.
 
 ---
 
 ## Users — `/lib/api/users.ts`
 
-| Method | Path | Request | Response | Called by |
-|---|---|---|---|---|
-| GET | `/api/users/:id` | — | `User` · 404 → `null` | `/caretaker/[id]`, `/booking/[id]`, `/dashboard` |
-| GET | `/api/users?ids=a,b,c` | query `ids` (csv) | `User[]` | dashboards, lists resolving several users |
-| GET | `/api/users` | — (dev/demo only) | `User[]` | Dev account switcher |
-| POST | `/api/users` | `{ name, email, phone?, roles? }` | `User` (201) | `/signup` (mock — real build uses auth provider) |
-| PATCH | `/api/users/:id` | `Partial<User>` | `User` | `/onboarding` (role selection), profile edits |
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/users/:id` | public | `User` · 404 |
+| GET | `/api/users?ids=a,b,c` | signed in | `User[]` |
+| GET | `/api/users` | signed in, **development only** | `User[]` — returns every email, so it is refused in production |
+| GET | `/api/me` | signed in | the authenticated `User` |
+| POST | `/api/signup` | public | `User` (201) · 409 if the email is taken. The only way to create an account: hashes a password and sends a verification link |
+| PATCH | `/api/users/:id` | self only | `User` |
 
 ## Pets — `/lib/api/pets.ts`
 
@@ -89,3 +89,70 @@ These are **not** represented in `/lib/api` yet; the backend will own them:
 - **Trust & safety** — background checks (Checkr), ID verification (Stripe
   Identity). `backgroundCheckStatus` is display-only here.
 - **Notifications** — push/SMS/email preferences.
+
+
+---
+
+## Vet care
+
+### Vets — `/lib/api/vets.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/vets/search` | public | `VetWithUser[]`, sorted by distance when `lat`/`lng` are given, else rating. Filters: `specialty`, `species`, `mode`, `emergencyOnly`, `radiusMiles` |
+| GET | `/api/vets/:id` | public | `VetWithUser` · 404 |
+| GET | `/api/users/:id/vet-profile` | public | `VetProfile` · `null` |
+| PATCH | `/api/users/:id/vet-profile` | self only | `VetProfile` (upsert). `rating`, `reviewCount` and `responseRatePct` are not accepted — they are derived |
+
+### Appointments — `/lib/api/appointments.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| POST | `/api/appointments` | signed in, `ownerId` = you, pet is yours | `VetAppointment` (201, `requested`). **No `fee`** — the server reads it off the vet's profile. 400 if the vet doesn't treat that species or offer that format |
+| GET | `/api/appointments/:id` | participant | `VetAppointment` · 404 |
+| PATCH | `/api/appointments/:id/status` | participant | `VetAppointment` · 409 illegal transition · 403 wrong party. Owner may `cancel`; only the vet may `confirm`, `decline`, start or complete |
+| GET | `/api/owners/:ownerId/appointments` | self only | `VetAppointment[]` |
+| GET | `/api/vets/:id/appointments` | that vet only | `VetAppointment[]` |
+
+Lifecycle: `requested → confirmed → in_progress → completed`, with `declined`
+and `cancelled` as terminal branches.
+
+### Health records — `/lib/api/medical-records.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/pets/:id/medical-records` | pet's owner, or a vet with a live appointment for it | `MedicalRecord[]` |
+| POST | `/api/pets/:id/medical-records` | as above; a treating vet may write any type, an owner only `weight` and `allergy` | `MedicalRecord` (201) |
+| DELETE | `/api/medical-records/:id` | the record's author only | 204 |
+
+An unexpired `prescription` record with refills left is what authorises the
+product slugs it names in the store.
+
+---
+
+## Store
+
+### Catalog — `/lib/api/products.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/products` | public | `ProductPage` — filters `q`, `category`, `species`, `lifeStage`, `brand`, `minPriceCents`, `maxPriceCents`; `sort`; `limit`/`offset` |
+| GET | `/api/products/:slug` | public | `Product` · 404 |
+| GET | `/api/brands` | public | `string[]` |
+| GET | `/api/pets/:id/recommendations` | pet's owner | `Product[]` — right species and life stage, allergens excluded, no Rx items |
+
+### Orders — `/lib/api/orders.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| POST | `/api/orders/quote` | signed in; `petId` must be yours | `CartQuote` — server-side re-pricing plus the prescription check |
+| POST | `/api/orders` | signed in | `Order` (201). The body carries items and an address, **never prices**. 409 with the quote when a line is unavailable, or with `productId` when stock ran out mid-checkout |
+| GET | `/api/orders` | signed in | your `Order[]`, newest first |
+| GET | `/api/orders/:id` | the customer, or ops | `Order` with items and the tracking timeline |
+| POST | `/api/orders/:id/cancel` | the customer | `Order` · 409 once shipped. Returns the stock |
+| PATCH | `/api/orders/:id/status` | **ops only** | `Order` · 409 illegal transition. Appends the tracking event |
+| GET | `/api/ops/orders` | **ops only** | the fulfilment queue, oldest first |
+
+Lifecycle: `pending_payment → paid → processing → packed → shipped →
+out_for_delivery → delivered`, with `cancelled` and `refunded` as terminal
+branches. Cancelling or refunding returns stock to the catalog.

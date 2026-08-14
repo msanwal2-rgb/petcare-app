@@ -311,7 +311,7 @@ export function toProduct(p: DbProduct): Product {
   };
 }
 
-export function toOrderItem(i: DbOrderItem): OrderItem {
+function toOrderItem(i: DbOrderItem): OrderItem {
   return {
     id: i.id,
     orderId: i.orderId,
@@ -326,7 +326,7 @@ export function toOrderItem(i: DbOrderItem): OrderItem {
   };
 }
 
-export function toOrderEvent(e: DbOrderEvent): OrderEvent {
+function toOrderEvent(e: DbOrderEvent): OrderEvent {
   return {
     id: e.id,
     orderId: e.orderId,

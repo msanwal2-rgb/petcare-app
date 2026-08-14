@@ -4,7 +4,7 @@ import type { CaretakerWithUser } from "@/types";
 import { RatingStars } from "./RatingStars";
 import { ServiceTypeChip } from "./ServiceTypeChip";
 import { MapPinIcon, ShieldCheckIcon } from "./ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatCurrency } from "@/lib/utils";
 
 /**

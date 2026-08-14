@@ -8,7 +8,6 @@ import {
   getRecordById,
   getRecordsForPet,
   ownerMayAuthor,
-  updateRecord,
 } from "@/lib/server/medical-records";
 
 beforeAll(async () => {
@@ -141,13 +140,11 @@ describe("record writes", () => {
     expect(created.authorUserId).toBe("u1");
   });
 
-  it("updates a record", async () => {
-    const updated = await updateRecord("mr2", { refillsLeft: 1 }, db);
-    expect(updated.refillsLeft).toBe(1);
-  });
-
   it("stops authorising a product once the refills run out", async () => {
-    await updateRecord("mr2", { refillsLeft: 0 }, db);
+    await db.medicalRecord.update({
+      where: { id: "mr2" },
+      data: { refillsLeft: 0 },
+    });
     const slugs = await authorizedProductSlugs("p4", "2026-07-08T00:00:00Z", db);
     expect(slugs.size).toBe(0);
   });

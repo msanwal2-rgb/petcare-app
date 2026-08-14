@@ -1,5 +1,9 @@
 /**
  * Curated, hand-picked Unsplash photography (brief §3).
+ *
+ * This is production code, not fixtures: `unsplash()` builds every remote
+ * image URL the app renders, and BLUR_DATA_URL is the placeholder behind all
+ * of them. It lives outside /lib/seed-data for that reason.
  * Every URL below was verified to resolve — we reference specific photo
  * IDs (not the randomized Source endpoint) so imagery stays consistent
  * and on-brand. `unsplash()` builds a fixed-size, face-aware crop so

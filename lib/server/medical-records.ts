@@ -61,15 +61,6 @@ export async function createRecord(
   return toMedicalRecord(r);
 }
 
-export async function updateRecord(
-  id: string,
-  patch: Partial<MedicalRecordBody>,
-  db: PrismaClient = defaultPrisma
-) {
-  const r = await db.medicalRecord.update({ where: { id }, data: patch });
-  return toMedicalRecord(r);
-}
-
 export async function deleteRecord(id: string, db: PrismaClient = defaultPrisma) {
   await db.medicalRecord.delete({ where: { id } });
 }

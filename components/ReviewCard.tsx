@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { Review, User } from "@/types";
 import { RatingStars } from "./RatingStars";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatDate } from "@/lib/utils";
 
 export function ReviewCard({

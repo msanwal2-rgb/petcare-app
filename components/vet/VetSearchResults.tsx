@@ -7,29 +7,18 @@ import { searchVets } from "@/lib/api/vets";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { VetCard } from "@/components/vet/VetCard";
 import { CaretakerCardSkeleton } from "@/components/CaretakerCardSkeleton";
-import { EmptyState } from "@/components/EmptyState";
-import { RevealItem } from "@/components/ui/Reveal";
-import { Field, Input, Select } from "@/components/ui/Field";
-import { SearchIcon } from "@/components/ui/icons";
+import { ResultsGrid } from "@/components/ui/ResultsGrid";
+import { Field, Input } from "@/components/ui/Field";
+import { SelectFilter } from "@/components/ui/SelectFilter";
 import { coordsFor } from "@/lib/geo";
 import {
   CONSULT_MODE_LABELS,
+  CONSULT_MODE_OPTIONS,
   SPECIALTY_LABELS,
+  SPECIALTY_OPTIONS,
   SPECIES_LABELS,
+  SPECIES_OPTIONS,
 } from "@/lib/utils";
-
-const SPECIALTIES: VetSpecialty[] = [
-  "general",
-  "dermatology",
-  "dentistry",
-  "surgery",
-  "emergency",
-  "nutrition",
-  "behavior",
-  "exotics",
-];
-const MODES: ConsultMode[] = ["in_clinic", "video", "home_visit"];
-const SPECIES: Species[] = ["dog", "cat", "other"];
 
 export function VetSearchResults() {
   const params = useSearchParams();
@@ -76,50 +65,35 @@ export function VetSearchResults() {
                 />
               </Field>
 
-              <Field label="Specialty" htmlFor="f-specialty">
-                <Select
-                  id="f-specialty"
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                >
-                  <option value="">Any specialty</option>
-                  {SPECIALTIES.map((s) => (
-                    <option key={s} value={s}>
-                      {SPECIALTY_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="f-specialty"
+                label="Specialty"
+                anyLabel="Any specialty"
+                options={SPECIALTY_OPTIONS}
+                optionLabel={(s) => SPECIALTY_LABELS[s]}
+                value={specialty}
+                onChange={setSpecialty}
+              />
 
-              <Field label="Pet type" htmlFor="f-species">
-                <Select
-                  id="f-species"
-                  value={species}
-                  onChange={(e) => setSpecies(e.target.value)}
-                >
-                  <option value="">Any pet</option>
-                  {SPECIES.map((s) => (
-                    <option key={s} value={s}>
-                      {SPECIES_LABELS[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="f-species"
+                label="Pet type"
+                anyLabel="Any pet"
+                options={SPECIES_OPTIONS}
+                optionLabel={(s) => SPECIES_LABELS[s]}
+                value={species}
+                onChange={setSpecies}
+              />
 
-              <Field label="Consultation" htmlFor="f-mode">
-                <Select
-                  id="f-mode"
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                >
-                  <option value="">Any format</option>
-                  {MODES.map((m) => (
-                    <option key={m} value={m}>
-                      {CONSULT_MODE_LABELS[m]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <SelectFilter
+                id="f-mode"
+                label="Consultation"
+                anyLabel="Any format"
+                options={CONSULT_MODE_OPTIONS}
+                optionLabel={(m) => CONSULT_MODE_LABELS[m]}
+                value={mode}
+                onChange={setMode}
+              />
 
               <label className="flex items-center gap-2.5 text-sm text-charcoal">
                 <input
@@ -158,29 +132,16 @@ export function VetSearchResults() {
             )}
           </div>
 
-          {loading || data === null ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <CaretakerCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : results.length === 0 ? (
-            <EmptyState
-              icon={<SearchIcon width={40} height={40} />}
-              title="No vets match those filters"
-              description="Try clearing the specialty filter or searching a nearby city. Video consultations aren't limited by distance."
-              actionLabel="See all vets"
-              actionHref="/vets"
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((v) => (
-                <RevealItem key={v.id}>
-                  <VetCard vet={v} />
-                </RevealItem>
-              ))}
-            </div>
-          )}
+          <ResultsGrid
+            items={data}
+            loading={loading}
+            skeleton={<CaretakerCardSkeleton />}
+            renderItem={(vet) => <VetCard vet={vet} />}
+            emptyTitle="No vets match those filters"
+            emptyDescription="Try clearing the specialty filter or searching a nearby city. Video consultations aren't limited by distance."
+            emptyActionLabel="See all vets"
+            emptyActionHref="/vets"
+          />
         </section>
       </div>
     </div>

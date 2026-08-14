@@ -1,13 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { getCaretakerById } from "@/lib/api/caretakers";
 import { getReviewsForUser } from "@/lib/api/reviews";
 import { getUsersByIds } from "@/lib/api/users";
 import { useAsync } from "@/lib/hooks/useAsync";
-import { RatingStars } from "@/components/RatingStars";
 import { ServiceTypeChip } from "@/components/ServiceTypeChip";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 import { ReviewCard } from "@/components/ReviewCard";
@@ -16,13 +14,8 @@ import { ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
 import { Panel, Stat } from "@/components/ui/Panel";
-import {
-  MapPinIcon,
-  ShieldCheckIcon,
-  CheckIcon,
-  ClockIcon,
-} from "@/components/ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { ProfileHero, ProfilePageSkeleton } from "@/components/ui/ProfileHero";
+import { CheckIcon, ClockIcon } from "@/components/ui/icons";
 import {
   SERVICE_LABELS,
   SPECIES_LABELS,
@@ -61,7 +54,7 @@ export default function CaretakerDetailPage() {
         />
       </div>
     ) : (
-      <ProfileSkeleton />
+      <ProfilePageSkeleton />
     );
   }
 
@@ -72,39 +65,15 @@ export default function CaretakerDetailPage() {
     <div className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-6">
       {/* Header */}
       <Reveal className="overflow-hidden rounded-3xl border border-mist bg-white">
-        <div className="relative h-56 sm:h-72">
-          <Image
-            src={user.avatarUrl}
-            alt={user.name}
-            fill
-            priority
-            sizes="(max-width: 1024px) 100vw, 1200px"
-            placeholder="blur"
-            blurDataURL={BLUR_DATA_URL}
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 flex flex-wrap items-end justify-between gap-4 p-6">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-semibold text-white">{user.name}</h1>
-                {user.verified && (
-                  <ShieldCheckIcon className="text-marigold" width={22} height={22} />
-                )}
-              </div>
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-white/85">
-                <MapPinIcon width={15} height={15} />
-                {user.address.city}, {user.address.state}
-              </p>
-            </div>
-            <div className="rounded-xl bg-white/95 px-4 py-2 backdrop-blur">
-              <RatingStars
-                rating={caretaker.rating}
-                reviewCount={caretaker.reviewCount}
-              />
-            </div>
-          </div>
-        </div>
+        <ProfileHero
+          imageUrl={user.avatarUrl}
+          name={user.name}
+          verified={user.verified}
+          city={user.address.city}
+          state={user.address.state}
+          rating={caretaker.rating}
+          reviewCount={caretaker.reviewCount}
+        />
       </Reveal>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
@@ -305,26 +274,5 @@ function EnvItem({ ok, children }: { ok: boolean; children: React.ReactNode }) {
       </span>
       <span className={cn(!ok && "text-charcoal/45 line-through")}>{children}</span>
     </li>
-  );
-}
-
-function ProfileSkeleton() {
-  return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-6">
-      <Skeleton className="h-56 w-full rounded-3xl sm:h-72" />
-      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-24 w-full" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-16" />
-            ))}
-          </div>
-          <Skeleton className="h-40 w-full rounded-2xl" />
-        </div>
-        <Skeleton className="h-56 w-full rounded-2xl" />
-      </div>
-    </div>
   );
 }

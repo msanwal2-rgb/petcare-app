@@ -1,7 +1,7 @@
 import { getUserById, updateUser } from "@/lib/server/users";
 import { updateUserSchema } from "@/lib/validation/schemas";
 import { forbidden, notFound, ok, parseBody } from "@/lib/server/http";
-import { currentUserId, unauthorized } from "@/lib/server/session";
+import { requireUser } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -15,9 +15,9 @@ export async function GET(_request: Request, ctx: Ctx) {
 // PATCH /api/users/:id -> User | 404 — only your own account
 export async function PATCH(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
-  if (uid !== id) return forbidden();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
+  if (auth.uid !== id) return forbidden();
   const parsed = await parseBody(request, updateUserSchema);
   if ("response" in parsed) return parsed.response;
   const user = await updateUser(id, parsed.data);

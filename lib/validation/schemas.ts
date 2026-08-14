@@ -7,12 +7,12 @@
 import { z } from "zod";
 
 export const userRole = z.enum(["owner", "caretaker", "vet"]);
-export const species = z.enum(["dog", "cat", "other"]);
-export const sex = z.enum(["male", "female"]);
-export const serviceType = z.enum(["walking", "sitting", "boarding", "daycare"]);
-export const pricingUnit = z.enum(["hour", "day"]);
-export const backgroundCheckStatus = z.enum(["verified", "pending", "none"]);
-export const bookingStatus = z.enum([
+const species = z.enum(["dog", "cat", "other"]);
+const sex = z.enum(["male", "female"]);
+const serviceType = z.enum(["walking", "sitting", "boarding", "daycare"]);
+const pricingUnit = z.enum(["hour", "day"]);
+const backgroundCheckStatus = z.enum(["verified", "pending", "none"]);
+const bookingStatus = z.enum([
   "requested",
   "accepted",
   "declined",
@@ -29,13 +29,6 @@ const address = z.object({
 });
 
 /* ── Users ──────────────────────────────────────────────────────────── */
-
-export const createUserSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  phone: z.string().optional(),
-  roles: z.array(userRole).optional(),
-});
 
 export const updateUserSchema = z
   .object({
@@ -147,7 +140,7 @@ const boolish = z
 
 /* ── Vet care ───────────────────────────────────────────────────────── */
 
-export const vetSpecialty = z.enum([
+const vetSpecialty = z.enum([
   "general",
   "dermatology",
   "dentistry",
@@ -157,8 +150,8 @@ export const vetSpecialty = z.enum([
   "behavior",
   "exotics",
 ]);
-export const consultMode = z.enum(["in_clinic", "video", "home_visit"]);
-export const appointmentStatus = z.enum([
+const consultMode = z.enum(["in_clinic", "video", "home_visit"]);
+const appointmentStatus = z.enum([
   "requested",
   "confirmed",
   "declined",
@@ -166,7 +159,7 @@ export const appointmentStatus = z.enum([
   "completed",
   "cancelled",
 ]);
-export const medicalRecordType = z.enum([
+const medicalRecordType = z.enum([
   "visit_note",
   "vaccination",
   "prescription",
@@ -232,8 +225,6 @@ export const medicalRecordSchema = z.object({
   productSlugs: z.array(z.string()).default([]),
 });
 
-export const medicalRecordPatchSchema = medicalRecordSchema.partial();
-
 export const vetSearchQuerySchema = z.object({
   location: z.string().optional(),
   lat: numeric.optional(),
@@ -247,7 +238,7 @@ export const vetSearchQuerySchema = z.object({
 
 /* ── Store ──────────────────────────────────────────────────────────── */
 
-export const productCategory = z.enum([
+const productCategory = z.enum([
   "dry_food",
   "wet_food",
   "treats",
@@ -256,15 +247,15 @@ export const productCategory = z.enum([
   "dental",
   "accessories",
 ]);
-export const lifeStage = z.enum(["puppy", "kitten", "adult", "senior", "all"]);
-export const productSort = z.enum([
+const lifeStage = z.enum(["puppy", "kitten", "adult", "senior", "all"]);
+const productSort = z.enum([
   "featured",
   "price_asc",
   "price_desc",
   "rating",
   "newest",
 ]);
-export const orderStatus = z.enum([
+const orderStatus = z.enum([
   "pending_payment",
   "paid",
   "processing",
@@ -291,7 +282,7 @@ export const productQuerySchema = z.object({
   offset: intish.optional(),
 });
 
-export const shippingAddressSchema = z.object({
+const shippingAddressSchema = z.object({
   name: z.string().min(1, "Who should we address it to?"),
   line1: z.string().min(1, "Street address is required"),
   line2: z.string().default(""),
@@ -343,7 +334,6 @@ export const searchQuerySchema = z.object({
   maxPrice: numeric.optional(),
 });
 
-export type CreateUserBody = z.infer<typeof createUserSchema>;
 export type UpdateUserBody = z.infer<typeof updateUserSchema>;
 export type PetInputBody = z.infer<typeof petInputSchema>;
 export type PetPatchBody = z.infer<typeof petPatchSchema>;

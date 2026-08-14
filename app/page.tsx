@@ -13,7 +13,7 @@ import {
   BagIcon,
   ChevronRightIcon,
 } from "@/components/ui/icons";
-import { unsplash, CTA_PHOTO, BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { unsplash, CTA_PHOTO, BLUR_DATA_URL } from "@/lib/media/photos";
 
 const STEPS = [
   {

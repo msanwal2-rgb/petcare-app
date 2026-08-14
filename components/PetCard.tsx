@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Pet } from "@/types";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { SPECIES_LABELS, cn, petAge } from "@/lib/utils";
 import { CheckIcon } from "./ui/icons";
 

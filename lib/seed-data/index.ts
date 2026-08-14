@@ -1,9 +1,11 @@
 /**
- * Seed data for the Pet Care Marketplace (brief §8).
+ * Seed data for the Pet Care Marketplace: owners, caretakers, pets, bookings
+ * and reviews. The vet-care and store fixtures live alongside in ./vets and
+ * ./store.
  *
- * IMPORTANT: nothing outside /lib/api should import this file directly.
- * Pages and components call the API layer in /lib/api/*, which reads from
- * here today and will call a real backend later — a one-file swap per domain.
+ * IMPORTANT: only the seeder (lib/server/seed.ts) imports this. Pages and
+ * components read live data through /lib/api/*; a page importing fixtures
+ * directly would ship a thousand lines of them to the browser.
  *
  * All timestamps are hard-coded around the demo "today" of 2026-07-08 so the
  * UI is deterministic (no server/client hydration drift from Date.now()).
@@ -23,7 +25,7 @@ import {
   HEADSHOTS,
   OTHER_PHOTOS,
   unsplash,
-} from "./photos";
+} from "@/lib/media/photos";
 
 export const TODAY = "2026-07-08";
 
@@ -37,7 +39,7 @@ const other = (i: number) => unsplash(OTHER_PHOTOS[i % OTHER_PHOTOS.length], 900
    so the UI can exercise both a wide-open caretaker and a fully-booked one. */
 type AvailPattern = "open" | "busy" | "booked" | "weekends";
 
-export function addDays(iso: string, n: number): string {
+function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
@@ -949,5 +951,3 @@ export const reviews: Review[] = [
 ];
 
 /* Convenience default demo accounts for the dev account switcher (§8). */
-export const DEMO_OWNER_ID = "u1"; // Maya Chen — owner with 2 pets + active bookings
-export const DEMO_CARETAKER_ID = "u10"; // Elena Petrova — 5.0 caretaker with incoming requests

@@ -19,7 +19,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Panel, Stat } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
   CONSULT_MODE_LABELS,
   SPECIALTY_LABELS,

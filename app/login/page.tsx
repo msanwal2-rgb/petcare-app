@@ -13,31 +13,29 @@ import {
   loginWithGoogle,
   loginWithPassword,
 } from "@/lib/auth/session-client";
-import { DEMO_PASSWORD } from "@/lib/auth/demo";
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, type DemoRole } from "@/lib/auth/demo";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 
-// Seed accounts wired up for one-tap demo login.
-const DEMO = { owner: "u1", caretaker: "u10" };
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [samples, setSamples] = useState<Record<string, User>>({});
+  const [samples, setSamples] = useState<Partial<Record<DemoRole, User>>>({});
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([getUserById(DEMO.owner), getUserById(DEMO.caretaker)]).then(
-      ([o, c]) => {
-        const map: Record<string, User> = {};
-        if (o) map.owner = o;
-        if (c) map.caretaker = c;
-        setSamples(map);
-      }
-    );
+    const roles = Object.keys(DEMO_ACCOUNTS) as DemoRole[];
+    Promise.all(roles.map((r) => getUserById(DEMO_ACCOUNTS[r]))).then((users) => {
+      setSamples(
+        Object.fromEntries(
+          roles.map((r, i) => [r, users[i]]).filter(([, u]) => u)
+        ) as Partial<Record<DemoRole, User>>
+      );
+    });
     // Only show the Google button when the OAuth provider is configured.
     getProviders().then((p) => setGoogleEnabled(Boolean(p?.google)));
   }, []);
@@ -139,7 +137,7 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-2">
-          {(["owner", "caretaker"] as const).map((role) => {
+          {(Object.keys(DEMO_ACCOUNTS) as DemoRole[]).map((role) => {
             const u = samples[role];
             return (
               <button

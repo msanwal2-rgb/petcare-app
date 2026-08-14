@@ -1,14 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetToSnapshot, testPrisma as db } from "./helpers/testdb";
 import {
-  createUser,
   getUserById,
   getUsersByIds,
   listUsers,
   updateUser,
 } from "@/lib/server/users";
-import { users as seedUsers } from "@/lib/mock-data";
-import { vetUsers } from "@/lib/mock-data/vets";
+import { users as seedUsers } from "@/lib/seed-data";
+import { vetUsers } from "@/lib/seed-data/vets";
 
 beforeEach(async () => {
   await resetToSnapshot(db);
@@ -48,35 +47,6 @@ describe("users", () => {
     // Derived, not a magic number — adding a seed user shouldn't fail this.
     const expected = seedUsers.length + vetUsers.length + 1; // +1 store ops account
     expect((await listUsers(db)).length).toBe(expected);
-  });
-
-  it("creates a user with sensible defaults", async () => {
-    const created = await createUser(
-      { name: "Test Person", email: "test.person@example.com" },
-      db
-    );
-    expect(created.id).toMatch(/^u_/);
-    expect(created.phone).toBe("");
-    expect(created.roles).toEqual([]);
-    expect(created.verified).toBe(false);
-    expect(created.avatarUrl).toContain("http");
-    // round-trips through the db
-    const fetched = await getUserById(created.id, db);
-    expect(fetched!.email).toBe("test.person@example.com");
-  });
-
-  it("creates a user with provided phone and roles", async () => {
-    const created = await createUser(
-      {
-        name: "Both Roles",
-        email: "both@example.com",
-        phone: "(555) 555-5555",
-        roles: ["owner", "caretaker"],
-      },
-      db
-    );
-    expect(created.phone).toBe("(555) 555-5555");
-    expect(created.roles).toEqual(["owner", "caretaker"]);
   });
 
   it("updates scalar fields and the nested address", async () => {

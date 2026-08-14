@@ -9,7 +9,7 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toUser } from "./serialize";
 import { genId, nowIso } from "./ids";
-import { HEADSHOTS, unsplash } from "@/lib/mock-data/photos";
+import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 import type { UserRole } from "@/types";
 
 const BCRYPT_ROUNDS = 10;

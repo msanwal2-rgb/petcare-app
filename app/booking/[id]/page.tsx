@@ -22,7 +22,7 @@ import { MessageThread } from "@/components/booking/MessageThread";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
   SERVICE_LABELS,
   STATUS_LABELS,

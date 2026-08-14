@@ -13,7 +13,7 @@
 
 import type { Order, OrderEvent, OrderItem, Product, User } from "@/types";
 import { TODAY } from "./index";
-import { HEADSHOTS, unsplash } from "./photos";
+import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 import { taxFor } from "@/lib/pricing";
 
 /**

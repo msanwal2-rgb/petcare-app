@@ -8,7 +8,7 @@ import { getMessages, sendMessage } from "@/lib/api/messages";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { cn, formatDateTime } from "@/lib/utils";
 
 type Person = { name: string; avatarUrl: string };

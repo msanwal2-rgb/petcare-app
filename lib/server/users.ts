@@ -6,9 +6,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toUser } from "./serialize";
-import { genId, nowIso } from "./ids";
-import { HEADSHOTS, unsplash } from "@/lib/mock-data/photos";
-import type { CreateUserBody, UpdateUserBody } from "@/lib/validation/schemas";
+import type { UpdateUserBody } from "@/lib/validation/schemas";
 
 export async function getUserById(id: string, db: PrismaClient = defaultPrisma) {
   const u = await db.user.findUnique({ where: { id } });
@@ -24,27 +22,6 @@ export async function getUsersByIds(ids: string[], db: PrismaClient = defaultPri
 export async function listUsers(db: PrismaClient = defaultPrisma) {
   const rows = await db.user.findMany({ orderBy: { createdAt: "asc" } });
   return rows.map(toUser);
-}
-
-export async function createUser(input: CreateUserBody, db: PrismaClient = defaultPrisma) {
-  const count = await db.user.count();
-  const u = await db.user.create({
-    data: {
-      id: genId("u"),
-      name: input.name,
-      email: input.email,
-      phone: input.phone ?? "",
-      avatarUrl: unsplash(HEADSHOTS[count % HEADSHOTS.length], 240, 240, "faces"),
-      roles: input.roles ?? [],
-      addressCity: "Austin",
-      addressState: "TX",
-      lat: 30.2672,
-      lng: -97.7431,
-      verified: false,
-      createdAt: nowIso(),
-    },
-  });
-  return toUser(u);
 }
 
 /** Returns null when the user doesn't exist (handler maps to 404). */

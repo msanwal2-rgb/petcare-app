@@ -13,6 +13,7 @@ import { upsertCaretakerProfile } from "@/lib/api/caretakers";
 import { Field, Input, Textarea, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { ServiceTypeChip } from "@/components/ServiceTypeChip";
+import { ToggleChips, toggleValue } from "@/components/ui/ToggleChips";
 import { SERVICE_LABELS, SPECIES_LABELS, cn } from "@/lib/utils";
 
 const SERVICES: ServiceType[] = ["walking", "sitting", "boarding", "daycare"];
@@ -179,27 +180,12 @@ export function CaretakerProfileForm({
         </Field>
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink">Pets you accept</p>
-          <div className="flex gap-2">
-            {SPECIES.map((s) => {
-              const on = accepted.includes(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggle(accepted, s, setAccepted)}
-                  aria-pressed={on}
-                  className={cn(
-                    "rounded-xl border px-3.5 py-2.5 text-sm transition-colors",
-                    on
-                      ? "border-ink bg-ink text-white"
-                      : "border-mist bg-white text-charcoal hover:border-ink/40"
-                  )}
-                >
-                  {SPECIES_LABELS[s]}s
-                </button>
-              );
-            })}
-          </div>
+          <ToggleChips
+            options={SPECIES}
+            selected={accepted}
+            onToggle={(v) => setAccepted((cur) => toggleValue(cur, v))}
+            label={(v) => `${SPECIES_LABELS[v]}s`}
+          />
         </div>
       </div>
 

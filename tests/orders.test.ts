@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { resetToSnapshot, testPrisma as db } from "./helpers/testdb";
 import {
   canCustomerCancel,
@@ -15,7 +23,12 @@ import {
   FLAT_SHIPPING_CENTS,
   FREE_SHIPPING_THRESHOLD_CENTS,
 } from "@/lib/pricing";
-import { canTransitionPayment } from "@/lib/server/payments";
+import {
+  canTransitionPayment,
+  paymentProvider,
+  setPaymentProvider,
+  type PaymentProvider,
+} from "@/lib/server/payments";
 
 const ADDRESS = {
   name: "Maya Chen",
@@ -27,6 +40,9 @@ const ADDRESS = {
   country: "US",
   phone: "(512) 555-0142",
 };
+
+/** Captured before any test swaps it, so each one can put it back. */
+const DEFAULT_PROVIDER = paymentProvider();
 
 beforeAll(async () => {
   await resetToSnapshot(db);
@@ -402,6 +418,83 @@ describe("customer cancellation window", () => {
     expect(canCustomerCancel("shipped")).toBe(false);
     expect(canCustomerCancel("out_for_delivery")).toBe(false);
     expect(canCustomerCancel("delivered")).toBe(false);
+  });
+});
+
+describe("the payment provider is a real seam", () => {
+  /**
+   * Records what the store asks a provider to do. Proves the boundary is
+   * genuinely swappable — and that an order that fails after capture gives the
+   * money back rather than leaving a customer paid-for-nothing.
+   */
+  function recordingProvider() {
+    const calls: string[] = [];
+    const provider: PaymentProvider = {
+      name: "recording",
+      async authorize(amountCents) {
+        calls.push(`authorize:${amountCents}`);
+        return { ref: "rec_1", status: "authorized" };
+      },
+      async capture(ref) {
+        calls.push(`capture:${ref}`);
+        return { ref, status: "paid" };
+      },
+      async refund(ref, amountCents) {
+        calls.push(`refund:${ref}:${amountCents}`);
+        return { ref, status: "refunded" };
+      },
+    };
+    return { provider, calls };
+  }
+
+  beforeEach(async () => {
+    await resetToSnapshot(db);
+  });
+  afterEach(() => {
+    setPaymentProvider(DEFAULT_PROVIDER);
+  });
+
+  it("authorizes then captures the server's total, not the client's", async () => {
+    const { provider, calls } = recordingProvider();
+    setPaymentProvider(provider);
+
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    expect(calls).toEqual([`authorize:${res.order.totalCents}`, "capture:rec_1"]);
+    expect(res.order.paymentRef).toBe("rec_1");
+  });
+
+  it("refunds the loser of a stock race, who had already been charged", async () => {
+    const { provider, calls } = recordingProvider();
+    setPaymentProvider(provider);
+
+    // Both quote successfully against 19 units, both pay, only one can have it.
+    const buy = () =>
+      createOrder(
+        "u1",
+        { items: [{ productId: "prod6", quantity: 12 }], shippingAddress: ADDRESS },
+        db
+      );
+    const results = await Promise.all([buy(), buy()]);
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    // Two customers charged, exactly one refunded — nobody is left paid-for-nothing.
+    expect(calls.filter((c) => c.startsWith("capture"))).toHaveLength(2);
+    expect(calls.filter((c) => c.startsWith("refund"))).toHaveLength(1);
+  });
+
+  it("refunds through the provider when an order is refunded", async () => {
+    const { provider, calls } = recordingProvider();
+    setPaymentProvider(provider);
+
+    const res = await updateOrderStatus("o1", "refunded", {}, db);
+    if (!res.ok) throw new Error("expected ok");
+    expect(calls).toEqual([`refund:demo_pay_o1:${res.order.totalCents}`]);
   });
 });
 

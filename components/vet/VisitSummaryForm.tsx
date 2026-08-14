@@ -6,7 +6,10 @@ import type { MedicalRecordType } from "@/types";
 import { createRecord, type MedicalRecordInput } from "@/lib/api/medical-records";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
-import { RECORD_TYPE_LABELS, cn } from "@/lib/utils";
+import { RECORD_TYPE_LABELS, RECORD_TYPE_OPTIONS, cn } from "@/lib/utils";
+
+/** "allergy" is owner-reported and lives on the pet, not a visit. */
+const AUTHORABLE_TYPES = RECORD_TYPE_OPTIONS.filter((t) => t !== "allergy");
 
 /**
  * The vet's write surface on a pet's health record.
@@ -16,14 +19,6 @@ import { RECORD_TYPE_LABELS, cn } from "@/lib/utils";
  * a visit note needs neither. Showing all of them at once is how clinical
  * forms end up half-filled.
  */
-const TYPES: MedicalRecordType[] = [
-  "visit_note",
-  "vaccination",
-  "prescription",
-  "lab_result",
-  "weight",
-];
-
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export function VisitSummaryForm({
@@ -31,7 +26,7 @@ export function VisitSummaryForm({
   appointmentId,
   onCreated,
   /** Entry types the current user is allowed to write. */
-  allowedTypes = TYPES,
+  allowedTypes = AUTHORABLE_TYPES,
   className,
 }: {
   petId: string;

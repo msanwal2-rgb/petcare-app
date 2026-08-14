@@ -24,7 +24,7 @@ import { ProgressLeash } from "@/components/ui/ProgressLeash";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
 import { MapPinIcon, StethoscopeIcon } from "@/components/ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
   CONSULT_MODE_LABELS,
   SPECIES_LABELS,

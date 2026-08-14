@@ -3,7 +3,7 @@
  */
 
 import type { MedicalRecord } from "@/types";
-import { deleteJson, getJson, patchJson, postJson } from "./_client";
+import { deleteJson, getJson, postJson } from "./_client";
 
 /** What a caller supplies; the server stamps petId, author and vet. */
 export type MedicalRecordInput = Pick<
@@ -35,14 +35,6 @@ export async function createRecord(
   input: MedicalRecordInput
 ): Promise<MedicalRecord> {
   return postJson<MedicalRecord>(`/api/pets/${petId}/medical-records`, input);
-}
-
-/** PATCH /api/medical-records/:id -> MedicalRecord */
-export async function updateRecord(
-  id: string,
-  patch: Partial<MedicalRecordInput>
-): Promise<MedicalRecord> {
-  return patchJson<MedicalRecord>(`/api/medical-records/${id}`, patch);
 }
 
 /** DELETE /api/medical-records/:id -> void */

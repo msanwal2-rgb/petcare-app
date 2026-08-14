@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { ProgressLeash } from "@/components/ui/ProgressLeash";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
   CONSULT_MODE_LABELS,
   SPECIES_LABELS,

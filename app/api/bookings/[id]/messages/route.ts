@@ -7,9 +7,8 @@ import {
 } from "@/lib/server/messages";
 import { forbidden, notFound, ok, parseBody } from "@/lib/server/http";
 import {
-  currentUserId,
-  ownsCaretakerProfile,
-  unauthorized,
+  isBookingParticipant,
+  requireUser,
 } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -18,16 +17,14 @@ const messageSchema = z.object({ body: z.string().min(1).max(2000) });
 
 /** Resolve the booking and confirm the caller is a participant. */
 async function guard(id: string) {
-  const uid = await currentUserId();
-  if (!uid) return { res: unauthorized() as Response };
+  const auth = await requireUser();
+  if ("response" in auth) return { res: auth.response };
   const booking = await getBookingById(id);
   if (!booking) return { res: notFound(`Booking ${id} not found`) as Response };
-  const isOwner = booking.ownerId === uid;
-  const isCaretaker = isOwner
-    ? false
-    : await ownsCaretakerProfile(uid, booking.caretakerId);
-  if (!isOwner && !isCaretaker) return { res: forbidden() as Response };
-  return { uid };
+  if (!(await isBookingParticipant(auth.uid, id))) {
+    return { res: forbidden() as Response };
+  }
+  return { uid: auth.uid };
 }
 
 // GET /api/bookings/:id/messages -> Message[] (oldest first); marks incoming read

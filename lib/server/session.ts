@@ -12,8 +12,8 @@ import { forbidden, unauthorized } from "./http";
 // single import site.
 export { unauthorized, forbidden };
 
-/** The authenticated user's id, or null. */
-export async function currentUserId(): Promise<string | null> {
+/** The authenticated user's id, or null. Route handlers use requireUser. */
+async function currentUserId(): Promise<string | null> {
   const session = await auth();
   return session?.user?.id ?? null;
 }

@@ -19,7 +19,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { AuthRequired } from "@/components/AuthRequired";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
   SERVICE_LABELS,
   formatCurrency,

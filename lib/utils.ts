@@ -60,9 +60,6 @@ export function formatDate(iso: string): string {
 export function formatDateTime(iso: string): string {
   return DATETIME_FMT.format(new Date(iso));
 }
-export function formatTime(iso: string): string {
-  return TIME_FMT.format(new Date(iso));
-}
 
 /** Human date range, collapsing same-day ranges to one date. */
 export function formatRange(startIso: string, endIso: string): string {
@@ -106,13 +103,6 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   sitting: "Sitting",
   boarding: "Boarding",
   daycare: "Daycare",
-};
-
-export const SERVICE_VERBS: Record<ServiceType, string> = {
-  walking: "walk",
-  sitting: "sit",
-  boarding: "board",
-  daycare: "daycare",
 };
 
 export const STATUS_LABELS: Record<BookingStatus, string> = {
@@ -204,6 +194,20 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "Cancelled",
   refunded: "Refunded",
 };
+
+/* ── Option lists ─────────────────────────────────────────────────────
+   Derived from the label maps above rather than written out again, so a new
+   specialty or category can never appear in one place and not the other.
+   Object key order is insertion order for string keys, which is why these come
+   out in the order the maps declare. */
+
+export const SERVICE_OPTIONS = Object.keys(SERVICE_LABELS) as ServiceType[];
+export const SPECIES_OPTIONS = Object.keys(SPECIES_LABELS) as Pet["species"][];
+export const SPECIALTY_OPTIONS = Object.keys(SPECIALTY_LABELS) as VetSpecialty[];
+export const CONSULT_MODE_OPTIONS = Object.keys(CONSULT_MODE_LABELS) as ConsultMode[];
+export const RECORD_TYPE_OPTIONS = Object.keys(RECORD_TYPE_LABELS) as MedicalRecordType[];
+export const CATEGORY_OPTIONS = Object.keys(CATEGORY_LABELS) as ProductCategory[];
+export const LIFE_STAGE_OPTIONS = Object.keys(LIFE_STAGE_LABELS) as LifeStage[];
 
 /** Duration between two ISO datetimes, expressed in whole hours and days. */
 export function durationHours(startIso: string, endIso: string): number {

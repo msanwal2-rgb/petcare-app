@@ -18,7 +18,7 @@ import { BookingListRow } from "./BookingListRow";
 import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatRange, formatCurrency } from "@/lib/utils";
 
 export function CaretakerDashboard({ user }: { user: User }) {

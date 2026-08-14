@@ -1,25 +1,25 @@
 import { createPet, getPetsByOwner } from "@/lib/server/pets";
 import { petInputSchema } from "@/lib/validation/schemas";
 import { error, forbidden, ok, parseBody } from "@/lib/server/http";
-import { currentUserId, unauthorized } from "@/lib/server/session";
+import { requireUser } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ ownerId: string }> };
 
 // GET /api/owners/:ownerId/pets -> Pet[]  (your own pets)
 export async function GET(_request: Request, ctx: Ctx) {
   const { ownerId } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
-  if (uid !== ownerId) return forbidden();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
+  if (auth.uid !== ownerId) return forbidden();
   return ok(await getPetsByOwner(ownerId));
 }
 
 // POST /api/owners/:ownerId/pets -> Pet (201)
 export async function POST(request: Request, ctx: Ctx) {
   const { ownerId } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
-  if (uid !== ownerId) return forbidden();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
+  if (auth.uid !== ownerId) return forbidden();
   const parsed = await parseBody(request, petInputSchema);
   if ("response" in parsed) return parsed.response;
   if (parsed.data.ownerId && parsed.data.ownerId !== ownerId) {

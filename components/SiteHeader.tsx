@@ -11,7 +11,7 @@ import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { CartButton } from "./store/CartButton";
 import { RoleToggle } from "./RoleToggle";
 import { MenuIcon, XIcon } from "./ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { cn } from "@/lib/utils";
 
 function Logo() {

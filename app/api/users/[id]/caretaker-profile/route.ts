@@ -1,7 +1,7 @@
 import { getCaretakerByUserId, upsertCaretakerProfile } from "@/lib/server/caretakers";
 import { caretakerPatchSchema } from "@/lib/validation/schemas";
 import { forbidden, ok, parseBody } from "@/lib/server/http";
-import { currentUserId, unauthorized } from "@/lib/server/session";
+import { requireUser } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -17,9 +17,9 @@ export async function GET(_request: Request, ctx: Ctx) {
 // Auth: only edit your own caretaker profile.
 export async function PATCH(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
-  if (uid !== id) return forbidden();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
+  if (auth.uid !== id) return forbidden();
   const parsed = await parseBody(request, caretakerPatchSchema);
   if ("response" in parsed) return parsed.response;
   return ok(await upsertCaretakerProfile(id, parsed.data));

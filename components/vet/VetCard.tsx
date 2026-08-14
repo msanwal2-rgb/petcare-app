@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { VetWithUser } from "@/types";
 import { RatingStars } from "@/components/RatingStars";
 import { MapPinIcon, AlertIcon } from "@/components/ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { CONSULT_MODE_LABELS, SPECIALTY_LABELS, formatCurrency } from "@/lib/utils";
 
 /**

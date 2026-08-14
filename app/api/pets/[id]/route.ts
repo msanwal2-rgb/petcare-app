@@ -1,7 +1,7 @@
 import { getPetById, updatePet } from "@/lib/server/pets";
 import { petPatchSchema } from "@/lib/validation/schemas";
 import { forbidden, notFound, ok, parseBody } from "@/lib/server/http";
-import { currentUserId, unauthorized } from "@/lib/server/session";
+import { requireUser } from "@/lib/server/session";
 import { prisma } from "@/lib/db/prisma";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -17,14 +17,14 @@ export async function GET(_request: Request, ctx: Ctx) {
 // PATCH /api/pets/:id -> Pet | 404 — only the pet's owner
 export async function PATCH(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
   const existing = await prisma.pet.findUnique({
     where: { id },
     select: { ownerId: true },
   });
   if (!existing) return notFound(`Pet ${id} not found`);
-  if (existing.ownerId !== uid) return forbidden();
+  if (existing.ownerId !== auth.uid) return forbidden();
 
   const parsed = await parseBody(request, petPatchSchema);
   if ("response" in parsed) return parsed.response;

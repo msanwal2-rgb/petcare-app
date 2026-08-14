@@ -2,25 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
   createBookingSchema,
   createReviewSchema,
-  createUserSchema,
   searchQuerySchema,
   updateBookingStatusSchema,
+  updateUserSchema,
 } from "@/lib/validation/schemas";
 
 describe("validation schemas", () => {
-  it("accepts a valid user payload", () => {
+  it("accepts a valid user patch", () => {
     expect(
-      createUserSchema.safeParse({ name: "A", email: "a@b.com" }).success
+      updateUserSchema.safeParse({ name: "A", email: "a@b.com" }).success
     ).toBe(true);
   });
 
-  it("rejects a bad email and empty name", () => {
-    expect(createUserSchema.safeParse({ name: "A", email: "nope" }).success).toBe(
-      false
-    );
-    expect(
-      createUserSchema.safeParse({ name: "", email: "a@b.com" }).success
-    ).toBe(false);
+  it("rejects a bad email and an empty name", () => {
+    expect(updateUserSchema.safeParse({ email: "nope" }).success).toBe(false);
+    expect(updateUserSchema.safeParse({ name: "" }).success).toBe(false);
   });
 
   it("coerces numeric search params from strings", () => {

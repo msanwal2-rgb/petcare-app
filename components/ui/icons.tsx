@@ -83,13 +83,6 @@ export const HeartIcon = (p: P) => (
     <path d="M12 20s-7-4.4-7-9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7 3.5C19 15.6 12 20 12 20Z" />
   </svg>
 );
-export const DogIcon = (p: P) => (
-  <svg {...svg(p)}>
-    <path d="M10 5.5 7 4v4M14 5.5 17 4v4" />
-    <path d="M5 9.5C5 8 6 8 7 8h10c1 0 2 0 2 1.5V15a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5Z" />
-    <path d="M9.5 13h.01M14.5 13h.01M12 16v1.5" />
-  </svg>
-);
 export const PawIcon = (p: P) => (
   <svg {...svg(p)}>
     <circle cx="6.5" cy="10" r="1.6" />
@@ -135,12 +128,6 @@ export const SyringeIcon = (p: P) => (
     <path d="m14 4 6 6M17.5 6.5 20.5 3.5" />
     <path d="m5.5 18.5 9-9 3 3-9 9H5.5v-3Z" />
     <path d="m10 11 2 2M12.5 8.5l2 2" />
-  </svg>
-);
-export const VideoIcon = (p: P) => (
-  <svg {...svg(p)}>
-    <rect x="3" y="6" width="12" height="12" rx="2.5" />
-    <path d="m15 10.5 6-3.5v10l-6-3.5z" />
   </svg>
 );
 export const BagIcon = (p: P) => (

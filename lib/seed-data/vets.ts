@@ -15,7 +15,7 @@
 
 import type { MedicalRecord, VetAppointment, VetProfile, User } from "@/types";
 import { generateAvailability, TODAY } from "./index";
-import { HEADSHOTS, unsplash } from "./photos";
+import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 
 const avatar = (i: number) => unsplash(HEADSHOTS[i % HEADSHOTS.length], 240, 240, "faces");
 
@@ -507,6 +507,3 @@ export const medicalRecords: MedicalRecord[] = [
     createdAt: "2025-10-02T09:00:00Z",
   },
 ];
-
-/** Demo vet account, mirroring DEMO_OWNER_ID / DEMO_CARETAKER_ID. */
-export const DEMO_VET_ID = "u17"; // Dr. Naomi Ruiz — general practice, busy schedule

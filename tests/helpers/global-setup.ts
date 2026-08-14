@@ -5,6 +5,9 @@
  *
  * Seeding here rather than per-test is what makes the suite quick: tests call
  * `resetToSnapshot()`, which restores this exact state in one round trip.
+ *
+ * The `test` schema is shared, so two suite runs against the same database at
+ * once will corrupt each other. Run one at a time.
  */
 
 import { execSync } from "node:child_process";

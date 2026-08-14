@@ -4,7 +4,7 @@ import type { Booking } from "@/types";
 import { BookingStatusBadge } from "@/components/BookingStatusBadge";
 import { ServiceTypeChip } from "@/components/ServiceTypeChip";
 import { ChevronRightIcon } from "@/components/ui/icons";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatRange, formatCurrency } from "@/lib/utils";
 
 export function BookingListRow({

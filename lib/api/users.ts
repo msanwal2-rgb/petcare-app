@@ -23,16 +23,6 @@ export async function listUsers(): Promise<User[]> {
   return getJson<User[]>(`/api/users`);
 }
 
-/** POST /api/users -> User (201) */
-export async function createUser(input: {
-  name: string;
-  email: string;
-  phone?: string;
-  roles?: UserRole[];
-}): Promise<User> {
-  return postJson<User>(`/api/users`, input);
-}
-
 /** POST /api/signup -> User (201) — creates an email/password account. */
 export async function registerAccount(input: {
   name: string;

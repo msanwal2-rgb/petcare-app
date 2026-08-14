@@ -19,7 +19,7 @@ import {
   OTHER_PHOTOS,
   unsplash,
   BLUR_DATA_URL,
-} from "@/lib/mock-data/photos";
+} from "@/lib/media/photos";
 import { cn } from "@/lib/utils";
 
 const schema = z.object({

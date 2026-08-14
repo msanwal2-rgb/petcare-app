@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { Pet } from "@/types";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { cn } from "@/lib/utils";
 
 /**

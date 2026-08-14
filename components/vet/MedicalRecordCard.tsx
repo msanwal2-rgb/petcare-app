@@ -6,6 +6,7 @@ import {
   PillIcon,
   StethoscopeIcon,
   SyringeIcon,
+  TrashIcon,
 } from "@/components/ui/icons";
 import { RECORD_TYPE_LABELS, cn, formatDate } from "@/lib/utils";
 
@@ -34,12 +35,19 @@ function prescriptionActive(record: MedicalRecord, now = new Date()): boolean {
   return !record.expiresAt || new Date(record.expiresAt) > now;
 }
 
-/** One entry in a pet's health timeline. */
+/**
+ * One entry in a pet's health timeline.
+ *
+ * `onDelete` is offered only to the entry's author — an owner can withdraw a
+ * weight they mistyped, but not a diagnosis a vet wrote about their animal.
+ */
 export function MedicalRecordCard({
   record,
+  onDelete,
   className,
 }: {
   record: MedicalRecord;
+  onDelete?: () => void;
   className?: string;
 }) {
   const Icon = ICON[record.type];
@@ -63,8 +71,20 @@ export function MedicalRecordCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h3 className="text-sm font-semibold text-ink">{record.title}</h3>
-            <span className="font-mono text-[11px] text-charcoal/50">
-              {formatDate(record.occurredAt)}
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-charcoal/50">
+                {formatDate(record.occurredAt)}
+              </span>
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  aria-label={`Delete ${record.title}`}
+                  className="text-charcoal/40 transition-colors hover:text-leash"
+                >
+                  <TrashIcon width={14} height={14} />
+                </button>
+              )}
             </span>
           </div>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-charcoal/45">

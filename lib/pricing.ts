@@ -13,7 +13,7 @@
 export const FREE_SHIPPING_THRESHOLD_CENTS = 4900;
 export const FLAT_SHIPPING_CENTS = 599;
 /** Single blended rate; a real store would resolve this per destination. */
-export const TAX_RATE = 0.0825;
+const TAX_RATE = 0.0825;
 
 export function shippingFor(subtotalCents: number): number {
   return subtotalCents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS;

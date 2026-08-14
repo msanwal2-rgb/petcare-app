@@ -7,14 +7,17 @@ import { useSession } from "@/lib/store/session";
 import { listUsers } from "@/lib/api/users";
 import { loginAsDemo } from "@/lib/auth/session-client";
 import type { User } from "@/types";
-import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
+import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { ChevronDownIcon, XIcon } from "./ui/icons";
 import { cn } from "@/lib/utils";
 
 /**
- * DEV-ONLY account switcher (brief §8). Temporary scaffolding that stands in
- * for real auth — lets you jump between a sample owner and caretaker to see
- * every UI state. Clearly marked; would be removed once real auth lands.
+ * DEV-ONLY account switcher. Jump between seeded owner, caretaker, vet and ops
+ * accounts to see every UI state without logging in and out.
+ *
+ * It renders nothing in production, and the endpoint behind it refuses to list
+ * accounts there too — the listing exposes every user's email address, so both
+ * ends of that are gated rather than just the button.
  */
 export function DevAccountSwitcher() {
   const { currentUser, hasHydrated } = useSession();
@@ -26,6 +29,7 @@ export function DevAccountSwitcher() {
     if (open && users.length === 0) listUsers().then(setUsers);
   }, [open, users.length]);
 
+  if (process.env.NODE_ENV === "production") return null;
   if (!hasHydrated) return null;
 
   async function switchTo(u: User) {

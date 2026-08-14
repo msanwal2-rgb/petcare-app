@@ -13,7 +13,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { products } from "../lib/mock-data/store";
+import { products } from "../lib/seed-data/store";
 import type { ProductCategory } from "../types";
 
 const OUT_DIR = path.join(process.cwd(), "public", "products");

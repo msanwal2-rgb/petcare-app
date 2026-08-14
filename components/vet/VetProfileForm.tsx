@@ -7,26 +7,16 @@ import type { ConsultMode, Species, VetProfile, VetSpecialty } from "@/types";
 import { upsertVetProfile } from "@/lib/api/vets";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
+import { ToggleChips, toggleValue } from "@/components/ui/ToggleChips";
 import { coordsFor } from "@/lib/geo";
 import {
   CONSULT_MODE_LABELS,
+  CONSULT_MODE_OPTIONS,
   SPECIALTY_LABELS,
+  SPECIALTY_OPTIONS,
   SPECIES_LABELS,
-  cn,
+  SPECIES_OPTIONS,
 } from "@/lib/utils";
-
-const SPECIALTIES: VetSpecialty[] = [
-  "general",
-  "dermatology",
-  "dentistry",
-  "surgery",
-  "emergency",
-  "nutrition",
-  "behavior",
-  "exotics",
-];
-const MODES: ConsultMode[] = ["in_clinic", "video", "home_visit"];
-const SPECIES: Species[] = ["dog", "cat", "other"];
 
 export function VetProfileForm({
   userId,
@@ -55,10 +45,6 @@ export function VetProfileForm({
   const [city, setCity] = useState(profile?.clinic.city ?? "");
   const [state, setState] = useState(profile?.clinic.state ?? "");
   const [saving, setSaving] = useState(false);
-
-  function toggle<T>(list: T[], value: T, set: (v: T[]) => void) {
-    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
-  }
 
   async function save() {
     if (!clinicName.trim()) return toast.error("Add your clinic name.");
@@ -129,27 +115,13 @@ export function VetProfileForm({
 
       <div>
         <p className="mb-2 text-sm font-medium text-ink">Specialties</p>
-        <div className="flex flex-wrap gap-2">
-          {SPECIALTIES.map((s) => {
-            const on = specialties.includes(s);
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggle(specialties, s, setSpecialties)}
-                aria-pressed={on}
-                className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                  on
-                    ? "border-ink bg-ink text-white"
-                    : "border-mist bg-white text-charcoal hover:border-ink/40"
-                )}
-              >
-                {SPECIALTY_LABELS[s]}
-              </button>
-            );
-          })}
-        </div>
+        <ToggleChips
+          options={SPECIALTY_OPTIONS}
+          selected={specialties}
+          onToggle={(v) => setSpecialties((cur) => toggleValue(cur, v))}
+          label={(v) => SPECIALTY_LABELS[v]}
+          size="sm"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
@@ -184,52 +156,22 @@ export function VetProfileForm({
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink">Species you treat</p>
-          <div className="flex gap-2">
-            {SPECIES.map((s) => {
-              const on = accepted.includes(s);
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => toggle(accepted, s, setAccepted)}
-                  aria-pressed={on}
-                  className={cn(
-                    "rounded-xl border px-3.5 py-2.5 text-sm transition-colors",
-                    on
-                      ? "border-ink bg-ink text-white"
-                      : "border-mist bg-white text-charcoal hover:border-ink/40"
-                  )}
-                >
-                  {SPECIES_LABELS[s]}s
-                </button>
-              );
-            })}
-          </div>
+          <ToggleChips
+            options={SPECIES_OPTIONS}
+            selected={accepted}
+            onToggle={(v) => setAccepted((cur) => toggleValue(cur, v))}
+            label={(v) => `${SPECIES_LABELS[v]}s`}
+          />
         </div>
 
         <div>
           <p className="mb-1.5 text-sm font-medium text-ink">Consultation formats</p>
-          <div className="flex flex-wrap gap-2">
-            {MODES.map((m) => {
-              const on = modes.includes(m);
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => toggle(modes, m, setModes)}
-                  aria-pressed={on}
-                  className={cn(
-                    "rounded-xl border px-3.5 py-2.5 text-sm transition-colors",
-                    on
-                      ? "border-ink bg-ink text-white"
-                      : "border-mist bg-white text-charcoal hover:border-ink/40"
-                  )}
-                >
-                  {CONSULT_MODE_LABELS[m]}
-                </button>
-              );
-            })}
-          </div>
+          <ToggleChips
+            options={CONSULT_MODE_OPTIONS}
+            selected={modes}
+            onToggle={(v) => setModes((cur) => toggleValue(cur, v))}
+            label={(v) => CONSULT_MODE_LABELS[v]}
+          />
         </div>
       </div>
 

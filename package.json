@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "art:generate": "tsx scripts/generate-product-art.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "dotenv -e .env.local -- prisma migrate deploy",
@@ -35,7 +36,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

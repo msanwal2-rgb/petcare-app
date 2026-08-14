@@ -2,9 +2,8 @@ import { getBookingById, updateBookingStatus } from "@/lib/server/bookings";
 import { updateBookingStatusSchema } from "@/lib/validation/schemas";
 import { error, forbidden, notFound, ok, parseBody } from "@/lib/server/http";
 import {
-  currentUserId,
+  requireUser,
   ownsCaretakerProfile,
-  unauthorized,
 } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -13,15 +12,15 @@ type Ctx = { params: Promise<{ id: string }> };
 // Auth: only a participant (owner or the caretaker) can change status.
 export async function PATCH(request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const uid = await currentUserId();
-  if (!uid) return unauthorized();
+  const auth = await requireUser();
+  if ("response" in auth) return auth.response;
 
   const booking = await getBookingById(id);
   if (!booking) return notFound(`Booking ${id} not found`);
-  const isOwner = booking.ownerId === uid;
+  const isOwner = booking.ownerId === auth.uid;
   const isCaretaker = isOwner
     ? false
-    : await ownsCaretakerProfile(uid, booking.caretakerId);
+    : await ownsCaretakerProfile(auth.uid, booking.caretakerId);
   if (!isOwner && !isCaretaker) return forbidden();
 
   const parsed = await parseBody(request, updateBookingStatusSchema);
