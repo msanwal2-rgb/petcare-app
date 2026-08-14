@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { UserRole } from "@/types";
 import { updateUser } from "@/lib/api/users";
 import { useSession } from "@/lib/store/session";
+import { useAuthNavigate } from "@/lib/auth/session-client";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -51,7 +51,7 @@ function nextStepFor(roles: UserRole[]): string {
 }
 
 export default function OnboardingPage() {
-  const router = useRouter();
+  const navigateAfterAuth = useAuthNavigate();
   const { currentUser, setUser, hasHydrated } = useSession();
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [saving, setSaving] = useState(false);
@@ -80,7 +80,7 @@ export default function OnboardingPage() {
       setUser(updated);
       toast.success("You’re all set!");
       // Send professionals straight to the profile they can't be found without.
-      router.push(nextStepFor(roles));
+      navigateAfterAuth(nextStepFor(roles));
     } catch {
       toast.error("Couldn’t save. Try again.");
       setSaving(false);

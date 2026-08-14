@@ -18,6 +18,7 @@ import { AppointmentStatusBadge } from "@/components/vet/AppointmentStatusBadge"
 import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Panel, Stat } from "@/components/ui/Panel";
+import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BLUR_DATA_URL } from "@/lib/media/photos";
 import {
@@ -172,15 +173,15 @@ export function VetDashboard({ user }: { user: User }) {
   }
 
   return (
-    <div className="space-y-10">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <RevealGroup className="space-y-10">
+      <RevealItem className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Awaiting your reply" value={String(requests.length)} />
         <Stat label="Scheduled" value={String(scheduled.length)} />
         <Stat label="Completed" value={String(history.filter((a) => a.status === "completed").length)} />
         <Stat label="Consultation fee" value={formatCurrency(profile.consultFee)} />
-      </div>
+      </RevealItem>
 
-      <section>
+      <RevealItem>
         <h2 className="mb-3 text-lg font-semibold text-ink">Requests</h2>
         {loading ? (
           <Skeleton className="h-24 w-full rounded-2xl" />
@@ -195,9 +196,9 @@ export function VetDashboard({ user }: { user: User }) {
             ))}
           </div>
         )}
-      </section>
+      </RevealItem>
 
-      <section>
+      <RevealItem>
         <h2 className="mb-3 text-lg font-semibold text-ink">Schedule</h2>
         {scheduled.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-mist bg-white/60 px-4 py-8 text-center text-sm text-charcoal/60">
@@ -210,9 +211,9 @@ export function VetDashboard({ user }: { user: User }) {
             ))}
           </div>
         )}
-      </section>
+      </RevealItem>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <RevealItem className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel
           title="Your clinic"
           action={
@@ -247,18 +248,18 @@ export function VetDashboard({ user }: { user: User }) {
             emptyLabel="You haven't published availability yet — owners can't request a time until you do."
           />
         </div>
-      </div>
+      </RevealItem>
 
       {history.length > 0 && (
-        <section>
+        <RevealItem>
           <h2 className="mb-3 text-lg font-semibold text-ink">Past appointments</h2>
           <div className="space-y-3">
             {history.slice(0, 8).map((a) => (
               <Row key={a.id} appointment={a} />
             ))}
           </div>
-        </section>
+        </RevealItem>
       )}
-    </div>
+    </RevealGroup>
   );
 }

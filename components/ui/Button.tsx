@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import type { ComponentProps } from "react";
+import { DURATION, EASE_OUT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 type Variant = "cta" | "primary" | "outline" | "ghost";
@@ -10,7 +11,8 @@ type Size = "sm" | "md" | "lg";
 
 const base =
   "inline-flex items-center justify-center gap-2 rounded-full font-medium " +
-  "transition-colors duration-150 select-none disabled:opacity-50 " +
+  "transition-[background-color,border-color,color,box-shadow] duration-300 " +
+  "ease-[cubic-bezier(0.22,1,0.36,1)] select-none disabled:opacity-50 " +
   "disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2";
 
 const variants: Record<Variant, string> = {
@@ -32,7 +34,14 @@ function classes(variant: Variant, size: Size, className?: string) {
   return cn(base, variants[variant], sizes[size], className);
 }
 
+/**
+ * Press and hover feel. The lift is small and the press is smaller — a button
+ * should acknowledge the cursor, not perform. Both settle on the app's easing
+ * so they match the cards and the nav.
+ */
 const tap = { scale: 0.97 };
+const hover = { y: -1 };
+const feel = { duration: DURATION.fast, ease: EASE_OUT } as const;
 
 type ButtonProps = ComponentProps<typeof motion.button> & {
   variant?: Variant;
@@ -48,6 +57,8 @@ export function Button({
   return (
     <motion.button
       whileTap={tap}
+      whileHover={hover}
+      transition={feel}
       className={classes(variant, size, className)}
       {...props}
     />
@@ -70,6 +81,8 @@ export function ButtonLink({
   return (
     <MotionLink
       whileTap={tap}
+      whileHover={hover}
+      transition={feel}
       className={classes(variant, size, className)}
       {...props}
     />

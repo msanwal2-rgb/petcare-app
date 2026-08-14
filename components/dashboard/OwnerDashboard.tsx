@@ -21,6 +21,7 @@ import { BookingListRow } from "./BookingListRow";
 import { AppointmentStatusBadge } from "@/components/vet/AppointmentStatusBadge";
 import { OrderStatusBadge } from "@/components/store/OrderStatusBadge";
 import { RecommendedForPet } from "@/components/store/RecommendedForPet";
+import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PlusIcon, PawIcon, StethoscopeIcon, TruckIcon } from "@/components/ui/icons";
 import { formatCents, formatDate, formatRange } from "@/lib/utils";
@@ -62,9 +63,10 @@ export function OwnerDashboard({ user }: { user: User }) {
   const past = bookings.filter((b) => !UPCOMING.has(b.status));
 
   return (
-    <div className="space-y-10">
+    <RevealGroup className="space-y-10">
       {/* Pets */}
-      <section>
+      <RevealItem>
+        <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ink">Your pets</h2>
           <Link
@@ -93,17 +95,22 @@ export function OwnerDashboard({ user }: { user: User }) {
             actionLabel="Add a pet"
             actionHref="/dashboard/pets/new"
           />
-        )}
-      </section>
+          )}
+        </section>
+      </RevealItem>
 
       {/* Health and deliveries — the two other things in flight for this pet */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <RevealItem className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <VetSection appointments={(appointments ?? []).filter((a) => APPOINTMENT_UPCOMING.has(a.status))} />
         <OrdersSection orders={(orders ?? []).filter((o) => ORDER_IN_FLIGHT.has(o.status))} />
-      </div>
+      </RevealItem>
 
       {/* Store picks for the first pet — the store reading the pet record */}
-      {pets && pets.length > 0 && <RecommendedForPet pet={pets[0]} />}
+      {pets && pets.length > 0 && (
+        <RevealItem>
+          <RecommendedForPet pet={pets[0]} />
+        </RevealItem>
+      )}
 
       {/* Upcoming bookings */}
       <BookingSection
@@ -124,7 +131,7 @@ export function OwnerDashboard({ user }: { user: User }) {
         emptyDesc="Your completed and cancelled bookings will show up here."
         resolve={(b) => data?.map.get(b.caretakerId)}
       />
-    </div>
+    </RevealGroup>
   );
 }
 
@@ -144,7 +151,7 @@ function BookingSection({
   resolve: (b: Booking) => CaretakerWithUser | undefined;
 }) {
   return (
-    <section>
+    <RevealItem>
       <h2 className="mb-4 text-lg font-semibold text-ink">{title}</h2>
       {loading ? (
         <div className="space-y-3">
@@ -173,7 +180,7 @@ function BookingSection({
           })}
         </div>
       )}
-    </section>
+    </RevealItem>
   );
 }
 

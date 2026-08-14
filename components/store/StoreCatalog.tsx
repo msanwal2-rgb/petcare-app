@@ -15,13 +15,11 @@ import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { ProductCard } from "./ProductCard";
 import { PetShoppingBar } from "./PetShoppingBar";
-import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { SelectFilter } from "@/components/ui/SelectFilter";
-import { RevealItem } from "@/components/ui/Reveal";
+import { ResultsGrid } from "@/components/ui/ResultsGrid";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { SearchIcon } from "@/components/ui/icons";
 import {
   CATEGORY_LABELS,
   CATEGORY_OPTIONS,
@@ -42,6 +40,7 @@ const SORTS: { value: ProductSort; label: string }[] = [
   { value: "newest", label: "Newest" },
 ];
 
+const PRODUCT_GRID = "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 const PAGE_SIZE = 12;
 const MAX_PRICE_CENTS = 12000;
 
@@ -242,35 +241,28 @@ export function StoreCatalog() {
             </div>
           </div>
 
-          {loading || data === null ? (
-            <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-[3/4] w-full rounded-[12px]" />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <EmptyState
-              icon={<SearchIcon width={40} height={40} />}
-              title="Nothing matches those filters"
-              description="Try widening the price range or clearing the category filter."
-              actionLabel="Reset filters"
-              actionHref="/store"
-            />
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-5 lg:grid-cols-3 xl:grid-cols-4">
-                {items.map((p) => (
-                  <RevealItem key={p.id}>
-                    <ProductCard
-                      product={p}
-                      allergenWarning={
-                        pet ? allergenClash(p.allergens, pet.allergies) : undefined
-                      }
-                    />
-                  </RevealItem>
-                ))}
-              </div>
+          <ResultsGrid
+            items={data?.items ?? null}
+            loading={loading}
+            className={PRODUCT_GRID}
+            skeletonCount={8}
+            skeleton={<Skeleton className="aspect-[3/4] w-full rounded-[12px]" />}
+            renderItem={(p) => (
+              <ProductCard
+                product={p}
+                allergenWarning={
+                  pet ? allergenClash(p.allergens, pet.allergies) : undefined
+                }
+              />
+            )}
+            emptyTitle="Nothing matches those filters"
+            emptyDescription="Try widening the price range or clearing the category filter."
+            emptyActionLabel="Reset filters"
+            emptyActionHref="/store"
+          />
 
+          {items.length > 0 && (
+            <>
               {pages > 1 && (
                 <div className="mt-8 flex items-center justify-center gap-3">
                   <Button

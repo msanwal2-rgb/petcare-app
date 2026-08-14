@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { EmptyState } from "@/components/EmptyState";
-import { RevealItem } from "./Reveal";
+import { RevealGroup, RevealItem } from "./Reveal";
 import { SearchIcon } from "./icons";
 import { cn } from "@/lib/utils";
 
@@ -63,11 +63,15 @@ export function ResultsGrid<T extends { id: string }>({
     );
   }
 
+  // RevealGroup is the stagger parent RevealItem's variants resolve against —
+  // without it the items would render with no animation at all. Keyed on the
+  // result ids so a filter change replays the arrival rather than swapping
+  // cards in place.
   return (
-    <div className={grid}>
+    <RevealGroup key={items.map((i) => i.id).join(",")} className={grid}>
       {items.map((item) => (
         <RevealItem key={item.id}>{renderItem(item)}</RevealItem>
       ))}
-    </div>
+    </RevealGroup>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { motion, useInView } from "framer-motion";
+import { useRef, type ReactNode } from "react";
+import { DURATION, EASE_OUT, stagger as staggerVariants } from "@/lib/motion";
 
 /**
  * Scroll-triggered reveal (brief §3): fade + 12px slide-up as the element
@@ -25,7 +26,7 @@ export function Reveal({
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "0px 0px -80px 0px" }}
-      transition={{ duration: 0.5, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: DURATION.slow, delay, ease: EASE_OUT }}
     >
       {children}
     </motion.div>
@@ -33,28 +34,34 @@ export function Reveal({
 }
 
 /**
- * Stagger container: children fade+slide in ~50ms apart (brief §3).
+ * Stagger container: children fade+slide in ~60ms apart (brief §3).
  * Wrap items in <RevealItem>.
+ *
+ * Deliberately `animate` driven by useInView rather than `whileInView`. With
+ * `whileInView` + `once`, the orchestration fires and then stops — a child
+ * that mounts afterwards (a dashboard section waiting on a fetch, a filtered
+ * result) inherits `hidden` and is never told to show, so it stays invisible.
+ * A persistent `animate` state is inherited by children whenever they mount.
  */
 export function RevealGroup({
   children,
   className,
-  stagger = 0.05,
+  stagger = 0.06,
 }: {
   children: ReactNode;
   className?: string;
   stagger?: number;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "0px 0px -60px 0px" });
+
   return (
     <motion.div
+      ref={ref}
       className={className}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: "0px 0px -60px 0px" }}
-      variants={{
-        hidden: {},
-        show: { transition: { staggerChildren: stagger } },
-      }}
+      animate={inView ? "show" : "hidden"}
+      variants={staggerVariants(stagger)}
     >
       {children}
     </motion.div>
@@ -76,7 +83,7 @@ export function RevealItem({
         show: {
           opacity: 1,
           y: 0,
-          transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+          transition: { duration: DURATION.slow, ease: EASE_OUT },
         },
       }}
     >

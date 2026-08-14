@@ -25,12 +25,16 @@
 
   --radius-card: 12px;
 
-  /* signature motion */
+  /* signature motion — mirrors lib/motion.ts so CSS and Framer agree */
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 :root {
   color-scheme: light;
+  /* Anchor targets sit below the sticky header instead of under it. */
+  scroll-padding-top: 5rem;
+  scroll-behavior: smooth;
 }
 
 @layer base {
@@ -61,6 +65,32 @@
 
   ::selection {
     background: color-mix(in srgb, var(--color-marigold) 45%, transparent);
+  }
+}
+
+/* ── Interaction utilities ────────────────────────────────────────
+   The card hover was the same six Tailwind utilities in four components and
+   had already drifted. One class, one curve — slow enough to read as weight
+   rather than a twitch. */
+@layer components {
+  .lift {
+    transition:
+      transform 0.5s var(--ease-out-soft),
+      box-shadow 0.5s var(--ease-out-soft),
+      border-color 0.3s ease;
+  }
+  .lift:hover,
+  .lift:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--color-ink) 22%, transparent);
+  }
+
+  /* Media inside a .lift card drifts in slightly as the card rises. */
+  .lift-media {
+    transition: transform 0.7s var(--ease-out-soft);
+  }
+  .lift:hover .lift-media {
+    transform: scale(1.05);
   }
 }
 

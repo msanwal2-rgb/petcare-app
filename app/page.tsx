@@ -114,7 +114,7 @@ export default function LandingPage() {
               <Reveal key={pillar.title} delay={i * 0.08}>
                 <Link
                   href={pillar.href}
-                  className="group flex h-full flex-col rounded-2xl border border-mist bg-fog/60 p-7 transition-all hover:-translate-y-1 hover:border-ink/25 hover:shadow-lg hover:shadow-ink/5"
+                  className="lift group flex h-full flex-col rounded-2xl border border-mist bg-fog/60 p-7 hover:border-ink/25"
                 >
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-white">
                     <pillar.icon width={22} height={22} />

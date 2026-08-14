@@ -20,7 +20,7 @@ export function CaretakerCard({ caretaker }: { caretaker: CaretakerWithUser }) {
   return (
     <Link
       href={`/caretaker/${caretaker.id}`}
-      className="group block rounded-[12px] border border-mist bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-ink/5 focus-visible:-translate-y-1"
+      className="lift group block rounded-[12px] border border-mist bg-white shadow-sm"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-t-[12px]">
         <Image
@@ -30,7 +30,7 @@ export function CaretakerCard({ caretaker }: { caretaker: CaretakerWithUser }) {
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
           placeholder="blur"
           blurDataURL={BLUR_DATA_URL}
-          className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          className="lift-media object-cover"
         />
         {/* background-check trust marker */}
         {caretaker.backgroundCheckStatus === "verified" && (

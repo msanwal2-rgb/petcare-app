@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useId } from "react";
+import { DURATION, EASE_OUT, layoutGlide } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 /**
@@ -68,7 +69,7 @@ export function ProgressLeash({
               height={H}
               initial={false}
               animate={{ width: padX + fraction * (W - 2 * padX) + 4 }}
-              transition={{ type: "spring", stiffness: 120, damping: 20 }}
+              transition={layoutGlide}
             />
           </clipPath>
         </defs>
@@ -107,7 +108,7 @@ export function ProgressLeash({
                 strokeWidth={2}
                 initial={false}
                 animate={done ? { scale: [1, 1.25, 1] } : { scale: 1 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
+                transition={{ duration: DURATION.base, ease: EASE_OUT }}
                 style={{ transformOrigin: `${xs[i]}px ${baseY}px` }}
               />
               {done && (

@@ -7,9 +7,30 @@
  */
 
 import { signIn, signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useSession as useStore } from "@/lib/store/session";
 import type { User } from "@/types";
 import { DEMO_PASSWORD } from "./demo";
+
+/**
+ * Navigate after signing in or out.
+ *
+ * Not just `router.push`. The App Router caches prefetched routes, and a
+ * protected route prefetched while signed out caches `proxy.ts`'s redirect to
+ * /login. A plain push afterwards replays that stale redirect and the user
+ * never leaves the login page — which is exactly the bug this exists to stop.
+ * `refresh()` drops the cache so the push is evaluated against the new session.
+ *
+ * Every sign-in and sign-out goes through here; none of them should call
+ * `router.push` directly.
+ */
+export function useAuthNavigate(): (href: string) => void {
+  const router = useRouter();
+  return (href: string) => {
+    router.refresh();
+    router.push(href);
+  };
+}
 
 /** Pull the authenticated user from the server and push it into the store. */
 export async function refreshSessionUser(): Promise<User | null> {

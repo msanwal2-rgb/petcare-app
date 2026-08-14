@@ -18,7 +18,7 @@ export function VetCard({ vet }: { vet: VetWithUser }) {
   return (
     <Link
       href={`/vets/${vet.id}`}
-      className="group block rounded-[12px] border border-mist bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-ink/5 focus-visible:-translate-y-1"
+      className="lift group block rounded-[12px] border border-mist bg-white shadow-sm"
     >
       <div className="relative aspect-[4/3] overflow-hidden rounded-t-[12px]">
         <Image
@@ -28,7 +28,7 @@ export function VetCard({ vet }: { vet: VetWithUser }) {
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
           placeholder="blur"
           blurDataURL={BLUR_DATA_URL}
-          className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          className="lift-media object-cover"
         />
         {vet.emergencyAvailable && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-[#a83c27] shadow-sm backdrop-blur">

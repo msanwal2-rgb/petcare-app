@@ -28,7 +28,7 @@ export function ProductCard({
   return (
     <Link
       href={`/store/${product.slug}`}
-      className="group flex flex-col rounded-[12px] border border-mist bg-white shadow-sm transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:shadow-ink/5 focus-visible:-translate-y-1"
+      className="lift group flex flex-col rounded-[12px] border border-mist bg-white shadow-sm"
     >
       <div className="relative aspect-square overflow-hidden rounded-t-[12px] bg-fog">
         <Image
@@ -36,7 +36,7 @@ export function ProductCard({
           alt=""
           fill
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px"
-          className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+          className="lift-media object-cover"
         />
         {product.requiresPrescription && (
           <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-[#946412] shadow-sm backdrop-blur">

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +8,11 @@ import { getProviders } from "next-auth/react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { registerAccount } from "@/lib/api/users";
-import { loginWithGoogle, loginWithPassword } from "@/lib/auth/session-client";
+import {
+  loginWithGoogle,
+  loginWithPassword,
+  useAuthNavigate,
+} from "@/lib/auth/session-client";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -22,7 +25,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function SignupPage() {
-  const router = useRouter();
+  const navigateAfterAuth = useAuthNavigate();
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const {
     register,
@@ -47,7 +50,7 @@ export default function SignupPage() {
       // Establish a real session, then continue to role selection.
       await loginWithPassword(values.email, values.password);
       toast.success("Account created — one quick step to go.");
-      router.push("/onboarding");
+      navigateAfterAuth("/onboarding");
     } catch (e) {
       const msg =
         e instanceof Error && e.message.includes("already exists")

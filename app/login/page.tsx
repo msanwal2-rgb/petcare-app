@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getProviders } from "next-auth/react";
 import { toast } from "sonner";
@@ -12,6 +11,7 @@ import {
   loginAsDemo,
   loginWithGoogle,
   loginWithPassword,
+  useAuthNavigate,
 } from "@/lib/auth/session-client";
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, type DemoRole } from "@/lib/auth/demo";
 import { Field, Input } from "@/components/ui/Field";
@@ -20,7 +20,7 @@ import { BLUR_DATA_URL } from "@/lib/media/photos";
 
 
 export default function LoginPage() {
-  const router = useRouter();
+  const navigateAfterAuth = useAuthNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [samples, setSamples] = useState<Partial<Record<DemoRole, User>>>({});
@@ -45,7 +45,7 @@ export default function LoginPage() {
     try {
       await loginAsDemo(user.email);
       toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
-      router.push("/dashboard");
+      navigateAfterAuth("/dashboard");
     } catch {
       toast.error("Demo login failed. Try re-seeding the database.");
     } finally {
@@ -59,7 +59,7 @@ export default function LoginPage() {
     try {
       const user = await loginWithPassword(email.trim(), password);
       toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
-      router.push("/dashboard");
+      navigateAfterAuth("/dashboard");
     } catch {
       toast.error("No account matches that email and password.");
     } finally {

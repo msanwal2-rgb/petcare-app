@@ -17,6 +17,7 @@ import { ServiceTypeChip } from "@/components/ServiceTypeChip";
 import { BookingListRow } from "./BookingListRow";
 import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatRange, formatCurrency } from "@/lib/utils";
@@ -76,9 +77,9 @@ export function CaretakerDashboard({ user }: { user: User }) {
   }
 
   return (
-    <div className="space-y-10">
+    <RevealGroup className="space-y-10">
       {/* Incoming requests */}
-      <section>
+      <RevealItem>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-ink">
           Incoming requests
           {requests.length > 0 && (
@@ -164,10 +165,10 @@ export function CaretakerDashboard({ user }: { user: User }) {
             ))}
           </div>
         )}
-      </section>
+      </RevealItem>
 
       {/* Active */}
-      <section>
+      <RevealItem>
         <h2 className="mb-4 text-lg font-semibold text-ink">Active bookings</h2>
         {loading ? (
           <Skeleton className="h-[76px] w-full rounded-[12px]" />
@@ -188,10 +189,10 @@ export function CaretakerDashboard({ user }: { user: User }) {
             ))}
           </div>
         )}
-      </section>
+      </RevealItem>
 
       {/* Availability + profile */}
-      <section>
+      <RevealItem>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-ink">Your availability</h2>
           <ButtonLink
@@ -203,7 +204,7 @@ export function CaretakerDashboard({ user }: { user: User }) {
           </ButtonLink>
         </div>
         <AvailabilityCalendar availability={profile.availability} />
-      </section>
+      </RevealItem>
 
       {/* History */}
       {history.length > 0 && (
@@ -221,6 +222,6 @@ export function CaretakerDashboard({ user }: { user: User }) {
           </div>
         </section>
       )}
-    </div>
+    </RevealGroup>
   );
 }
