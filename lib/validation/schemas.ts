@@ -245,6 +245,89 @@ export const vetSearchQuerySchema = z.object({
   emergencyOnly: boolish.optional(),
 });
 
+/* ── Store ──────────────────────────────────────────────────────────── */
+
+export const productCategory = z.enum([
+  "dry_food",
+  "wet_food",
+  "treats",
+  "supplements",
+  "prescription_diet",
+  "dental",
+  "accessories",
+]);
+export const lifeStage = z.enum(["puppy", "kitten", "adult", "senior", "all"]);
+export const productSort = z.enum([
+  "featured",
+  "price_asc",
+  "price_desc",
+  "rating",
+  "newest",
+]);
+export const orderStatus = z.enum([
+  "pending_payment",
+  "paid",
+  "processing",
+  "packed",
+  "shipped",
+  "out_for_delivery",
+  "delivered",
+  "cancelled",
+  "refunded",
+]);
+
+const intish = numeric.pipe(z.number().int());
+
+export const productQuerySchema = z.object({
+  q: z.string().optional(),
+  category: productCategory.optional(),
+  species: species.optional(),
+  lifeStage: lifeStage.optional(),
+  brand: z.string().optional(),
+  minPriceCents: intish.optional(),
+  maxPriceCents: intish.optional(),
+  sort: productSort.optional(),
+  limit: intish.optional(),
+  offset: intish.optional(),
+});
+
+export const shippingAddressSchema = z.object({
+  name: z.string().min(1, "Who should we address it to?"),
+  line1: z.string().min(1, "Street address is required"),
+  line2: z.string().default(""),
+  city: z.string().min(1, "City is required"),
+  state: z.string().min(1, "State is required"),
+  postalCode: z.string().min(3, "Postal code is required"),
+  country: z.string().default("US"),
+  phone: z.string().default(""),
+});
+
+const cartLine = z.object({
+  productId: z.string(),
+  quantity: z.number().int().min(1).max(20),
+});
+
+export const createOrderSchema = z.object({
+  items: z.array(cartLine).min(1),
+  shippingAddress: shippingAddressSchema,
+  deliveryInstructions: z.string().optional(),
+  /** Enables the prescription check for Rx-only items. */
+  petId: z.string().optional(),
+});
+
+/** Cart re-pricing, used by the cart and checkout screens before submitting. */
+export const quoteCartSchema = z.object({
+  items: z.array(cartLine),
+  petId: z.string().optional(),
+});
+
+export const updateOrderStatusSchema = z.object({
+  status: orderStatus,
+  location: z.string().optional(),
+  carrier: z.string().optional(),
+  trackingNumber: z.string().optional(),
+});
+
 /* ── Search query parsing ───────────────────────────────────────────── */
 
 export const searchQuerySchema = z.object({
@@ -270,3 +353,7 @@ export type CreateReviewBody = z.infer<typeof createReviewSchema>;
 export type VetPatchBody = z.infer<typeof vetPatchSchema>;
 export type CreateAppointmentBody = z.infer<typeof createAppointmentSchema>;
 export type MedicalRecordBody = z.infer<typeof medicalRecordSchema>;
+export type ProductQueryBody = z.infer<typeof productQuerySchema>;
+export type CreateOrderBody = z.infer<typeof createOrderSchema>;
+export type QuoteCartBody = z.infer<typeof quoteCartSchema>;
+export type UpdateOrderStatusBody = z.infer<typeof updateOrderStatusSchema>;

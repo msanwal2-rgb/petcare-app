@@ -8,6 +8,7 @@ import { useSession } from "@/lib/store/session";
 import { logout as endSession } from "@/lib/auth/session-client";
 import { ButtonLink } from "@/components/ui/Button";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
+import { CartButton } from "./store/CartButton";
 import { RoleToggle } from "./RoleToggle";
 import { MenuIcon, XIcon } from "./ui/icons";
 import { BLUR_DATA_URL } from "@/lib/mock-data/photos";
@@ -28,6 +29,7 @@ function Logo() {
 const NAV = [
   { href: "/search", label: "Find care" },
   { href: "/vets", label: "Vets" },
+  { href: "/store", label: "Store" },
   { href: "/dashboard", label: "Dashboard" },
 ];
 
@@ -65,6 +67,7 @@ export function SiteHeader() {
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
+            <CartButton />
             {!hasHydrated ? (
               <div className="h-9 w-40" />
             ) : currentUser ? (
@@ -112,14 +115,16 @@ export function SiteHeader() {
             )}
           </div>
 
-          <button
-            className="md:hidden"
-            onClick={() => setMobileOpen((v) => !v)}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <XIcon /> : <MenuIcon />}
-          </button>
+          <div className="flex items-center gap-1 md:hidden">
+            <CartButton />
+            <button
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? <XIcon /> : <MenuIcon />}
+            </button>
+          </div>
         </div>
 
         {mobileOpen && (

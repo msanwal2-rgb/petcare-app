@@ -25,6 +25,7 @@ export async function POST(request: Request, ctx: Ctx) {
   if (parsed.data.ownerId && parsed.data.ownerId !== ownerId) {
     return error("ownerId in body does not match path", 400);
   }
-  const { ownerId: _ignored, ...petData } = parsed.data;
+  // The path owns the id; drop the body's copy rather than passing it twice.
+  const { ownerId: _bodyOwnerId, ...petData } = parsed.data;
   return ok(await createPet(ownerId, petData), 201);
 }

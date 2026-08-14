@@ -14,6 +14,10 @@ import type {
   CaretakerProfile as DbCaretaker,
   MedicalRecord as DbMedicalRecord,
   Message as DbMessage,
+  Order as DbOrder,
+  OrderEvent as DbOrderEvent,
+  OrderItem as DbOrderItem,
+  Product as DbProduct,
   Pet as DbPet,
   PricingEntry as DbPricingEntry,
   Review as DbReview,
@@ -29,11 +33,19 @@ import type {
   CaretakerProfile,
   CaretakerWithUser,
   ConsultMode,
+  LifeStage,
   MedicalRecord,
   MedicalRecordType,
   Message,
+  Order,
+  OrderEvent,
+  OrderItem,
+  OrderStatus,
+  PaymentStatus,
   Pet,
   PricingEntry,
+  Product,
+  ProductCategory,
   Review,
   Species,
   ServiceType,
@@ -268,6 +280,101 @@ export function toMedicalRecord(r: DbMedicalRecord): MedicalRecord {
     expiresAt: r.expiresAt,
     productSlugs: r.productSlugs,
     createdAt: r.createdAt,
+  };
+}
+
+/* ── Store ────────────────────────────────────────────────────────────── */
+
+export function toProduct(p: DbProduct): Product {
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    brand: p.brand,
+    description: p.description,
+    category: p.category as ProductCategory,
+    species: p.species as Species[],
+    lifeStage: p.lifeStage as LifeStage[],
+    sizeLabel: p.sizeLabel,
+    weightLbs: p.weightLbs,
+    priceCents: p.priceCents,
+    compareAtPriceCents: p.compareAtPriceCents,
+    imageUrl: p.imageUrl,
+    ingredients: p.ingredients,
+    allergens: p.allergens,
+    requiresPrescription: p.requiresPrescription,
+    stockQty: p.stockQty,
+    active: p.active,
+    rating: p.rating,
+    reviewCount: p.reviewCount,
+    createdAt: p.createdAt,
+  };
+}
+
+export function toOrderItem(i: DbOrderItem): OrderItem {
+  return {
+    id: i.id,
+    orderId: i.orderId,
+    productId: i.productId,
+    name: i.name,
+    brand: i.brand,
+    imageUrl: i.imageUrl,
+    slug: i.slug,
+    unitPriceCents: i.unitPriceCents,
+    quantity: i.quantity,
+    lineTotalCents: i.lineTotalCents,
+  };
+}
+
+export function toOrderEvent(e: DbOrderEvent): OrderEvent {
+  return {
+    id: e.id,
+    orderId: e.orderId,
+    status: e.status as OrderStatus,
+    label: e.label,
+    description: e.description,
+    location: e.location,
+    occurredAt: e.occurredAt,
+  };
+}
+
+type DbOrderWithRelations = DbOrder & {
+  items: DbOrderItem[];
+  events: DbOrderEvent[];
+};
+
+export function toOrder(o: DbOrderWithRelations): Order {
+  return {
+    id: o.id,
+    userId: o.userId,
+    status: o.status as OrderStatus,
+    paymentStatus: o.paymentStatus as PaymentStatus,
+    paymentRef: o.paymentRef,
+    subtotalCents: o.subtotalCents,
+    shippingCents: o.shippingCents,
+    taxCents: o.taxCents,
+    totalCents: o.totalCents,
+    shippingAddress: {
+      name: o.shipName,
+      line1: o.shipLine1,
+      line2: o.shipLine2,
+      city: o.shipCity,
+      state: o.shipState,
+      postalCode: o.shipPostalCode,
+      country: o.shipCountry,
+      phone: o.shipPhone,
+    },
+    deliveryInstructions: o.deliveryInstructions,
+    carrier: o.carrier,
+    trackingNumber: o.trackingNumber,
+    placedAt: o.placedAt,
+    estimatedDeliveryAt: o.estimatedDeliveryAt,
+    deliveredAt: o.deliveredAt,
+    items: o.items.map(toOrderItem),
+    // Chronological — the timeline reads top-down from order to doorstep.
+    events: o.events
+      .map(toOrderEvent)
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)),
   };
 }
 

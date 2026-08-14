@@ -389,6 +389,26 @@ export const medicalRecords: MedicalRecord[] = [
     createdAt: "2026-07-01T18:30:00Z",
   },
 
+  {
+    id: "mr11",
+    petId: "p6",
+    appointmentId: "a2",
+    vetId: "v2",
+    authorUserId: "u18",
+    type: "prescription",
+    title: "Hydrolysed protein diet",
+    details:
+      "Twelve-week trial alongside the Apoquel, with a view to reducing the dose if the skin stays quiet.",
+    occurredAt: "2026-07-01T18:15:00Z",
+    nextDueAt: null,
+    medicationName: "VetLine Hydrolysed Protein (dog)",
+    dosage: "Feed to weight; sole diet for twelve weeks.",
+    refillsLeft: 4,
+    expiresAt: "2027-01-01T00:00:00Z",
+    productSlugs: ["vetline-hydrolyzed-protein-dog-dry"],
+    createdAt: "2026-07-01T18:30:00Z",
+  },
+
   /* Biscuit (p1) — vaccination history; the booster falls due next month */
   {
     id: "mr6",

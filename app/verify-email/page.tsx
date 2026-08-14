@@ -9,16 +9,16 @@ import { ButtonLink } from "@/components/ui/Button";
 
 function VerifyInner() {
   const token = useSearchParams().get("token");
-  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  // A missing token needs no request, so it isn't a state transition — it's
+  // the starting state. Only the network result is set from the effect.
+  const [state, setState] = useState<"loading" | "ok" | "error">(
+    token ? "loading" : "error"
+  );
   const ran = useRef(false);
 
   useEffect(() => {
-    if (ran.current) return; // guard against double-invoke in dev/strict mode
+    if (ran.current || !token) return; // guard against double-invoke in strict mode
     ran.current = true;
-    if (!token) {
-      setState("error");
-      return;
-    }
     verifyEmail(token)
       .then(async () => {
         await refreshSessionUser();

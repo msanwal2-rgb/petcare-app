@@ -14,6 +14,7 @@
 import type { Order, OrderEvent, OrderItem, Product, User } from "@/types";
 import { TODAY } from "./index";
 import { HEADSHOTS, unsplash } from "./photos";
+import { taxFor } from "@/lib/pricing";
 
 /**
  * Store operations staff. `isOps` is not a marketplace role — it never appears
@@ -612,7 +613,7 @@ function line(slug: string, quantity: number): Omit<OrderItem, "id" | "orderId">
 
 function totals(items: Omit<OrderItem, "id" | "orderId">[], shippingCents: number) {
   const subtotalCents = items.reduce((sum, i) => sum + i.lineTotalCents, 0);
-  const taxCents = Math.round(subtotalCents * 0.0825); // matches lib/server/orders.ts
+  const taxCents = taxFor(subtotalCents);
   return {
     subtotalCents,
     shippingCents,
