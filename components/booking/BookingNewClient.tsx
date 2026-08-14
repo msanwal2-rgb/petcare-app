@@ -81,7 +81,12 @@ export function BookingNewClient() {
   if (!hasHydrated || (caretakerId && loadingCaretaker)) return <LoadingState />;
   if (!currentUser)
     return (
-      <AuthRequired message="Log in to request a booking. You can use the Dev account switcher to try it instantly." />
+      <AuthRequired
+        message="Log in to request a booking."
+        callbackPath={
+          caretakerId ? `/booking/new?caretakerId=${caretakerId}` : "/booking/new"
+        }
+      />
     );
   if (!caretaker)
     return (

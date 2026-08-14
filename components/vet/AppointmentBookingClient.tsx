@@ -70,7 +70,14 @@ export function AppointmentBookingClient() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!hasHydrated) return <BookingSkeleton />;
-  if (!currentUser) return <AuthRequired />;
+  // The vet is in the query string; coming back without it is a dead end.
+  if (!currentUser)
+    return (
+      <AuthRequired
+        message="Log in to request an appointment."
+        callbackPath={vetId ? `/vets/book?vetId=${vetId}` : "/vets/book"}
+      />
+    );
 
   if (!vet) {
     return (
