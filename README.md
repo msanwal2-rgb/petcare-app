@@ -110,4 +110,5 @@ prescriptions, the catalog, stock, and order records.
 ## Docs
 
 - **`API_CONTRACTS.md`** — every endpoint, its auth rule, and its shapes.
+- **`ROADMAP.md`** — what is still missing and what it would take.
 - **`docs/`** — the original product foundation and frontend brief.
