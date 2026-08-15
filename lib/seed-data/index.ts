@@ -892,7 +892,8 @@ export const bookings: Booking[] = [
 export const reviews: Review[] = [
   {
     id: "r1",
-    bookingId: "b9",
+    subjectId: "b9",
+    kind: "booking",
     fromUserId: "u2", // owner → caretaker (Ben, c8)
     toUserId: "u14",
     rating: 5,
@@ -902,7 +903,8 @@ export const reviews: Review[] = [
   },
   {
     id: "r2",
-    bookingId: "b9",
+    subjectId: "b9",
+    kind: "booking",
     fromUserId: "u14", // caretaker → owner
     toUserId: "u2",
     rating: 5,
@@ -911,7 +913,8 @@ export const reviews: Review[] = [
   },
   {
     id: "r3",
-    bookingId: "b10",
+    subjectId: "b10",
+    kind: "booking",
     fromUserId: "u3", // owner → caretaker (Elena, c4)
     toUserId: "u10",
     rating: 5,
@@ -921,7 +924,8 @@ export const reviews: Review[] = [
   },
   {
     id: "r4",
-    bookingId: "b11",
+    subjectId: "b11",
+    kind: "booking",
     fromUserId: "u6", // owner → caretaker (Hannah, c9)
     toUserId: "u15",
     rating: 4,
@@ -931,7 +935,8 @@ export const reviews: Review[] = [
   },
   {
     id: "r5",
-    bookingId: "b12",
+    subjectId: "b12",
+    kind: "booking",
     fromUserId: "u4", // owner → caretaker (Marcus, c5)
     toUserId: "u11",
     rating: 5,
@@ -941,7 +946,8 @@ export const reviews: Review[] = [
   },
   {
     id: "r6",
-    bookingId: "b12",
+    subjectId: "b12",
+    kind: "booking",
     fromUserId: "u11", // caretaker → owner
     toUserId: "u4",
     rating: 5,

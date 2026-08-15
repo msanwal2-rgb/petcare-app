@@ -116,6 +116,8 @@ export const updateBookingStatusSchema = z.object({ status: bookingStatus });
 
 /* ── Reviews ────────────────────────────────────────────────────────── */
 
+export const reviewKind = z.enum(["booking", "vet_appointment"]);
+
 export const createReviewSchema = z.object({
   fromUserId: z.string(),
   toUserId: z.string(),

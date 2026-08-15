@@ -2,25 +2,28 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { createReview } from "@/lib/api/reviews";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Field";
 import { StarIcon } from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
-/** Post-completion review form (bidirectional per foundation §3). */
+/**
+ * Post-completion review form.
+ *
+ * Presentational: it collects a rating and a comment and hands them to
+ * `onSubmit`. Bookings and vet appointments post to different endpoints with
+ * different rules about who may review whom, and neither of those belongs in
+ * a star picker.
+ */
 export function LeaveReview({
-  bookingId,
-  fromUserId,
-  toUserId,
   toName,
-  onDone,
+  onSubmit,
+  prompt = "How did it go? Share the details that would help others.",
 }: {
-  bookingId: string;
-  fromUserId: string;
-  toUserId: string;
+  /** Who is being reviewed, for the heading and the thank-you. */
   toName: string;
-  onDone: () => void;
+  onSubmit: (review: { rating: number; comment: string }) => Promise<unknown>;
+  prompt?: string;
 }) {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
@@ -35,13 +38,15 @@ export function LeaveReview({
     }
     setSaving(true);
     try {
-      await createReview({ bookingId, fromUserId, toUserId, rating, comment });
+      await onSubmit({ rating, comment: comment.trim() });
       toast.success(`Thanks for reviewing ${toName.split(" ")[0]}!`);
       setRating(0);
       setComment("");
-      onDone();
-    } catch {
-      toast.error("Couldn’t save your review. Try again.");
+    } catch (e) {
+      // The server owns the rules — surface what it actually said.
+      toast.error("Couldn’t save your review", {
+        description: e instanceof Error ? e.message : undefined,
+      });
     } finally {
       setSaving(false);
     }
@@ -78,7 +83,7 @@ export function LeaveReview({
       <Textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="How did it go? Share the details that would help others."
+        placeholder={prompt}
         className="mt-3"
       />
       <div className="mt-3 flex justify-end">

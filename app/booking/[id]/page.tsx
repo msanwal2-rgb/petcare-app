@@ -9,7 +9,7 @@ import { getBookingById, updateBookingStatus } from "@/lib/api/bookings";
 import { getCaretakerById } from "@/lib/api/caretakers";
 import { getUserById } from "@/lib/api/users";
 import { getPetsByIds } from "@/lib/api/pets";
-import { getReviewsForBooking } from "@/lib/api/reviews";
+import { createBookingReview, getReviewsForBooking } from "@/lib/api/reviews";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { BookingStatusBadge } from "@/components/BookingStatusBadge";
@@ -17,7 +17,7 @@ import { ServiceTypeChip } from "@/components/ServiceTypeChip";
 import { PetCard } from "@/components/PetCard";
 import { ReviewCard } from "@/components/ReviewCard";
 import { EmptyState } from "@/components/EmptyState";
-import { LeaveReview } from "@/components/booking/LeaveReview";
+import { LeaveReview } from "@/components/reviews/LeaveReview";
 import { MessageThread } from "@/components/booking/MessageThread";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -331,11 +331,16 @@ export default function BookingDetailPage() {
             )}
             {(isOwner || isCaretaker) && !alreadyReviewed && caretaker && owner && (
               <LeaveReview
-                bookingId={booking.id}
-                fromUserId={currentUser!.id}
-                toUserId={isOwner ? caretaker.userId : booking.ownerId}
                 toName={isOwner ? caretaker.user.name : owner.name}
-                onDone={reloadReviews}
+                onSubmit={async ({ rating, comment }) => {
+                  await createBookingReview(booking.id, {
+                    fromUserId: currentUser!.id,
+                    toUserId: isOwner ? caretaker.userId : booking.ownerId,
+                    rating,
+                    comment,
+                  });
+                  reloadReviews();
+                }}
               />
             )}
           </div>

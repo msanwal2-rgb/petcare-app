@@ -3,12 +3,16 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { getVetById } from "@/lib/api/vets";
+import { getReviewsForUser } from "@/lib/api/reviews";
+import { getUsersByIds } from "@/lib/api/users";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 import { EmptyState } from "@/components/EmptyState";
+import { ReviewCard } from "@/components/ReviewCard";
 import { ButtonLink } from "@/components/ui/Button";
 import { Reveal } from "@/components/ui/Reveal";
 import { ProfileHero, ProfilePageSkeleton } from "@/components/ui/ProfileHero";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Panel, Stat } from "@/components/ui/Panel";
 import { ClockIcon, AlertIcon, StethoscopeIcon } from "@/components/ui/icons";
 import {
@@ -23,6 +27,18 @@ export default function VetDetailPage() {
   const [selectedDate, setSelectedDate] = useState<string>();
 
   const { data: vet, loading } = useAsync(() => getVetById(id), [id]);
+  const { data: reviews } = useAsync(
+    () =>
+      vet ? getReviewsForUser(vet.userId, "vet_appointment") : Promise.resolve([]),
+    [vet?.userId]
+  );
+  const { data: authors } = useAsync(
+    () =>
+      reviews?.length
+        ? getUsersByIds(reviews.map((r) => r.fromUserId))
+        : Promise.resolve([]),
+    [reviews]
+  );
 
   if (loading || vet === null) {
     return vet === null && !loading ? (
@@ -40,6 +56,7 @@ export default function VetDetailPage() {
   }
 
   const { user } = vet;
+  const authorById = new Map((authors ?? []).map((a) => [a.id, a]));
 
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-6">
@@ -158,6 +175,35 @@ export default function VetDetailPage() {
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
             />
+          </Reveal>
+
+          <Reveal>
+            <h2 className="text-lg font-semibold text-ink">
+              Reviews{" "}
+              <span className="font-mono text-sm font-normal text-charcoal/50">
+                ({vet.reviewCount})
+              </span>
+            </h2>
+            <div className="mt-4 space-y-4">
+              {reviews === null ? (
+                <>
+                  <Skeleton className="h-28 w-full rounded-[12px]" />
+                  <Skeleton className="h-28 w-full rounded-[12px]" />
+                </>
+              ) : reviews.length === 0 ? (
+                <p className="rounded-[12px] border border-dashed border-mist bg-white/60 px-4 py-8 text-center text-sm text-charcoal/60">
+                  No written reviews yet — be the first after your visit.
+                </p>
+              ) : (
+                reviews.map((r) => (
+                  <ReviewCard
+                    key={r.id}
+                    review={r}
+                    author={authorById.get(r.fromUserId)}
+                  />
+                ))
+              )}
+            </div>
           </Reveal>
         </div>
 

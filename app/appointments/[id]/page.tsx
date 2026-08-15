@@ -11,12 +11,18 @@ import { getVetById } from "@/lib/api/vets";
 import { getPetById } from "@/lib/api/pets";
 import { getUserById } from "@/lib/api/users";
 import { getRecordsForPet } from "@/lib/api/medical-records";
+import {
+  createAppointmentReview,
+  getReviewsForAppointment,
+} from "@/lib/api/reviews";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { AuthRequired } from "@/components/AuthRequired";
 import { AppointmentStatusBadge } from "@/components/vet/AppointmentStatusBadge";
 import { VisitSummaryForm } from "@/components/vet/VisitSummaryForm";
 import { MedicalRecordCard } from "@/components/vet/MedicalRecordCard";
+import { ReviewCard } from "@/components/ReviewCard";
+import { LeaveReview } from "@/components/reviews/LeaveReview";
 import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
@@ -64,6 +70,10 @@ export default function AppointmentDetailPage() {
     () => (appointment ? getUserById(appointment.ownerId) : Promise.resolve(null)),
     [appointment?.ownerId]
   );
+  const { data: reviews, reload: reloadReviews } = useAsync(
+    () => (appointment ? getReviewsForAppointment(appointment.id) : Promise.resolve([])),
+    [appointment?.id]
+  );
   const {
     data: records,
     reload: reloadRecords,
@@ -94,6 +104,12 @@ export default function AppointmentDetailPage() {
 
   const journeyIndex = JOURNEY.indexOf(appointment.status);
   const onHappyPath = journeyIndex >= 0;
+
+  // Only the owner reviews, only once the visit happened, only once. The
+  // server enforces all three; this decides whether to offer the form.
+  const alreadyReviewed = (reviews ?? []).some((r) => r.fromUserId === currentUser.id);
+  const canReview =
+    isOwner && appointment.status === "completed" && !alreadyReviewed;
 
   async function move(status: AppointmentStatus, message: string) {
     setBusy(true);
@@ -355,6 +371,45 @@ export default function AppointmentDetailPage() {
           />
         )}
       </Reveal>
+
+      {appointment.status === "completed" && vet && (
+        <Reveal className="mt-8">
+          <h2 className="text-lg font-semibold text-ink">Reviews</h2>
+          <div className="mt-3 space-y-4">
+            {(reviews ?? []).map((r) => (
+              <ReviewCard
+                key={r.id}
+                review={r}
+                author={r.fromUserId === owner?.id ? owner : undefined}
+              />
+            ))}
+
+            {canReview && (
+              <LeaveReview
+                toName={vet.user.name}
+                prompt="How was the visit? What would help another owner choosing a vet?"
+                onSubmit={async ({ rating, comment }) => {
+                  await createAppointmentReview(appointment.id, {
+                    fromUserId: currentUser.id,
+                    toUserId: vet.userId,
+                    rating,
+                    comment,
+                  });
+                  reloadReviews();
+                }}
+              />
+            )}
+
+            {!canReview && (reviews ?? []).length === 0 && (
+              <p className="text-sm text-charcoal/55">
+                {isVet
+                  ? "Nothing from the owner yet."
+                  : "This visit hasn't been reviewed."}
+              </p>
+            )}
+          </div>
+        </Reveal>
+      )}
     </div>
   );
 }

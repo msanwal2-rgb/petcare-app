@@ -97,9 +97,14 @@ export interface Booking {
   createdAt: string; // ISO 8601
 }
 
+/** What was reviewed. Bookings are reviewed both ways; vet visits are not. */
+export type ReviewKind = "booking" | "vet_appointment";
+
 export interface Review {
   id: string;
-  bookingId: string;
+  /** The Booking or VetAppointment being reviewed — see `kind`. */
+  subjectId: string;
+  kind: ReviewKind;
   fromUserId: string;
   toUserId: string;
   rating: number; // 0–5

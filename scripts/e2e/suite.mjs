@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 
 const BASE = process.argv[2] || "http://localhost:3000";
 const browser = await chromium.launch({ channel: "chrome" });
@@ -325,6 +325,69 @@ await reachesDashboard("straight to /login → demo button", async (page) => {
   await page.goto(`${BASE}/dashboard`, { waitUntil: "networkidle" });
   await page.waitForTimeout(2000);
   check("guarded route still bounces when signed out", page.url().includes("/login"), page.url().replace(BASE, ""));
+  await ctx.close();
+}
+
+
+/* ── 13. Vet reviews ───────────────────────────────────────────────
+   Owner reviews the vet after a completed visit; one direction, once. */
+console.log("\n[13] Vet reviews");
+{
+  const { ctx, page } = await newPage();
+
+  await page.goto(`${BASE}/vets/v1`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1500);
+  const profile = await text(page);
+  check("vet profile lists written reviews", profile.includes("food trial has to be strict"));
+  check("vet profile shows a review count", /Reviews\s*\(\d+\)/.test(profile.replace(/\n/g, " ")));
+
+  await login(page, "maya.chen@example.com");
+  await page.goto(`${BASE}/appointments/a8`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(3500);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1500);
+  check("completed visit offers a review form", (await text(page)).includes("Leave a review for"));
+
+  await page.locator('button[aria-label="5 stars"]').click();
+  await page.fill("textarea", "Sorted the limp with a plan, not a prescription.");
+  await page.click('button:has-text("Post review")');
+  await page.waitForTimeout(8000);
+  const after = await text(page);
+  check("review is posted and shown", after.includes("Sorted the limp"));
+  check("form retires once used", !after.includes("Leave a review for"));
+
+  // and it reaches the vet's public profile
+  await page.goto(`${BASE}/vets/v1`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(3000);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1500);
+  check("review appears on the vet's profile", (await text(page)).includes("Sorted the limp"));
+  await ctx.close();
+}
+
+/* An unreviewable visit must not offer the form. */
+{
+  const { ctx, page } = await newPage();
+  await login(page, "maya.chen@example.com");
+  await page.goto(`${BASE}/appointments/a3`, { waitUntil: "networkidle" }); // confirmed, not completed
+  await page.waitForTimeout(3500);
+  check("upcoming visit offers no review form", !(await text(page)).includes("Leave a review for"));
+  await ctx.close();
+}
+
+/* The vet sees the review but is not invited to review the client back. */
+{
+  const { ctx, page } = await newPage();
+  await login(page, "naomi.ruiz@example.com");
+  await page.goto(`${BASE}/appointments/a1`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(3500);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1500);
+  const vetView = await text(page);
+  check("vet sees the owner's review", vetView.includes("food trial has to be strict"));
+  check("vet is not offered a review form", !vetView.includes("Leave a review for"));
   await ctx.close();
 }
 

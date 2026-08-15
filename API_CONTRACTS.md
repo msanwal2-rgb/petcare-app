@@ -69,11 +69,18 @@ would authorize/hold payment here (foundation §3, §5; Stripe Connect escrow).
 
 ## Reviews — `/lib/api/reviews.ts`
 
-| Method | Path | Request | Response | Called by |
-|---|---|---|---|---|
-| GET | `/api/users/:userId/reviews` | — | `Review[]` (about this user, newest first) | `/caretaker/[id]`, profiles |
-| GET | `/api/bookings/:bookingId/reviews` | — | `Review[]` | `/booking/[id]` |
-| POST | `/api/bookings/:bookingId/reviews` | `{ fromUserId, toUserId, rating, comment }` | `Review` (201) | `/booking/[id]` |
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/users/:id/reviews[?kind=]` | public | `Review[]`, newest first. `kind` (`booking` \| `vet_appointment`) separates someone's caretaker reviews from their vet reviews |
+| GET | `/api/bookings/:id/reviews` | public | `Review[]` |
+| POST | `/api/bookings/:id/reviews` | a participant | `Review` (201) · 403 wrong author or recipient · 409 not complete / already reviewed. Bookings are reviewed **both ways** |
+
+Who may review whom is re-derived from the subject, never trusted from the
+body: the subject must exist and be `completed`, the author must have taken
+part, the recipient must be the other party, and one author gets one review.
+A posted rating is folded into the recipient's profile as a running average —
+`reviewCount` includes reputation that predates this database, so recounting
+from the rows would erase it.
 
 ---
 
@@ -116,6 +123,13 @@ These are **not** represented in `/lib/api` yet; the backend will own them:
 
 Lifecycle: `requested → confirmed → in_progress → completed`, with `declined`
 and `cancelled` as terminal branches.
+
+### Reviews — `/lib/api/reviews.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/appointments/:id/reviews` | public | `Review[]` |
+| POST | `/api/appointments/:id/reviews` | the pet's owner | `Review` (201) · 403 wrong author or recipient · 409 not complete / already reviewed. **One direction only** — a vet cannot review the client back |
 
 ### Health records — `/lib/api/medical-records.ts`
 

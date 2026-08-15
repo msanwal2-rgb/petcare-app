@@ -13,7 +13,13 @@
  *     which is what the health-record UI surfaces as a reminder.
  */
 
-import type { MedicalRecord, VetAppointment, VetProfile, User } from "@/types";
+import type {
+  MedicalRecord,
+  Review,
+  VetAppointment,
+  VetProfile,
+  User,
+} from "@/types";
 import { generateAvailability, TODAY } from "./index";
 import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 
@@ -271,6 +277,21 @@ export const appointments: VetAppointment[] = [
     createdAt: "2026-07-02T11:30:00Z",
   },
   {
+    id: "a8",
+    ownerId: "u1",
+    vetId: "v1",
+    petId: "p1", // Biscuit
+    mode: "in_clinic",
+    reason: "Limping on the front right leg",
+    symptoms: ["Limping"],
+    startDateTime: "2026-06-30T16:00:00Z",
+    endDateTime: "2026-06-30T16:30:00Z",
+    status: "completed",
+    fee: 85,
+    notes: "Started after a long hike at the weekend.",
+    createdAt: "2026-06-27T09:10:00Z",
+  },
+  {
     id: "a7",
     ownerId: "u5",
     vetId: "v4",
@@ -447,6 +468,26 @@ export const medicalRecords: MedicalRecord[] = [
     createdAt: "2026-02-11T10:30:00Z",
   },
 
+  {
+    id: "mr12",
+    petId: "p1",
+    appointmentId: "a8",
+    vetId: "v1",
+    authorUserId: "u17",
+    type: "visit_note",
+    title: "Soft-tissue strain, front right",
+    details:
+      "No swelling and full range of motion. Almost certainly a strain from overdoing it. Short lead walks only for ten days, then build back up. Recheck if he is still favouring it after two weeks.",
+    occurredAt: "2026-06-30T16:30:00Z",
+    nextDueAt: null,
+    medicationName: null,
+    dosage: null,
+    refillsLeft: null,
+    expiresAt: null,
+    productSlugs: [],
+    createdAt: "2026-06-30T16:45:00Z",
+  },
+
   /* Miso (p2) */
   {
     id: "mr8",
@@ -505,5 +546,46 @@ export const medicalRecords: MedicalRecord[] = [
     expiresAt: null,
     productSlugs: [],
     createdAt: "2025-10-02T09:00:00Z",
+  },
+];
+
+/* ── Reviews of completed visits ──────────────────────────────────────
+   One direction only: the pet's owner reviews the vet. The seeded
+   `reviewCount` on each profile stands for reputation earned before this
+   database existed, so these are simply the written ones. */
+
+export const vetReviews: Review[] = [
+  {
+    id: "vr1",
+    subjectId: "a1", // Luna's allergy work-up with Dr. Ruiz
+    kind: "vet_appointment",
+    fromUserId: "u3",
+    toUserId: "u17",
+    rating: 5,
+    comment:
+      "She spent twenty minutes explaining why the food trial has to be strict, instead of just handing me a bag. Luna has stopped over-grooming for the first time in a year.",
+    createdAt: "2026-06-22T09:15:00Z",
+  },
+  {
+    id: "vr2",
+    subjectId: "a2", // Pepper's dermatology review with Dr. Okafor
+    kind: "vet_appointment",
+    fromUserId: "u4",
+    toUserId: "u18",
+    rating: 5,
+    comment:
+      "Third vet we have seen for Pepper's itching and the first to actually get it under control. Worth the drive across town.",
+    createdAt: "2026-07-03T17:40:00Z",
+  },
+  {
+    id: "vr3",
+    subjectId: "a5", // Duke's dental with Dr. Whitfield
+    kind: "vet_appointment",
+    fromUserId: "u14",
+    toUserId: "u19",
+    rating: 4,
+    comment:
+      "Thorough work and the radiographs were reassuring. Only note is that the wait to get in was a few weeks longer than I expected.",
+    createdAt: "2026-06-14T11:20:00Z",
   },
 ];

@@ -1,8 +1,11 @@
-import { chromium } from "playwright";
+import { chromium } from "playwright-core";
 const B = process.argv[2] || "http://localhost:3000";
 const browser = await chromium.launch({ channel: "chrome" });
 let pass = 0, fail = 0; const problems = [];
-const check = (n, ok, d = "") => { ok ? (pass++, console.log(`  ✓ ${n}`)) : (fail++, problems.push(`${n} — ${d}`), console.log(`  ✗ ${n}  ${d}`)); };
+function check(name, ok, detail = "") {
+  if (ok) { pass++; console.log(`  ✓ ${name}`); }
+  else { fail++; problems.push(`${name} — ${detail}`); console.log(`  ✗ ${name}  ${detail}`); }
+}
 
 async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

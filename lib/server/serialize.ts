@@ -47,6 +47,7 @@ import type {
   Product,
   ProductCategory,
   Review,
+  ReviewKind,
   Species,
   ServiceType,
   Sex,
@@ -189,7 +190,9 @@ export function toBooking(b: DbBooking): Booking {
 export function toReview(r: DbReview): Review {
   return {
     id: r.id,
-    bookingId: r.bookingId,
+    // The column is still called bookingId; `kind` says what it points at.
+    subjectId: r.bookingId,
+    kind: r.kind as ReviewKind,
     fromUserId: r.fromUserId,
     toUserId: r.toUserId,
     rating: r.rating,

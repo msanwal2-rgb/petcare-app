@@ -15,6 +15,7 @@ import {
 import {
   appointments as seedAppointments,
   medicalRecords as seedMedicalRecords,
+  vetReviews as seedVetReviews,
   vets as seedVets,
   vetUsers as seedVetUsers,
 } from "@/lib/seed-data/vets";
@@ -150,7 +151,8 @@ export async function seedDatabase(db: PrismaClient) {
   await db.review.createMany({
     data: seedReviews.map((r) => ({
       id: r.id,
-      bookingId: r.bookingId,
+      bookingId: r.subjectId,
+      kind: r.kind,
       fromUserId: r.fromUserId,
       toUserId: r.toUserId,
       rating: r.rating,
@@ -204,6 +206,18 @@ export async function seedDatabase(db: PrismaClient) {
 
   await db.vetAppointment.createMany({ data: seedAppointments });
   await db.medicalRecord.createMany({ data: seedMedicalRecords });
+  await db.review.createMany({
+    data: seedVetReviews.map((r) => ({
+      id: r.id,
+      bookingId: r.subjectId,
+      kind: r.kind,
+      fromUserId: r.fromUserId,
+      toUserId: r.toUserId,
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.createdAt,
+    })),
+  });
 
   /* ── Store ────────────────────────────────────────────────────────── */
 
@@ -225,7 +239,7 @@ export async function seedDatabase(db: PrismaClient) {
     pets: seedPets.length,
     caretakers: seedCaretakers.length,
     bookings: seedBookings.length,
-    reviews: seedReviews.length,
+    reviews: seedReviews.length + seedVetReviews.length,
     messages: 5,
     vets: seedVets.length,
     appointments: seedAppointments.length,

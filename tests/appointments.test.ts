@@ -31,7 +31,7 @@ afterAll(async () => {
 describe("appointment reads", () => {
   it("lists an owner's appointments newest-first", async () => {
     const list = await getAppointmentsByOwner("u1", db);
-    expect(list.length).toBe(2);
+    expect(list.length).toBe(3);
     for (let i = 1; i < list.length; i++) {
       expect(list[i - 1].startDateTime >= list[i].startDateTime).toBe(true);
     }
