@@ -12,7 +12,6 @@
  */
 
 import type { Order, OrderEvent, OrderItem, Product, User } from "@/types";
-import { TODAY } from "./index";
 import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 import { taxFor } from "@/lib/pricing";
 
@@ -567,6 +566,23 @@ export const products: Product[] = [
    Priya (u3), so /store/orders and the tracking timeline are populated
    immediately: one delivered, one out for delivery, one just placed. */
 
+/**
+ * Orders are timed relative to when the database was seeded, unlike the rest
+ * of the fixtures.
+ *
+ * The cron computes each order's stage from how long ago it was placed, so
+ * orders pinned to a fixed date in the past would all be "overdue for
+ * delivery" the first time it ran, and the tracking demo would be over before
+ * anyone saw it. Placing them a few hours and days back instead means the
+ * seeded status is exactly the stage its age has earned — and real time then
+ * carries them forward on its own.
+ */
+const SEEDED_AT = Date.now();
+const hoursAgo = (hours: number) =>
+  new Date(SEEDED_AT - hours * 3_600_000).toISOString();
+const hoursAhead = (hours: number) =>
+  new Date(SEEDED_AT + hours * 3_600_000).toISOString();
+
 const MAYA_ADDRESS = {
   shipName: "Maya Chen",
   shipLine1: "1204 Grove Street",
@@ -639,17 +655,17 @@ export const orders: SeedOrder[] = [
     deliveryInstructions: "Leave with the front desk if I'm out.",
     carrier: "Leash Delivery",
     trackingNumber: "LEASH-4471-0921",
-    placedAt: "2026-06-24T16:20:00Z",
-    estimatedDeliveryAt: "2026-06-27T22:00:00Z",
-    deliveredAt: "2026-06-27T18:41:00Z",
+    placedAt: hoursAgo(14 * 24),
+    estimatedDeliveryAt: hoursAgo(11 * 24),
+    deliveredAt: hoursAgo(11 * 24 + 3),
     items: o1Items,
     events: [
-      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: "2026-06-24T16:20:00Z" },
-      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: "2026-06-25T09:05:00Z" },
-      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Austin, TX", occurredAt: "2026-06-25T15:30:00Z" },
-      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Austin, TX", occurredAt: "2026-06-26T08:15:00Z" },
-      { status: "out_for_delivery", label: "Out for delivery", description: "On the van and heading your way.", location: "Austin, TX", occurredAt: "2026-06-27T07:50:00Z" },
-      { status: "delivered", label: "Delivered", description: "Left with the front desk.", location: "1204 Grove Street, Austin, TX", occurredAt: "2026-06-27T18:41:00Z" },
+      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: hoursAgo(336) },
+      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: hoursAgo(335) },
+      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Austin, TX", occurredAt: hoursAgo(330) },
+      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Austin, TX", occurredAt: hoursAgo(312) },
+      { status: "out_for_delivery", label: "Out for delivery", description: "On the van and heading your way.", location: "Austin, TX", occurredAt: hoursAgo(288) },
+      { status: "delivered", label: "Delivered", description: "Left with the front desk.", location: "1204 Grove Street, Austin, TX", occurredAt: hoursAgo(276) },
     ],
   },
   {
@@ -663,16 +679,16 @@ export const orders: SeedOrder[] = [
     deliveryInstructions: "",
     carrier: "Leash Delivery",
     trackingNumber: "LEASH-4471-1188",
-    placedAt: "2026-07-05T11:02:00Z",
-    estimatedDeliveryAt: `${TODAY}T22:00:00Z`,
+    placedAt: hoursAgo(50),
+    estimatedDeliveryAt: hoursAhead(10),
     deliveredAt: null,
     items: o2Items,
     events: [
-      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: "2026-07-05T11:02:00Z" },
-      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: "2026-07-05T14:40:00Z" },
-      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Austin, TX", occurredAt: "2026-07-06T10:12:00Z" },
-      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Austin, TX", occurredAt: "2026-07-07T08:30:00Z" },
-      { status: "out_for_delivery", label: "Out for delivery", description: "On the van and heading your way.", location: "Austin, TX", occurredAt: `${TODAY}T07:45:00Z` },
+      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: hoursAgo(50) },
+      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: hoursAgo(49) },
+      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Austin, TX", occurredAt: hoursAgo(44) },
+      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Austin, TX", occurredAt: hoursAgo(26) },
+      { status: "out_for_delivery", label: "Out for delivery", description: "On the van and heading your way.", location: "Austin, TX", occurredAt: hoursAgo(2) },
     ],
   },
   {
@@ -686,13 +702,13 @@ export const orders: SeedOrder[] = [
     deliveryInstructions: "",
     carrier: null,
     trackingNumber: null,
-    placedAt: `${TODAY}T09:15:00Z`,
-    estimatedDeliveryAt: "2026-07-12T22:00:00Z",
+    placedAt: hoursAgo(3),
+    estimatedDeliveryAt: hoursAhead(57),
     deliveredAt: null,
     items: o3Items,
     events: [
-      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: `${TODAY}T09:15:00Z` },
-      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: `${TODAY}T10:02:00Z` },
+      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: hoursAgo(3) },
+      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Austin, TX", occurredAt: hoursAgo(2) },
     ],
   },
   {
@@ -706,15 +722,15 @@ export const orders: SeedOrder[] = [
     deliveryInstructions: "Side gate is unlocked.",
     carrier: "Leash Delivery",
     trackingNumber: "LEASH-8820-3310",
-    placedAt: "2026-07-03T13:44:00Z",
-    estimatedDeliveryAt: "2026-07-09T22:00:00Z",
+    placedAt: hoursAgo(30),
+    estimatedDeliveryAt: hoursAhead(30),
     deliveredAt: null,
     items: o4Items,
     events: [
-      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: "2026-07-03T13:44:00Z" },
-      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Denver, CO", occurredAt: "2026-07-04T09:20:00Z" },
-      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Denver, CO", occurredAt: "2026-07-06T11:05:00Z" },
-      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Denver, CO", occurredAt: "2026-07-07T07:55:00Z" },
+      { status: "paid", label: "Payment confirmed", description: "We've received your payment.", location: null, occurredAt: hoursAgo(30) },
+      { status: "processing", label: "Preparing your order", description: "Picking items in the fulfilment centre.", location: "Denver, CO", occurredAt: hoursAgo(29) },
+      { status: "packed", label: "Packed", description: "Your order is boxed and labelled.", location: "Denver, CO", occurredAt: hoursAgo(24) },
+      { status: "shipped", label: "Shipped", description: "Handed to the carrier.", location: "Denver, CO", occurredAt: hoursAgo(6) },
     ],
   },
 ];

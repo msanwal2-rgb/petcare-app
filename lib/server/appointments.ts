@@ -15,7 +15,9 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toAppointment } from "./serialize";
 import { genId, nowIso } from "./ids";
-import type { AppointmentStatus } from "@/types";
+import { refreshResponseRate } from "./reputation";
+import { notify } from "./notifications";
+import type { AppointmentStatus, NotificationKind } from "@/types";
 import type { CreateAppointmentBody } from "@/lib/validation/schemas";
 
 const TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
@@ -37,6 +39,27 @@ const ACTOR_ALLOWED: Record<AppointmentStatus, AppointmentActor[]> = {
   in_progress: ["vet"],
   completed: ["vet"],
   cancelled: ["owner", "vet"],
+};
+
+/** What the owner hears when a vet moves their appointment along. */
+const APPOINTMENT_NOTICES: Partial<
+  Record<AppointmentStatus, (reason: string) => { kind: NotificationKind; title: string; body: string }>
+> = {
+  confirmed: (reason) => ({
+    kind: "appointment_confirmed",
+    title: "Your vet appointment is confirmed",
+    body: `${reason} — see the appointment for the time and what to bring.`,
+  }),
+  declined: (reason) => ({
+    kind: "appointment_declined",
+    title: "Your vet couldn't take that appointment",
+    body: `${reason} — you can request another time or find a different vet.`,
+  }),
+  completed: (reason) => ({
+    kind: "appointment_completed",
+    title: "Your visit summary is ready",
+    body: `${reason} — notes and any prescriptions are in your pet's health record.`,
+  }),
 };
 
 export type AppointmentStatusResult =
@@ -126,6 +149,7 @@ export async function createAppointment(
       createdAt: nowIso(),
     },
   });
+  await refreshResponseRate("vet", a.vetId, db);
   return { ok: true, appointment: toAppointment(a) };
 }
 
@@ -150,5 +174,13 @@ export async function updateAppointmentStatus(
   }
 
   const a = await db.vetAppointment.update({ where: { id }, data: { status } });
+  await refreshResponseRate("vet", a.vetId, db);
+
+  // The owner is the one waiting on an answer, so they are the one told.
+  const told = APPOINTMENT_NOTICES[status];
+  if (told) {
+    await notify(a.ownerId, { ...told(a.reason), href: `/appointments/${a.id}` }, db);
+  }
+
   return { ok: true, appointment: toAppointment(a) };
 }

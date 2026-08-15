@@ -16,6 +16,7 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toReview } from "./serialize";
 import { genId, nowIso } from "./ids";
+import { applyRating } from "./reputation";
 import type { ReviewKind } from "@/types";
 import type { CreateReviewBody } from "@/lib/validation/schemas";
 
@@ -134,39 +135,11 @@ export async function createReview(
     },
   });
 
-  await applyRatingToProfile(kind, input.toUserId, input.rating, db);
+  await applyRating(
+    kind === "vet_appointment" ? "vet" : "caretaker",
+    input.toUserId,
+    input.rating,
+    db
+  );
   return { ok: true, review: toReview(row) };
-}
-
-/**
- * Fold a new rating into the recipient's headline score.
- *
- * A running average rather than a recount over the Review rows, because the
- * seeded `reviewCount` stands for reputation earned before this database
- * existed. Recounting would wipe a vet's 214 reviews the moment someone left
- * the 215th, which reads as a bug rather than as honesty.
- */
-async function applyRatingToProfile(
-  kind: ReviewKind,
-  toUserId: string,
-  rating: number,
-  db: PrismaClient
-): Promise<void> {
-  const profile =
-    kind === "vet_appointment"
-      ? await db.vetProfile.findUnique({ where: { userId: toUserId } })
-      : await db.caretakerProfile.findUnique({ where: { userId: toUserId } });
-  // Owners are reviewed too, and they have no professional profile to update.
-  if (!profile) return;
-
-  const count = profile.reviewCount + 1;
-  const blended = (profile.rating * profile.reviewCount + rating) / count;
-  // One decimal — the precision every rating in the UI is rendered at.
-  const next = { rating: Math.round(blended * 10) / 10, reviewCount: count };
-
-  if (kind === "vet_appointment") {
-    await db.vetProfile.update({ where: { id: profile.id }, data: next });
-  } else {
-    await db.caretakerProfile.update({ where: { id: profile.id }, data: next });
-  }
 }

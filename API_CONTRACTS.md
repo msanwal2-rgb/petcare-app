@@ -84,20 +84,6 @@ from the rows would erase it.
 
 ---
 
-## Out of scope for this frontend build (foundation §5, §9)
-
-These are **not** represented in `/lib/api` yet; the backend will own them:
-
-- **Auth** — real login/OAuth/JWT, phone (SMS OTP) verification. Mock only.
-- **Payments** — Stripe Connect: authorization holds, capture on completion,
-  platform fee, caretaker payouts. The UI has a mock "Confirm & Pay" step only.
-- **Messaging** — `Message` entity (foundation §4) hangs off `Booking`; no
-  endpoints built.
-- **Trust & safety** — background checks (Checkr), ID verification (Stripe
-  Identity). `backgroundCheckStatus` is display-only here.
-- **Notifications** — push/SMS/email preferences.
-
-
 ---
 
 ## Vet care
@@ -170,3 +156,59 @@ product slugs it names in the store.
 Lifecycle: `pending_payment → paid → processing → packed → shipped →
 out_for_delivery → delivered`, with `cancelled` and `refunded` as terminal
 branches. Cancelling or refunding returns stock to the catalog.
+
+---
+
+## Notifications — `/lib/api/notifications.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/notifications` | signed in | `{ items, unread }` — your own, newest first, capped at 30 |
+| POST | `/api/notifications` | signed in | `{ unread }`. Body `{ id? }` — omit `id` to mark everything read. Scoped to you, so an id you don't own matches nothing |
+
+Notifications are written only by the status machines, never by a client. The
+owner hears when a caretaker accepts or declines, when a vet confirms, declines
+or finishes a visit, and when an order ships, goes out for delivery or arrives.
+Picking and packing are warehouse noise and are deliberately silent. Each one
+carries an `href` to the thing it is about, and mirrors to email when
+`RESEND_API_KEY` is set — best-effort, since a mail outage must not roll back
+the thing being announced.
+
+## Scheduled jobs
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/cron/advance-orders` | `Authorization: Bearer $CRON_SECRET` | `{ scanned, advanced }` |
+
+Moves in-flight orders to the stage their age has earned, writing every
+intermediate tracking event and notification on the way. **Time-based, not
+one-step-per-run**: Vercel's Hobby plan fires a cron at most once a day, and a
+step-per-run job would take most of a week to deliver one parcel. Computing the
+stage from elapsed time instead makes it idempotent and correct at any
+interval. Schedule lives in `vercel.json`. With no `CRON_SECRET` set the
+endpoint refuses everything rather than falling open.
+
+## What is simulated
+
+Everything above is real: real accounts, sessions, records and rules. Two
+things are deliberately not, and both are isolated behind a seam so replacing
+them is an implementation, not a rewrite:
+
+- **Payments.** `lib/server/payments.ts` defines a `PaymentProvider` interface
+  with a demo implementation that authorises and captures instantly. No card is
+  collected and no money moves. The `paymentStatus` machine, the refund path
+  and the order totals are real; going live means a new implementation plus a
+  webhook into the order status machine.
+- **Fulfilment.** There is no warehouse. Orders advance either from the ops
+  console at `/dashboard/orders` or from the cron at
+  `POST /api/cron/advance-orders`, and each advance writes the same
+  customer-visible tracking event a real carrier integration would.
+
+Not simulated, despite what an older version of this file claimed:
+authentication (Auth.js with real sessions and password hashing), email
+verification and password reset (`lib/server/mailer.ts` sends via Resend when
+`RESEND_API_KEY` is set and logs the link otherwise), and booking-scoped
+messaging (`GET`/`POST /api/bookings/:id/messages`).
+
+Genuinely absent, and out of scope: background checks and ID verification —
+`backgroundCheckStatus` is display-only — and any SMS or push channel.

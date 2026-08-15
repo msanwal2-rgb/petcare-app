@@ -153,8 +153,10 @@ describe("the reviewee's headline rating", () => {
 
     const after = await db.vetProfile.findUnique({ where: { id: "v1" } });
     expect(after!.reviewCount).toBe(before!.reviewCount + 1);
+    // Stored unrounded — see applyRating: rounding the accumulator would let a
+    // profile with a long history absorb bad reviews forever without moving.
     const expected = (before!.rating * before!.reviewCount + 4) / (before!.reviewCount + 1);
-    expect(after!.rating).toBeCloseTo(Math.round(expected * 10) / 10, 5);
+    expect(after!.rating).toBeCloseTo(expected, 10);
     // A single 4 must not wipe out a long history of 4.9s.
     expect(after!.rating).toBeGreaterThan(4.5);
   });

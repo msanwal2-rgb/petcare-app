@@ -11,6 +11,7 @@ import { useScrolled } from "@/lib/hooks/useScrolled";
 import { ButtonLink } from "@/components/ui/Button";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { CartButton } from "./store/CartButton";
+import { NotificationBell } from "./notifications/NotificationBell";
 import { RoleToggle } from "./RoleToggle";
 import { MenuIcon, XIcon } from "./ui/icons";
 import { BLUR_DATA_URL } from "@/lib/media/photos";
@@ -135,6 +136,7 @@ export function SiteHeader() {
           </div>
 
           <div className="hidden items-center gap-3 md:flex">
+            <NotificationBell />
             <CartButton />
             {!hasHydrated ? (
               <div className="h-9 w-40" />
@@ -185,6 +187,7 @@ export function SiteHeader() {
           </div>
 
           <div className="flex items-center gap-1 md:hidden">
+            <NotificationBell />
             <CartButton />
             <button
               onClick={() => setMobileOpen((v) => !v)}

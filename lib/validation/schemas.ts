@@ -125,6 +125,11 @@ export const createReviewSchema = z.object({
   comment: z.string(),
 });
 
+/* ── Notifications ──────────────────────────────────────────────────── */
+
+/** Omit `id` to mark everything read. */
+export const markReadSchema = z.object({ id: z.string().optional() });
+
 /* ── Query-string coercion ──────────────────────────────────────────────
    Query params arrive as strings; these turn them back into the types the
    search functions expect, failing loudly on garbage rather than silently

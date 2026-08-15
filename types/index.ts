@@ -416,6 +416,30 @@ export interface CartQuote {
   problems: { productId: string; code: CartProblemCode; message: string }[];
 }
 
+/* ── Notifications ─────────────────────────────────────────────────── */
+
+export type NotificationKind =
+  | "booking_accepted"
+  | "booking_declined"
+  | "appointment_confirmed"
+  | "appointment_declined"
+  | "appointment_completed"
+  | "order_shipped"
+  | "order_out_for_delivery"
+  | "order_delivered";
+
+export interface Notification {
+  id: string;
+  userId: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  /** Where clicking it should take you. */
+  href: string;
+  readAt: string | null;
+  createdAt: string; // ISO 8601
+}
+
 export type CartProblemCode =
   | "not_found"
   | "inactive"

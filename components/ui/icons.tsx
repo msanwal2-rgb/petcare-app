@@ -155,6 +155,12 @@ export const AlertIcon = (p: P) => (
     <path d="M12 10v4M12 16.5h.01" />
   </svg>
 );
+export const BellIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M18 9a6 6 0 1 0-12 0c0 4.5-2 6-2 6h16s-2-1.5-2-6Z" />
+    <path d="M10.5 19a2 2 0 0 0 3 0" />
+  </svg>
+);
 export const TrashIcon = (p: P) => (
   <svg {...svg(p)}>
     <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />

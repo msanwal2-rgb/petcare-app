@@ -51,6 +51,7 @@ const SEED_TABLES = [
   "reviews",
   "messages",
   "verification_tokens",
+  "notifications",
   "vet_profiles",
   "vet_availability_days",
   "vet_appointments",

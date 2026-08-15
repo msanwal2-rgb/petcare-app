@@ -13,7 +13,9 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toBooking } from "./serialize";
 import { genId, nowIso } from "./ids";
-import type { BookingStatus } from "@/types";
+import { refreshResponseRate } from "./reputation";
+import { notify } from "./notifications";
+import type { BookingStatus, NotificationKind } from "@/types";
 import type { CreateBookingBody } from "@/lib/validation/schemas";
 
 const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
@@ -23,6 +25,22 @@ const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
   completed: [],
   declined: [],
   cancelled: [],
+};
+
+/** What the owner hears when a caretaker answers their request. */
+const BOOKING_NOTICES: Partial<
+  Record<BookingStatus, { kind: NotificationKind; title: string; body: string }>
+> = {
+  accepted: {
+    kind: "booking_accepted",
+    title: "Your booking was accepted",
+    body: "Your caretaker has confirmed. You can message them from the booking.",
+  },
+  declined: {
+    kind: "booking_declined",
+    title: "Your booking request was declined",
+    body: "They couldn't take this one — plenty of other caretakers are free.",
+  },
 };
 
 export type StatusUpdateResult =
@@ -63,6 +81,8 @@ export async function createBooking(input: CreateBookingBody, db: PrismaClient =
       createdAt: nowIso(),
     },
   });
+  // A new request is one more thing left unanswered until they reply.
+  await refreshResponseRate("caretaker", b.caretakerId, db);
   return toBooking(b);
 }
 
@@ -80,5 +100,10 @@ export async function updateBookingStatus(
   }
 
   const b = await db.booking.update({ where: { id }, data: { status } });
+  await refreshResponseRate("caretaker", b.caretakerId, db);
+
+  const told = BOOKING_NOTICES[status];
+  if (told) await notify(b.ownerId, { ...told, href: `/booking/${b.id}` }, db);
+
   return { ok: true, booking: toBooking(b) };
 }

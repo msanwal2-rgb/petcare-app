@@ -391,6 +391,77 @@ console.log("\n[13] Vet reviews");
   await ctx.close();
 }
 
+
+/* ── 14. Caretaker reviews are reachable ───────────────────────────
+   Regression: every completed booking used to be pre-reviewed, so no demo
+   account could reach this form at all. */
+console.log("\n[14] Caretaker reviews");
+{
+  const { ctx, page } = await newPage();
+  await login(page, "maya.chen@example.com");
+  await page.goto(`${BASE}/booking/b17`, { waitUntil: "networkidle" }); // completed, unreviewed
+  await page.waitForTimeout(3500);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(1500);
+  check("completed booking offers a review form", (await text(page)).includes("Leave a review for"));
+
+  await page.locator('button[aria-label="5 stars"]').click();
+  await page.fill("textarea", "Miso settled in beautifully after the first evening.");
+  await page.click('button:has-text("Post review")');
+  await page.waitForTimeout(8000);
+  const after = await text(page);
+  check("caretaker review posts", after.includes("Miso settled in beautifully"));
+  check("form retires once used", !after.includes("Leave a review for"));
+  await ctx.close();
+}
+
+/* ── 15. Notifications ─────────────────────────────────────────────
+   The bell is written only by the status machines, so drive a real one. */
+console.log("\n[15] Notifications");
+{
+  // A vet confirms Maya's pending request...
+  const vet = await newPage();
+  await login(vet.page, "naomi.ruiz@example.com");
+  await vet.page.goto(`${BASE}/appointments/a4`, { waitUntil: "networkidle" });
+  await vet.page.waitForTimeout(3000);
+  await vet.page.click('button:has-text("Confirm")');
+  await vet.page.waitForTimeout(4000);
+  check("vet can confirm the request", (await text(vet.page)).includes("Confirmed"));
+  await vet.ctx.close();
+
+  // ...and Maya hears about it.
+  const owner = await newPage();
+  await login(owner.page, "maya.chen@example.com");
+  await owner.page.waitForTimeout(2500);
+  const bell = owner.page.locator('button[aria-label*="Notification"]').first();
+  check("bell is present when signed in", await bell.isVisible());
+  check("bell shows an unread count",
+    /\d/.test(await bell.innerText()), `"${await bell.innerText()}"`);
+
+  await bell.click();
+  await owner.page.waitForTimeout(2500);
+  const panel = await text(owner.page);
+  check("panel shows the confirmation", panel.includes("Your vet appointment is confirmed"));
+
+  // Opening the panel is the act of reading them.
+  await owner.page.keyboard.press("Escape");
+  await owner.page.reload({ waitUntil: "networkidle" });
+  await owner.page.waitForTimeout(3000);
+  const badge = await owner.page.locator('button[aria-label*="Notification"]').first().innerText();
+  check("count clears once read", !/\d/.test(badge), `"${badge}"`);
+  await owner.ctx.close();
+}
+
+/* Anonymous visitors get no bell — there is nothing to tell them. */
+{
+  const { ctx, page } = await newPage();
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(2000);
+  check("no bell when signed out",
+    (await page.locator('button[aria-label*="Notification"]').count()) === 0);
+  await ctx.close();
+}
+
 console.log(`\n${"=".repeat(50)}\n  PASS ${pass}   FAIL ${fail}`);
 if (problems.length) console.log("\nFailures:\n  " + problems.join("\n  "));
 await browser.close();

@@ -22,28 +22,29 @@ datasource db {
 }
 
 model User {
-  id           String            @id
-  name         String
-  email        String            @unique
-  phone        String            @default("")
-  avatarUrl    String
-  roles        String[] // "owner" | "caretaker" | "vet"
-  addressCity  String
-  addressState String
-  lat          Float
-  lng          Float
-  verified     Boolean           @default(false)
-  createdAt    String
+  id            String            @id
+  name          String
+  email         String            @unique
+  phone         String            @default("")
+  avatarUrl     String
+  roles         String[] // "owner" | "caretaker" | "vet"
+  addressCity   String
+  addressState  String
+  lat           Float
+  lng           Float
+  verified      Boolean           @default(false)
+  createdAt     String
   // Bcrypt hash for email/password login. Null for accounts created purely via
   // an OAuth provider (e.g. Google) that never set a password.
-  passwordHash String?
+  passwordHash  String?
   // Store operations staff: may advance order fulfillment. Not a marketplace
   // role — it never appears in `roles` or the role toggle.
-  isOps        Boolean           @default(false)
-  pets         Pet[]
-  caretaker    CaretakerProfile?
-  vet          VetProfile?
-  orders       Order[]
+  isOps         Boolean           @default(false)
+  pets          Pet[]
+  caretaker     CaretakerProfile?
+  vet           VetProfile?
+  orders        Order[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -369,6 +370,27 @@ model OrderEvent {
 
   @@index([orderId])
   @@map("order_events")
+}
+
+/// Something that happened to you while you weren't looking: a vet confirmed
+/// your appointment, a caretaker accepted your booking, your order shipped.
+///
+/// Written by the status machines, never by a client. Read-only to the user
+/// apart from marking them read.
+model Notification {
+  id        String  @id
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // NotificationKind
+  title     String
+  body      String  @default("")
+  /// Where clicking it should take you — the booking, order or appointment.
+  href      String
+  readAt    String?
+  createdAt String
+
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
 
 // Single-use, expiring tokens for email verification and password reset. Only

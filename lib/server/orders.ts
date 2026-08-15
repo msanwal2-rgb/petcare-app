@@ -19,10 +19,12 @@ import { toOrder } from "./serialize";
 import { genId, nowIso } from "./ids";
 import { paymentProvider } from "./payments";
 import { authorizedProductSlugs } from "./medical-records";
+import { notify } from "./notifications";
 import type {
   CartLineInput,
   CartProblemCode,
   CartQuote,
+  NotificationKind,
   OrderStatus,
   ShippingAddress,
 } from "@/types";
@@ -82,6 +84,27 @@ const EVENT_COPY: Record<OrderStatus, { label: string; description: string }> = 
     description: "This order was cancelled and any stock returned.",
   },
   refunded: { label: "Refunded", description: "The payment has been returned." },
+};
+
+/** The delivery milestones a customer actually wants to hear about. */
+const DELIVERY_NOTICES: Partial<
+  Record<OrderStatus, { kind: NotificationKind; title: string; body: string }>
+> = {
+  shipped: {
+    kind: "order_shipped",
+    title: "Your order is on its way",
+    body: "It's with the carrier — track it any time from your orders.",
+  },
+  out_for_delivery: {
+    kind: "order_out_for_delivery",
+    title: "Your order is out for delivery",
+    body: "It's on the van and should arrive today.",
+  },
+  delivered: {
+    kind: "order_delivered",
+    title: "Your order was delivered",
+    body: "Left at your delivery address. Let us know if anything's missing.",
+  },
 };
 
 /* ── Reads ───────────────────────────────────────────────────────────── */
@@ -420,6 +443,11 @@ export async function updateOrderStatus(
   if (status === "refunded" && existing.paymentRef) {
     await paymentProvider().refund(existing.paymentRef, existing.totalCents);
   }
+
+  // Only the milestones worth interrupting someone for. Picking and packing
+  // happen in a warehouse and nobody wants a notification about either.
+  const told = DELIVERY_NOTICES[status];
+  if (told) await notify(existing.userId, { ...told, href: `/store/orders/${id}` }, db);
 
   return { ok: true, order: toOrder(updated) };
 }

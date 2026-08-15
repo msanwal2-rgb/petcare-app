@@ -37,6 +37,7 @@ npm run dev                        # http://localhost:3000
 | `npm test` | Vitest against an isolated `test` schema |
 | `npm run db:migrate` / `db:seed` / `db:studio` | Prisma |
 | `npm run art:generate` | Regenerate `/public/products` artwork from the catalog |
+| `npm run e2e` / `e2e:sweep` | Browser tests (see `scripts/e2e/`) |
 
 ## Trying it out
 
@@ -98,9 +99,10 @@ Three rules the code holds to:
   collected and no money moves. The `paymentStatus` state machine, the refund
   path, and the order totals are real — swapping in a provider is a new
   implementation of that interface plus a webhook.
-- **Fulfilment.** There is no warehouse. `/dashboard/orders` is where an ops
-  account advances an order, and each advance writes the customer-visible
-  tracking event. Everything downstream of that is real.
+- **Fulfilment.** There is no warehouse. Orders move either from the ops
+  console at `/dashboard/orders` or from a daily cron that advances each one to
+  the stage its age has earned. Both write the same customer-visible tracking
+  events and notifications a carrier integration would.
 
 Not simulated: accounts, sessions, bookings, appointments, health records,
 prescriptions, the catalog, stock, and order records.

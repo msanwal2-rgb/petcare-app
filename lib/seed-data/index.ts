@@ -885,6 +885,22 @@ export const bookings: Booking[] = [
     priceTotal: 42,
     createdAt: "2026-06-16T08:30:00Z",
   },
+  {
+    // Completed and deliberately unreviewed, so the demo owner can actually
+    // exercise the review form. Every other completed booking already carries
+    // its reviews, which left that whole flow unreachable from a demo account.
+    id: "b17",
+    ownerId: "u1",
+    caretakerId: "c2",
+    petIds: ["p2"],
+    serviceType: "sitting",
+    startDateTime: "2026-06-24T09:00:00Z",
+    endDateTime: "2026-06-26T18:00:00Z",
+    notes: "Miso hid under the bed for the first evening, then settled.",
+    status: "completed",
+    priceTotal: 168,
+    createdAt: "2026-06-20T11:05:00Z",
+  },
 ];
 
 /* ── Reviews (brief §8: for completed bookings, bidirectional) ──────── */

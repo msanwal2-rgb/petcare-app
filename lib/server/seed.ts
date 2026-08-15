@@ -25,6 +25,7 @@ import {
   products as seedProducts,
 } from "@/lib/seed-data/store";
 import { hashPassword } from "./auth-logic";
+import { refreshResponseRate } from "./reputation";
 import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
 /** Delete every row, in FK-safe order. */
@@ -233,6 +234,12 @@ export async function seedDatabase(db: PrismaClient) {
       },
     });
   }
+
+  // responseRatePct is derived, so the fixtures must not get to hand-author it
+  // either — otherwise the seeded number contradicts the real one the moment
+  // anybody accepts a request.
+  for (const c of seedCaretakers) await refreshResponseRate("caretaker", c.id, db);
+  for (const v of seedVets) await refreshResponseRate("vet", v.id, db);
 
   return {
     users: allUsers.length,
