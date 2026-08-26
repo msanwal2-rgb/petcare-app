@@ -11,6 +11,11 @@ export function ToastProvider() {
   return (
     <Toaster
       position="bottom-right"
+      // Lifted clear of the assistant launcher, which sits at bottom-6 right-6.
+      // Moving the toaster instead would be the bigger change: its position is
+      // assumed by every action in the app and by the browser suite.
+      offset={{ bottom: 88 }}
+      mobileOffset={{ bottom: 88 }}
       toastOptions={{
         style: {
           background: "#ffffff",

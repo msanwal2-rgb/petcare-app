@@ -19,6 +19,10 @@ domain layer.
 - **Zod** at every write boundary. **Tailwind v4** — tokens live in
   `app/globals.css` under `@theme`; there is no `tailwind.config.js`.
 - **Framer Motion**, **sonner**, **React Hook Form**, **Zustand**, **Vitest**.
+- **Vercel AI SDK** (`ai` v6) for the support assistant, reaching a model
+  through the **AI Gateway** — or a direct Anthropic key when one is set. Both
+  pinned to the v6 line: `ai` v7 needs Node ≥ 22 and this project runs 20.18,
+  the same constraint that pins Prisma to 6.x.
 
 ## Getting started
 
@@ -37,6 +41,7 @@ npm run dev                        # http://localhost:3000
 | `npm test` | Vitest against an isolated `test` schema |
 | `npm run db:migrate` / `db:seed` / `db:studio` | Prisma |
 | `npm run art:generate` | Regenerate `/public/products` artwork from the catalog |
+| `npm run kb:ingest` | Embed the support content into the assistant's search corpus |
 | `npm run e2e` / `e2e:sweep` | Browser tests (see `scripts/e2e/`) |
 
 ## Trying it out
@@ -71,6 +76,8 @@ components/
 lib/
   api/                  Client fetch layer — one file per domain.
                         Pages and components call ONLY these.
+  server/assistant/     The support assistant: tools, guards, retrieval,
+                        instructions, and the one file that picks a model.
   server/               Domain logic, one file per domain. Every function takes
                         an injectable PrismaClient so tests can pass their own.
   seed-data/            Deterministic fixtures. Only the seeder imports these.
@@ -92,6 +99,41 @@ Three rules the code holds to:
    (bookings, appointments, orders), so an illegal move is a 409 rather than a
    corrupted record.
 
+## The support assistant
+
+A floating chat on every page. It answers questions about orders, bookings, vet
+appointments and how the platform works, looks up the signed-in customer's own
+records, and cancels things. It does not buy or book anything.
+
+That last part is a design decision rather than a limitation. Placing an order,
+creating a booking, writing a health record and every operations action have
+**no tool at all** — the assistant produces a link into the form the customer
+would have used, pre-filled, and they press the button. A hallucinated tool call
+therefore produces a dead link rather than a commitment nobody asked for.
+
+Three things hold the rest together:
+
+1. **No tool accepts a user id.** `uid` comes from the session and is captured
+   in a closure, so asking about somebody else is unrepresentable rather than
+   refused. Anonymous visitors get a *smaller tool list*, not a wall of
+   refusals. A test asserts both, so they stay true.
+2. **Money is formatted at the tool boundary.** The model receives `"$59.98"`,
+   never `5998`, so it has no number to divide by 100 incorrectly.
+3. **Retrieval is hybrid.** pgvector cosine similarity and Postgres full-text
+   ranking, fused by reciprocal rank fusion. On a corpus this size the lexical
+   half does most of the work — dense vectors alone put "cancel my booking" and
+   "cancel my order" within a hundredth of each other.
+
+Emergency guidance is inlined into the system prompt rather than retrieved,
+because an answer about a cat that cannot urinate must not depend on a
+similarity search returning the right row.
+
+Needs one model credential — `AI_GATEWAY_API_KEY` for production, or
+`ANTHROPIC_API_KEY`, which takes precedence and is the easy path for local
+testing. With neither, the endpoint returns 503 and says so rather than failing
+obscurely. `ASSISTANT_ENABLED=false` switches the whole thing off without a
+deploy. See `.env.local.example`.
+
 ## What's simulated
 
 - **Payments.** `lib/server/payments.ts` defines a `PaymentProvider` interface
@@ -111,4 +153,6 @@ prescriptions, the catalog, stock, and order records.
 
 - **`API_CONTRACTS.md`** — every endpoint, its auth rule, and its shapes.
 - **`ROADMAP.md`** — what is still missing and what it would take.
+- **`/support`** — the policies the app enforces, written down. Every figure on
+  that page is read from the module that enforces it, so it cannot drift.
 - **`docs/`** — the original product foundation and frontend brief.

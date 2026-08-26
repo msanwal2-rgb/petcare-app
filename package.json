@@ -17,14 +17,19 @@
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "test": "dotenv -e .env.local -- vitest run",
     "e2e": "node scripts/e2e/suite.mjs",
-    "e2e:sweep": "node scripts/e2e/sweep.mjs"
+    "e2e:sweep": "node scripts/e2e/sweep.mjs",
+    "kb:ingest": "dotenv -e .env.local -- tsx scripts/ingest-knowledge.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "3.0.113",
+    "@ai-sdk/openai-compatible": "2.0.72",
+    "@ai-sdk/react": "3.0.269",
     "@hookform/resolvers": "^5.4.0",
     "@prisma/client": "^6.19.3",
+    "ai": "6.0.266",
     "bcryptjs": "^3.0.3",
     "framer-motion": "^12.42.2",
     "next": "16.2.10",

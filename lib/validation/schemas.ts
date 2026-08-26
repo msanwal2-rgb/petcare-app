@@ -341,6 +341,43 @@ export const searchQuerySchema = z.object({
   maxPrice: numeric.optional(),
 });
 
+/* ── Support assistant ───────────────────────────────────────────────── */
+
+/**
+ * The chat request body.
+ *
+ * Only the HTTP boundary is validated here. The assistant's *tool* schemas live
+ * beside the tools in lib/server/assistant/tools/, because a tool's
+ * `inputSchema` is not a request boundary — it is a model-facing contract whose
+ * `.describe()` text is prompt content, and splitting it from the tool it
+ * documents makes both harder to read.
+ *
+ * The caps are the first line of cost control: a request cannot arrive carrying
+ * a hundred turns of history or a novel as its question.
+ */
+export const assistantChatSchema = z.object({
+  /**
+   * UIMessage shapes are the AI SDK's, and they evolve with it, so they are
+   * checked structurally rather than mirrored field for field — pinning the
+   * full shape here would break on an SDK upgrade without making anything
+   * safer. What matters at this boundary is the count and the size, both of
+   * which are enforced.
+   */
+  messages: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        role: z.enum(["user", "assistant", "system"]),
+        parts: z.array(z.object({ type: z.string() }).loose()).max(50),
+      }).loose(),
+    )
+    .min(1)
+    .max(40),
+  conversationId: z.string().max(64).optional(),
+  /** The page the customer is on, so "cancel this" has a referent. */
+  path: z.string().max(512).optional(),
+});
+
 export type UpdateUserBody = z.infer<typeof updateUserSchema>;
 export type PetInputBody = z.infer<typeof petInputSchema>;
 export type PetPatchBody = z.infer<typeof petPatchSchema>;
@@ -354,3 +391,4 @@ export type ProductQueryBody = z.infer<typeof productQuerySchema>;
 export type CreateOrderBody = z.infer<typeof createOrderSchema>;
 export type QuoteCartBody = z.infer<typeof quoteCartSchema>;
 export type UpdateOrderStatusBody = z.infer<typeof updateOrderStatusSchema>;
+export type AssistantChatBody = z.infer<typeof assistantChatSchema>;

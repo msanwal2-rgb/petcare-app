@@ -29,6 +29,29 @@ Going live is:
 Payouts to caretakers and vets, and a platform fee, belong with this work —
 they are meaningless before it.
 
+## The support assistant: what is left
+
+The assistant ships answering questions, reading the signed-in customer's
+records, and cancelling orders, bookings and appointments. Three things around
+it are unfinished:
+
+- **A model credential.** AI Gateway needs a card on the Vercel account before
+  it will serve requests — it passes provider tokens through at list price with
+  no markup, so free credits are Vercel paying Anthropic on your behalf, and a
+  payment method is the anti-abuse gate. Until then, `ANTHROPIC_API_KEY` takes
+  precedence and works immediately.
+- **A production corpus.** `npm run kb:ingest` needs a real embedding model.
+  The test suite uses a deterministic hash embedder, which is fine for
+  asserting ranking offline but is not what should be serving customers.
+- **Deep-link pre-fill.** `startCaretakerBooking` and `startVetAppointment`
+  produce links carrying service, dates and pet. `/booking/new` reads
+  `caretakerId` and `/vets/book` reads `vetId` and `date`; the remaining
+  params are ignored, so the form opens partly filled rather than fully.
+
+Worth doing once it has been used in anger: notification preferences (per-kind
+opt-out, gated in `notify()`) would let the assistant answer "stop emailing me",
+which today it can only explain.
+
 ## Smaller, unblocked
 
 - **Notification preferences.** Per-user opt-out per kind. `notify()` is the
@@ -46,9 +69,15 @@ they are meaningless before it.
   tests assert on those ids and statuses.
 - **Trust and safety.** `backgroundCheckStatus` is display-only. Real
   verification needs a vendor (Checkr, Stripe Identity).
-- **Test runtime.** ~20 minutes, almost entirely network round trips to Neon. A
-  local Postgres in CI, or transaction-rollback isolation instead of the
-  snapshot restore, would cut it sharply.
+- **Test runtime, and one flake it causes.** ~25 minutes, almost entirely
+  network round trips to Neon. A local Postgres in CI, or transaction-rollback
+  isolation instead of the snapshot restore, would cut it sharply. It also
+  causes a real intermittent failure: `createOrder` runs inside Prisma's
+  default 5s interactive-transaction timeout, and under full-suite load the
+  round trips have exceeded it (observed at 5261ms). It passes in isolation.
+  The same latency could bite in production under load — raising the timeout on
+  that one transaction is the fix, and it is a genuine bug rather than only a
+  test annoyance.
 
 ## Deliberately not planned
 

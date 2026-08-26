@@ -174,6 +174,33 @@ carries an `href` to the thing it is about, and mirrors to email when
 `RESEND_API_KEY` is set — best-effort, since a mail outage must not roll back
 the thing being announced.
 
+## Support assistant — `/lib/api/assistant.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| POST | `/api/assistant/chat` | **public** — a session changes what it can do, not whether it answers | A UI message stream (`text/event-stream`). 429 over the rate limit, 503 with no model credential or when `ASSISTANT_ENABLED=false` |
+| GET | `/api/assistant/conversations/:id` | the thread's owner, or the anonymous client that made it | the conversation with its messages · 404 |
+| DELETE | `/api/assistant/conversations/:id` | as above | 204 · 404 |
+
+The chat endpoint is the one route in this app that is deliberately reachable
+signed out, because a pre-sale question is worth answering. `proxy.ts` does not
+match `/api/*`, so nothing upstream is enforcing anything here: the handler
+resolves the session itself, and a null user id produces a **smaller tool set**
+rather than a refusal. Every tool that touches an account re-checks ownership
+against the database on every call.
+
+Nothing the assistant can do creates a commitment. There is no tool that places
+an order, creates a booking or appointment, writes a health record, posts a
+review or touches fulfilment — those are returned as pre-filled links for the
+customer to submit. The four write tools it does have all cancel something, and
+each returns the domain function's own result, so a refused transition is
+reported rather than narrated away.
+
+A conversation belonging to someone else reads as 404, not 403, so ids cannot be
+probed. Rate limits are counted in Postgres over a sliding window: 10/hour and
+30/day for anonymous visitors keyed on a salted hash of IP and user agent,
+40/hour and 200/day for signed-in customers keyed on their user id.
+
 ## Scheduled jobs
 
 | Method | Path | Auth | Response |

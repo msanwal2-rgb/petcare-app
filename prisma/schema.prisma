@@ -22,29 +22,30 @@ datasource db {
 }
 
 model User {
-  id            String            @id
-  name          String
-  email         String            @unique
-  phone         String            @default("")
-  avatarUrl     String
-  roles         String[] // "owner" | "caretaker" | "vet"
-  addressCity   String
-  addressState  String
-  lat           Float
-  lng           Float
-  verified      Boolean           @default(false)
-  createdAt     String
+  id             String                  @id
+  name           String
+  email          String                  @unique
+  phone          String                  @default("")
+  avatarUrl      String
+  roles          String[] // "owner" | "caretaker" | "vet"
+  addressCity    String
+  addressState   String
+  lat            Float
+  lng            Float
+  verified       Boolean                 @default(false)
+  createdAt      String
   // Bcrypt hash for email/password login. Null for accounts created purely via
   // an OAuth provider (e.g. Google) that never set a password.
-  passwordHash  String?
+  passwordHash   String?
   // Store operations staff: may advance order fulfillment. Not a marketplace
   // role — it never appears in `roles` or the role toggle.
-  isOps         Boolean           @default(false)
-  pets          Pet[]
-  caretaker     CaretakerProfile?
-  vet           VetProfile?
-  orders        Order[]
-  notifications Notification[]
+  isOps          Boolean                 @default(false)
+  pets           Pet[]
+  caretaker      CaretakerProfile?
+  vet            VetProfile?
+  orders         Order[]
+  notifications  Notification[]
+  assistantChats AssistantConversation[]
 
   @@map("users")
 }
@@ -405,4 +406,81 @@ model VerificationToken {
 
   @@index([identifier])
   @@map("verification_tokens")
+}
+
+/**
+ * ── Support assistant ──────────────────────────────────────────────
+ * The in-app support chat. Conversations are kept so a thread survives a
+ * reload and so there is a record of what the assistant told a customer.
+ */
+
+// A support conversation. Anonymous visitors get one too: `userId` stays null
+// and `clientKey` — a salted hash of IP and user agent — is what the rate
+// limiter counts against. Deleting a user takes their conversations with them.
+model AssistantConversation {
+  id        String             @id
+  userId    String?
+  user      User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientKey String
+  title     String             @default("")
+  createdAt String
+  updatedAt String
+  messages  AssistantMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([clientKey, createdAt])
+  @@map("assistant_conversations")
+}
+
+// One turn. `parts` holds the full UIMessage parts array — text plus the typed
+// tool parts — rather than flat prose, because that is what lets a reloaded
+// conversation re-render its tool cards exactly as they first appeared. `text`
+// is the flattened copy the rate limiter counts, which saves walking the JSON
+// on every check. Token counts are the cost dashboard.
+model AssistantMessage {
+  id             String                @id
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  parts          Json
+  text           String                @default("")
+  modelId        String                @default("")
+  inputTokens    Int                   @default(0)
+  outputTokens   Int                   @default(0)
+  createdAt      String
+
+  @@index([conversationId, createdAt])
+  @@map("assistant_messages")
+}
+
+// The assistant's retrieval corpus: policy, FAQ, care-guide and vaccine prose,
+// chunked and embedded by `npm run kb:ingest`. Reference data, not user data —
+// nothing at runtime writes here.
+//
+// `embedding` is Unsupported because Prisma 6 has no `vector` type, and it is
+// written **public.**vector deliberately: Prisma's schema engine sets
+// search_path to the target schema alone, so an unqualified `vector` fails with
+// `type "vector" does not exist` when the test harness pushes into `test`.
+// Qualified, it resolves everywhere.
+//
+// Nullable is also deliberate: a *required* Unsupported column strips `create`
+// and `update` off the generated client for the whole model, which would make
+// the ingest script's metadata pass impossible. Prisma omits the column from
+// the client either way, so every read and write of the vector is raw SQL.
+model KnowledgeChunk {
+  id          String                              @id
+  sourceKey   String                              @unique
+  source      String // "policy" | "faq" | "guide" | "vaccine"
+  title       String
+  href        String                              @default("")
+  species     String[] // "dog" | "cat" | "other"; empty means all
+  content     String
+  contentHash String
+  tokens      Int                                 @default(0)
+  embedding   Unsupported("public.vector(1536)")?
+  createdAt   String
+  updatedAt   String
+
+  @@index([source])
+  @@map("knowledge_chunks")
 }

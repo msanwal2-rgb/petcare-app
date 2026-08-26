@@ -13,6 +13,8 @@
 import { execSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { seedDatabase } from "@/lib/server/seed";
+import { ingestKnowledge } from "@/lib/server/assistant/ingest";
+import { hashEmbed } from "@/lib/server/assistant/embed";
 import {
   baseDbUrl,
   captureSnapshot,
@@ -28,6 +30,14 @@ export default async function setup() {
   const admin = new PrismaClient({ datasources: { db: { url: base } } });
   try {
     await admin.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${TEST_SCHEMA}"`);
+    // pgvector, for the assistant's knowledge_chunks table. Extensions are
+    // database-scoped, so this is the same install the migration makes rather
+    // than a second one — `IF NOT EXISTS` makes running both harmless. It has
+    // to happen before `db push`, which cannot create a vector column without
+    // the type already existing.
+    await admin.$executeRawUnsafe(
+      `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public`,
+    );
   } finally {
     await admin.$disconnect();
   }
@@ -47,6 +57,17 @@ export default async function setup() {
   const db = new PrismaClient({ datasources: { db: { url: testUrl } } });
   try {
     await seedDatabase(db);
+
+    // The assistant's retrieval corpus, embedded with the deterministic hash
+    // embedder — no network, no spend, and identical vectors every run, so
+    // retrieval assertions are stable. Ingested before the snapshot but left
+    // out of SEED_TABLES: it is reference data that no test mutates, so it
+    // survives every resetToSnapshot untouched.
+    await ingestKnowledge(
+      { embed: hashEmbed(), schema: TEST_SCHEMA, force: true },
+      db,
+    );
+
     await captureSnapshot(db);
   } finally {
     await db.$disconnect();

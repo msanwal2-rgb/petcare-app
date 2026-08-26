@@ -167,3 +167,13 @@ export const TrashIcon = (p: P) => (
     <path d="M10 11v6M14 11v6" />
   </svg>
 );
+/**
+ * The support assistant. A speech bubble on a leash-line tail, so the launcher
+ * reads as part of this product rather than as a bolted-on widget.
+ */
+export const ChatIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-3.6A7 7 0 0 1 4 12a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7Z" />
+    <path d="M9 11h6M9 14h3" />
+  </svg>
+);

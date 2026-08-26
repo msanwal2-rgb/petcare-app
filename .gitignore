@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which is placeholders only and is what README's
+# `cp .env.local.example .env.local` step expects to find.
+!.env.local.example
 
 # vercel
 .vercel

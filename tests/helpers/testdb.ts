@@ -40,6 +40,12 @@ export const testPrisma = new PrismaClient({
  * Every seeded table, in an order where inserting a row never precedes the row
  * it references. TRUNCATE ... CASCADE handles teardown regardless of order, so
  * only the insert direction matters here.
+ *
+ * `knowledge_chunks` is deliberately absent. It is read-only reference data
+ * that global setup ingests once with a deterministic offline embedder, and
+ * nothing in the app or the tests mutates it — so snapshotting and restoring it
+ * on every test would be pure cost. Leaving it out of this list is what keeps
+ * it intact across resets.
  */
 const SEED_TABLES = [
   "users",
@@ -60,6 +66,8 @@ const SEED_TABLES = [
   "orders",
   "order_items",
   "order_events",
+  "assistant_conversations",
+  "assistant_messages",
 ] as const;
 
 const q = (schema: string, table: string) => `"${schema}"."${table}"`;

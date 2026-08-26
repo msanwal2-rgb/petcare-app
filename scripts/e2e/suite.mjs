@@ -462,6 +462,107 @@ console.log("\n[15] Notifications");
   await ctx.close();
 }
 
+/* ── 16. Support assistant ─────────────────────────────────────────
+   Split in two. Everything up to the divider is free and offline: the
+   launcher, the dialog, keyboard behaviour, and the signed-out state. The
+   half below it spends money on a real model, so it only runs when you ask
+   for it with ASSISTANT_E2E=1.
+
+   The last check there is the one worth having: ask the assistant to book a
+   vet, and assert that it produced a link and did NOT create an appointment.
+   That is the whole "proposes, never commits" decision, tested end to end. */
+console.log("\n[16] Support assistant");
+{
+  /* Anonymous: the panel opens and works, but says what it cannot see. */
+  const { ctx, page } = await newPage();
+  await page.goto(`${BASE}/store`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+
+  const launcher = page.locator('button[aria-label="Open support chat"]');
+  check("launcher is present for anonymous visitors", (await launcher.count()) === 1);
+
+  await launcher.click();
+  await page.waitForTimeout(900);
+  check("panel opens as a dialog", (await page.locator('[role="dialog"]').count()) === 1);
+
+  const panelText = await page.locator('[role="dialog"]').innerText();
+  check("anonymous visitors are told to sign in for account questions",
+    panelText.includes("Sign in to ask about your orders"));
+  check("panel says what it will not do",
+    panelText.includes("never buys or books"));
+
+  /* Keyboard behaviour the other overlays in this app do not have. */
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(600);
+  check("Escape closes the panel", (await page.locator('[role="dialog"]').count()) === 0);
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+  check("focus returns to the launcher", focused === "Open support chat", `focus was "${focused}"`);
+  await ctx.close();
+}
+
+{
+  /* Signed in: the sign-in nudge is gone. */
+  const { ctx, page } = await newPage();
+  await login(page, "maya.chen@example.com");
+  await page.goto(`${BASE}/store/orders`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+
+  await page.click('button[aria-label="Open support chat"]');
+  await page.waitForTimeout(900);
+  const panelText = await page.locator('[role="dialog"]').innerText();
+  check("no sign-in nudge once signed in",
+    !panelText.includes("Sign in to ask about your orders"));
+  await ctx.close();
+}
+
+/* ── The half that costs money ─────────────────────────────────── */
+if (process.env.ASSISTANT_E2E === "1") {
+  console.log("  (ASSISTANT_E2E=1 — running the checks that call a real model)");
+
+  const { ctx, page } = await newPage();
+  await login(page, "maya.chen@example.com");
+  await page.goto(`${BASE}/store/orders`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+  await page.click('button[aria-label="Open support chat"]');
+  await page.waitForTimeout(700);
+
+  const ask = async (question) => {
+    await page.fill('[role="dialog"] textarea', question);
+    await page.press('[role="dialog"] textarea', "Enter");
+    // Wait for the reply to settle rather than for a fixed interval.
+    await page.waitForFunction(
+      () => !document.querySelector('[role="dialog"] button')?.textContent?.includes("Stop"),
+      { timeout: 45000 },
+    ).catch(() => {});
+    await page.waitForTimeout(1500);
+    return page.locator('[role="dialog"]').innerText();
+  };
+
+  const orderAnswer = await ask("what's the status of my most recent order?");
+  check("it looks the order up rather than guessing",
+    (await page.locator('[data-testid="assistant-tool-activity"]').count()) > 0);
+  check("it answers with a real order status",
+    /delivered|shipped|out for delivery|preparing|packed|cancelled/i.test(orderAnswer),
+    orderAnswer.slice(-200));
+
+  /* The tier-3 guarantee: a link, and nothing created. */
+  const before = await page.evaluate(async () =>
+    (await (await fetch("/api/owners/u1/appointments")).json()).length);
+
+  const bookAnswer = await ask("book me a vet appointment for Biscuit");
+  const linkCount = await page.locator('[role="dialog"] a[href*="/vets/book"]').count();
+  check("it offers a pre-filled booking link", linkCount > 0, bookAnswer.slice(-200));
+
+  const after = await page.evaluate(async () =>
+    (await (await fetch("/api/owners/u1/appointments")).json()).length);
+  check("it did NOT create the appointment itself", before === after,
+    `${before} before, ${after} after`);
+
+  await ctx.close();
+} else {
+  console.log("  (skipping the model-backed checks — set ASSISTANT_E2E=1 to run them)");
+}
+
 console.log(`\n${"=".repeat(50)}\n  PASS ${pass}   FAIL ${fail}`);
 if (problems.length) console.log("\nFailures:\n  " + problems.join("\n  "));
 await browser.close();

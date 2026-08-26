@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PageTransition } from "@/components/PageTransition";
 import { ToastProvider } from "@/components/ToastProvider";
+import { AssistantLauncher } from "@/components/assistant/AssistantLauncher";
 import { SessionSync } from "@/components/SessionSync";
 
 const spaceGrotesk = Space_Grotesk({
@@ -53,6 +54,13 @@ export default function RootLayout({
         </main>
         <SiteFooter />
         <ToastProvider />
+        {/*
+          Outside <main> deliberately: it must survive PageTransition's
+          pathname-keyed remount so a conversation is not lost on navigation,
+          and it must stay out of the subtree e2e:sweep scans for content stuck
+          at opacity 0, which an animating panel transiently is.
+        */}
+        <AssistantLauncher enabled={process.env.ASSISTANT_ENABLED !== "false"} />
       </body>
     </html>
   );
