@@ -49,6 +49,7 @@ export function SiteFooter() {
               title="Account"
               links={[
                 ["Dashboard", "/dashboard"],
+                ["Help & policies", "/support"],
                 ["Log in", "/login"],
                 ["Sign up", "/signup"],
               ]}

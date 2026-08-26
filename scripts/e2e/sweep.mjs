@@ -66,7 +66,7 @@ for (const route of CLIENT_GATED) {
 
 console.log("\n[C] Every page renders clean, per role");
 const ROLES = [
-  ["maya.chen@example.com", "owner", ["/", "/search", "/vets", "/store", "/pet-health", "/dashboard",
+  ["maya.chen@example.com", "owner", ["/", "/search", "/vets", "/store", "/pet-health", "/support", "/dashboard",
     "/dashboard/pets/new", "/dashboard/pets/p1", "/booking/new", "/store/cart", "/store/checkout",
     "/store/orders", "/store/orders/o1", "/store/summit-trail-salmon-dry-dog", "/vets/v1", "/vets/book",
     "/caretaker/c1", "/booking/b1", "/onboarding", "/appointments/a3"]],
