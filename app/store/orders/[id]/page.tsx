@@ -17,9 +17,8 @@ import { Panel } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
 import { formatCents, formatDate } from "@/lib/utils";
+import { canCustomerCancel } from "@/lib/delivery";
 
-/** Mirrors canCustomerCancel on the server; the server is the authority. */
-const CANCELLABLE = ["pending_payment", "paid", "processing", "packed"];
 
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -169,7 +168,7 @@ export default function OrderDetailPage() {
             </p>
           </Panel>
 
-          {CANCELLABLE.includes(order.status) && (
+          {canCustomerCancel(order.status) && (
             <Button
               variant="outline"
               className="mt-4 w-full"

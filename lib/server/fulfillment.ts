@@ -19,36 +19,21 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { getOrdersForFulfillment, updateOrderStatus } from "./orders";
+import { FULFILMENT_SCHEDULE, earnedStatus } from "@/lib/delivery";
 import type { OrderStatus } from "@/types";
 
 /**
- * How long after being placed an order reaches each stage. Loosely modelled on
- * a real two-to-three day courier, compressed enough that a demo order placed
- * in the morning has moved by the afternoon.
+ * The schedule and the stage calculation live in lib/delivery.ts, which has no
+ * dependencies, so the client and the support content can read the same facts.
+ * Re-exported here because this is where callers have always found them.
  */
-export const FULFILMENT_SCHEDULE: { status: OrderStatus; afterHours: number }[] = [
-  { status: "processing", afterHours: 1 },
-  { status: "packed", afterHours: 6 },
-  { status: "shipped", afterHours: 24 },
-  { status: "out_for_delivery", afterHours: 48 },
-  { status: "delivered", afterHours: 60 },
-];
+export { FULFILMENT_SCHEDULE, earnedStatus };
 
 /** The order the happy path runs in, used to walk from one stage to another. */
 const JOURNEY: OrderStatus[] = [
   "paid",
   ...FULFILMENT_SCHEDULE.map((s) => s.status),
 ];
-
-/** The furthest stage an order placed at `placedAt` has earned by `now`. */
-export function earnedStatus(placedAt: string, now: Date): OrderStatus {
-  const hours = (now.getTime() - new Date(placedAt).getTime()) / 3_600_000;
-  let earned: OrderStatus = "paid";
-  for (const stage of FULFILMENT_SCHEDULE) {
-    if (hours >= stage.afterHours) earned = stage.status;
-  }
-  return earned;
-}
 
 export interface AdvanceReport {
   scanned: number;

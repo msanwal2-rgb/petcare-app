@@ -32,6 +32,7 @@ import type { CreateOrderBody } from "@/lib/validation/schemas";
 // Pricing lives in a dependency-free module so the cart can show a matching
 // estimate without importing anything that touches the database.
 import { shippingFor, taxFor } from "@/lib/pricing";
+import { canCustomerCancel, CUSTOMER_CANCELLABLE } from "@/lib/delivery";
 
 /* ── Status machine ──────────────────────────────────────────────────── */
 
@@ -49,17 +50,13 @@ const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   refunded: [],
 };
 
-/** Statuses a customer may still cancel from themselves. */
-const CUSTOMER_CANCELLABLE: OrderStatus[] = [
-  "pending_payment",
-  "paid",
-  "processing",
-  "packed",
-];
-
-export function canCustomerCancel(status: OrderStatus): boolean {
-  return CUSTOMER_CANCELLABLE.includes(status);
-}
+/**
+ * Which statuses a customer may still cancel from lives in lib/delivery.ts so
+ * the order page and the support content can consult the same list rather than
+ * each keeping a copy. Re-exported: this is still the authority callers reach
+ * for, and the server is still the only place it is enforced.
+ */
+export { canCustomerCancel, CUSTOMER_CANCELLABLE };
 
 /** Customer-facing copy for each step of the journey. */
 const EVENT_COPY: Record<OrderStatus, { label: string; description: string }> = {
