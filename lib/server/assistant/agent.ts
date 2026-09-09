@@ -19,6 +19,7 @@ import { buildInstructions, type AssistantProfile } from "./instructions";
 import { buildTools, type ToolDeps } from "./tools";
 import { resolveModel } from "./model";
 import { getPetsByOwner } from "@/lib/server/pets";
+import { isOps } from "@/lib/server/access";
 import { getUserById } from "@/lib/server/users";
 import { petAge } from "@/lib/utils";
 import { SPECIES_LABELS } from "@/lib/utils";
@@ -50,15 +51,15 @@ export async function loadProfile(
   ]);
   if (!user) return null;
 
-  const row = await ctx.db.user.findUnique({
-    where: { id: ctx.uid },
-    select: { isOps: true },
-  });
+  // Through the predicate, not the raw column: `isOps` is a legacy boolean kept
+  // only until the next migration drops it, and `hasStaffRole` is what knows
+  // that an admin counts as ops too.
+  const ops = await isOps(ctx.uid, ctx.db);
 
   return {
     name: user.name,
     roles: user.roles,
-    isOps: row?.isOps ?? false,
+    isOps: ops,
     pets: pets.map((pet) => ({
       id: pet.id,
       name: pet.name,

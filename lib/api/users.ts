@@ -4,18 +4,23 @@
  * original mock so no page or component code needed to change.
  */
 
-import type { User, UserRole } from "@/types";
+import type { PublicUser, User, UserRole } from "@/types";
 import { getJson, getJsonOrNull, patchJson, postJson, qs } from "./_client";
 
-/** GET /api/users/:id -> User | null(404) */
-export async function getUserById(id: string): Promise<User | null> {
-  return getJsonOrNull<User>(`/api/users/${id}`);
+/**
+ * GET /api/users/:id -> PublicUser | null(404)
+ *
+ * The public projection — name, avatar, roles, city. For your own account use
+ * `getCurrentUser()` (/api/me), which returns everything.
+ */
+export async function getUserById(id: string): Promise<PublicUser | null> {
+  return getJsonOrNull<PublicUser>(`/api/users/${id}`);
 }
 
-/** GET /api/users?ids=a,b,c -> User[] */
-export async function getUsersByIds(ids: string[]): Promise<User[]> {
+/** GET /api/users?ids=a,b,c -> PublicUser[] */
+export async function getUsersByIds(ids: string[]): Promise<PublicUser[]> {
   if (ids.length === 0) return [];
-  return getJson<User[]>(`/api/users${qs({ ids: ids.join(",") })}`);
+  return getJson<PublicUser[]>(`/api/users${qs({ ids: ids.join(",") })}`);
 }
 
 /** GET /api/users -> User[] (dev/demo account switcher) */

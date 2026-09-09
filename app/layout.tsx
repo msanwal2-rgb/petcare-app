@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PageTransition } from "@/components/PageTransition";
 import { ToastProvider } from "@/components/ToastProvider";
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-fog text-charcoal">
         <SessionSync />
         <SiteHeader />
+        <MaintenanceBanner />
         <main className="flex-1 flex flex-col">
           <PageTransition>{children}</PageTransition>
         </main>

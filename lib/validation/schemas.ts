@@ -30,15 +30,35 @@ const address = z.object({
 
 /* ── Users ──────────────────────────────────────────────────────────── */
 
+/**
+ * What a user may change about their own account.
+ *
+ * `PATCH /api/users/:id` checks only that you are patching yourself and then
+ * spreads the result straight into `prisma.user.update`, so this schema *is*
+ * the privilege boundary. Two fields were removed from it:
+ *
+ *  - `verified` — the email-verification flag. Self-settable, it made the whole
+ *    token flow decorative: anyone could PATCH themselves verified, and the
+ *    badge the UI shows next to a name meant nothing. It is now set by
+ *    confirming a token, or by an admin, and both are recorded.
+ *  - `email` — the identifier the account is keyed and recovered by. Changing
+ *    it needs re-verification of the new address rather than a PATCH, and a
+ *    duplicate surfaced as an unhandled Prisma P2002, i.e. a 500. That flow
+ *    does not exist yet; accepting the field here pretended it did.
+ *
+ * `roles` deliberately stays. Choosing "I have a pet" / "I care for pets" /
+ * "I'm a veterinarian" is what /onboarding is, and self-declaration is the
+ * intended design — what a professional claim is *worth* is decided by
+ * verification (`backgroundCheckStatus`, license review) in the admin console,
+ * not by who is allowed to tick the box.
+ */
 export const updateUserSchema = z
   .object({
     name: z.string().min(1),
-    email: z.string().email(),
     phone: z.string(),
     avatarUrl: z.string(),
     roles: z.array(userRole),
     address: address,
-    verified: z.boolean(),
   })
   .partial();
 
@@ -101,15 +121,25 @@ export const caretakerPatchSchema = z
 
 /* ── Bookings ───────────────────────────────────────────────────────── */
 
+/**
+ * Note the absence of `priceTotal`.
+ *
+ * It used to be here as a bare `z.number()`, spread straight into
+ * `prisma.booking.create` — so a booking could be created for $0, or for a
+ * negative amount, by anyone willing to edit a request body. It was harmless
+ * only because nothing charged for a booking, which is not a property worth
+ * relying on. The server now reads the caretaker's own rate and multiplies it
+ * by the duration, exactly as `createAppointment` has always taken the vet's
+ * fee from the vet's profile rather than the request.
+ */
 export const createBookingSchema = z.object({
   ownerId: z.string(),
   caretakerId: z.string(),
-  petIds: z.array(z.string()).min(1),
+  petIds: z.array(z.string()).min(1).max(10),
   serviceType: serviceType,
   startDateTime: z.string(),
   endDateTime: z.string(),
-  notes: z.string(),
-  priceTotal: z.number(),
+  notes: z.string().max(2000),
 });
 
 export const updateBookingStatusSchema = z.object({ status: bookingStatus });
@@ -202,8 +232,15 @@ export const vetPatchSchema = z
   .partial();
 
 /** `fee` is absent by design — the server reads it off the vet's profile. */
+/**
+ * No `ownerId`. It is the caller's own id, taken from the session and passed to
+ * `createAppointment` as an argument — the same shape `createOrder` uses. It
+ * used to arrive in the body with the route checking it matched, which worked
+ * but meant a security-relevant equality lived in a handler rather than the
+ * domain. That identity now selects a price, so the check has to be somewhere
+ * a future route cannot forget it.
+ */
 export const createAppointmentSchema = z.object({
-  ownerId: z.string(),
   vetId: z.string(),
   petId: z.string(),
   mode: consultMode,

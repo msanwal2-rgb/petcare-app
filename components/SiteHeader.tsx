@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSession } from "@/lib/store/session";
 import { logout as endSession, navigateAfterAuth } from "@/lib/auth/session-client";
@@ -47,6 +47,16 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", guarded: true },
 ];
 
+/**
+ * The admin entry, appended for staff only.
+ *
+ * `staffRoles` reaches the client on the session user, which is safe because it
+ * only ever describes the person it is sent to. Hiding the link is courtesy —
+ * every endpoint behind it re-checks with `requireStaff`, so typing the URL
+ * gets an explanation rather than a console.
+ */
+const ADMIN_NAV = { href: "/dashboard/admin", label: "Admin", guarded: true };
+
 /** A nav item is "current" for its whole section, not just its exact URL. */
 function isCurrent(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -59,10 +69,18 @@ export function SiteHeader() {
   const [hovered, setHovered] = useState<string | null>(null);
   const scrolled = useScrolled(8);
 
+  // Staff get one extra item. Derived with useMemo rather than state, so it
+  // follows the session without an effect that sets state during render.
+  const nav = useMemo(
+    () =>
+      (currentUser?.staffRoles?.length ?? 0) > 0 ? [...NAV, ADMIN_NAV] : NAV,
+    [currentUser?.staffRoles]
+  );
+
   // What the sliding pill sits under: whatever is hovered, else the current
   // section. One shared element travels between items rather than four
   // independent underlines fading in and out.
-  const active = hovered ?? NAV.find((i) => isCurrent(pathname, i.href))?.href ?? null;
+  const active = hovered ?? nav.find((i) => isCurrent(pathname, i.href))?.href ?? null;
 
   async function handleLogout() {
     await endSession();
@@ -105,7 +123,7 @@ export function SiteHeader() {
               className="relative hidden items-center gap-1 md:flex"
               onMouseLeave={() => setHovered(null)}
             >
-              {NAV.map((item) => {
+              {nav.map((item) => {
                 const current = isCurrent(pathname, item.href);
                 return (
                   <Link
@@ -225,7 +243,7 @@ export function SiteHeader() {
             >
               <div className="px-4 py-4">
                 <nav className="flex flex-col gap-1">
-                  {NAV.map((item, i) => (
+                  {nav.map((item, i) => (
                     <motion.div
                       key={item.href}
                       initial={{ opacity: 0, x: -8 }}

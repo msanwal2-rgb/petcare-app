@@ -8,6 +8,7 @@ import type {
   CreateOrderInput,
   Order,
   OrderStatus,
+  PlacedOrder,
 } from "@/types";
 import { getJson, getJsonOrNull, patchJson, postJson } from "./_client";
 
@@ -33,8 +34,8 @@ export async function quoteCart(
 }
 
 /** POST /api/orders -> Order (201) */
-export async function placeOrder(input: CreateOrderInput): Promise<Order> {
-  return postJson<Order>(`/api/orders`, input);
+export async function placeOrder(input: CreateOrderInput): Promise<PlacedOrder> {
+  return postJson<PlacedOrder>(`/api/orders`, input);
 }
 
 /** POST /api/orders/:id/cancel -> Order */
@@ -56,4 +57,15 @@ export async function advanceOrder(
   options: { location?: string; carrier?: string; trackingNumber?: string } = {}
 ): Promise<Order> {
   return patchJson<Order>(`/api/orders/${id}/status`, { status, ...options });
+}
+
+/**
+ * POST /api/orders/:id/payment/sync -> Order
+ *
+ * Ask the server to re-check with the payment provider. The confirmation page
+ * calls this because the browser knowing the payment succeeded is not the same
+ * as the server knowing it — that arrives on a webhook, which can be slow.
+ */
+export async function syncOrderPayment(id: string): Promise<Order> {
+  return postJson<Order>(`/api/orders/${id}/payment/sync`, {});
 }

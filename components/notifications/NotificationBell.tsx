@@ -11,6 +11,7 @@ import {
   AlertIcon,
   BellIcon,
   CheckIcon,
+  ShieldCheckIcon,
   StethoscopeIcon,
   TruckIcon,
 } from "@/components/ui/icons";
@@ -26,6 +27,11 @@ const ICON: Record<NotificationKind, typeof CheckIcon> = {
   order_shipped: TruckIcon,
   order_out_for_delivery: TruckIcon,
   order_delivered: TruckIcon,
+  order_payment_failed: AlertIcon,
+  membership_started: ShieldCheckIcon,
+  membership_payment_failed: AlertIcon,
+  membership_cancelled: ShieldCheckIcon,
+  membership_ended: ShieldCheckIcon,
 };
 
 /**

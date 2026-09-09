@@ -15,8 +15,10 @@ import {
   getOrdersByUser,
   getOrdersForFulfillment,
   quoteCart,
+  settleOrderPayment,
   updateOrderStatus,
 } from "@/lib/server/orders";
+import { applyIntentState, requestRefund } from "@/lib/server/payments/ledger";
 import {
   shippingFor,
   taxFor,
@@ -109,19 +111,19 @@ describe("cart quoting", () => {
 
   it("blocks an Rx-only product for a pet without that prescription", async () => {
     // Biscuit (p1) has vaccinations but no prescriptions
-    const quote = await quoteCart([{ productId: "prod19", quantity: 1 }], "p1", db);
+    const quote = await quoteCart([{ productId: "prod19", quantity: 1 }], { petId: "p1" }, db);
     expect(quote.problems[0].code).toBe("prescription_required");
   });
 
   it("allows an Rx-only product for a pet whose vet prescribed it", async () => {
     // Luna (p4) holds a current prescription for the hypoallergenic cat diet
-    const quote = await quoteCart([{ productId: "prod19", quantity: 1 }], "p4", db);
+    const quote = await quoteCart([{ productId: "prod19", quantity: 1 }], { petId: "p4" }, db);
     expect(quote.problems).toEqual([]);
     expect(quote.lines[0].requiresPrescription).toBe(true);
   });
 
   it("still blocks a different Rx product the prescription doesn't name", async () => {
-    const quote = await quoteCart([{ productId: "prod21", quantity: 1 }], "p4", db);
+    const quote = await quoteCart([{ productId: "prod21", quantity: 1 }], { petId: "p4" }, db);
     expect(quote.problems[0].code).toBe("prescription_required");
   });
 
@@ -166,15 +168,23 @@ describe("placing an order", () => {
     expect(res.order.items[0].lineTotalCents).toBe(2598);
   });
 
-  it("opens the tracking timeline with the payment event", async () => {
+  it("opens the tracking timeline honestly, in two steps", async () => {
     const res = await createOrder(
       "u1",
       { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
       db
     );
     if (!res.ok) throw new Error("expected order");
-    expect(res.order.events).toHaveLength(1);
-    expect(res.order.events[0].status).toBe("paid");
+
+    // Two events, not one, and the change is the point: an order is placed
+    // before it is paid for. The timeline now says "we're waiting for your
+    // payment to clear" and then "payment confirmed", which is what actually
+    // happened — the copy for both was already sitting in EVENT_COPY.
+    expect(res.order.events).toHaveLength(2);
+    expect(res.order.events.map((e) => e.status)).toEqual([
+      "pending_payment",
+      "paid",
+    ]);
   });
 
   it("decrements stock by the quantity ordered", async () => {
@@ -423,28 +433,81 @@ describe("customer cancellation window", () => {
 
 describe("the payment provider is a real seam", () => {
   /**
-   * Records what the store asks a provider to do. Proves the boundary is
-   * genuinely swappable — and that an order that fails after capture gives the
-   * money back rather than leaving a customer paid-for-nothing.
+   * An *asynchronous* fake, which is the point.
+   *
+   * The provider this replaces settled inline, so no test could express an
+   * out-of-order event, a duplicate delivery, or a webhook that never arrives —
+   * the three things that actually go wrong with real payments. This one hands
+   * back a `requires_payment_method` intent and lets the test decide when, and
+   * in what order, the truth turns up.
    */
-  function recordingProvider() {
+  function fakeStripe() {
     const calls: string[] = [];
+    const intents = new Map<string, { amountCents: number; status: string }>();
+    let n = 0;
+
     const provider: PaymentProvider = {
       name: "recording",
-      async authorize(amountCents) {
-        calls.push(`authorize:${amountCents}`);
-        return { ref: "rec_1", status: "authorized" };
+      asynchronous: true,
+      async createIntent(input) {
+        const ref = `pi_test_${++n}`;
+        calls.push(`createIntent:${input.amountCents}:${input.idempotencyKey}`);
+        intents.set(ref, { amountCents: input.amountCents, status: "requires_payment_method" });
+        return {
+          ref,
+          status: "requires_payment_method",
+          amountCents: input.amountCents,
+          currency: input.currency,
+          clientSecret: `${ref}_secret`,
+        };
       },
-      async capture(ref) {
-        calls.push(`capture:${ref}`);
-        return { ref, status: "paid" };
+      async getIntent(ref) {
+        const it = intents.get(ref)!;
+        calls.push(`getIntent:${ref}`);
+        return {
+          ref,
+          status: it.status as "succeeded",
+          amountCents: it.amountCents,
+          currency: "usd",
+          clientSecret: null,
+        };
       },
-      async refund(ref, amountCents) {
-        calls.push(`refund:${ref}:${amountCents}`);
-        return { ref, status: "refunded" };
+      async cancelIntent(ref) {
+        calls.push(`cancelIntent:${ref}`);
+        return { ref, status: "canceled", amountCents: 0, currency: "usd", clientSecret: null };
+      },
+      async refund(input) {
+        calls.push(`refund:${input.ref}:${input.amountCents}`);
+        return { ref: `re_${input.ref}`, status: "succeeded", amountCents: input.amountCents };
       },
     };
-    return { provider, calls };
+
+    /** What the webhook would carry when the customer's card goes through. */
+    const succeed = (ref: string, amountCents?: number) => {
+      const it = intents.get(ref)!;
+      it.status = "succeeded";
+      return {
+        ref,
+        status: "succeeded" as const,
+        amountCents: amountCents ?? it.amountCents,
+        currency: "usd",
+        clientSecret: null,
+        methodBrand: "visa",
+        methodLast4: "4242",
+      };
+    };
+
+    const fail = (ref: string, code = "card_declined") => ({
+      ref,
+      status: "failed" as const,
+      amountCents: intents.get(ref)!.amountCents,
+      currency: "usd",
+      clientSecret: null,
+      failureCode: code,
+      failureMessage: "Your card was declined.",
+    });
+
+    return { provider, calls, succeed, fail };
   }
 
   beforeEach(async () => {
@@ -454,8 +517,8 @@ describe("the payment provider is a real seam", () => {
     setPaymentProvider(DEFAULT_PROVIDER);
   });
 
-  it("authorizes then captures the server's total, not the client's", async () => {
-    const { provider, calls } = recordingProvider();
+  it("creates the intent for the server's total, keyed on the order", async () => {
+    const { provider, calls } = fakeStripe();
     setPaymentProvider(provider);
 
     const res = await createOrder(
@@ -465,15 +528,59 @@ describe("the payment provider is a real seam", () => {
     );
     if (!res.ok) throw new Error("expected order");
 
-    expect(calls).toEqual([`authorize:${res.order.totalCents}`, "capture:rec_1"]);
-    expect(res.order.paymentRef).toBe("rec_1");
+    expect(calls).toEqual([`createIntent:${res.order.totalCents}:${res.order.id}`]);
+    // The clientSecret reaches this one response and is never stored.
+    expect(res.payment.clientSecret).toMatch(/_secret$/);
+    const stored = await db.payment.findUnique({ where: { providerRef: res.payment.ref } });
+    expect(JSON.stringify(stored)).not.toContain("_secret");
   });
 
-  it("refunds the loser of a stock race, who had already been charged", async () => {
-    const { provider, calls } = recordingProvider();
+  it("leaves the order unpaid until the payment actually succeeds", async () => {
+    const { provider, succeed } = fakeStripe();
     setPaymentProvider(provider);
 
-    // Both quote successfully against 19 units, both pay, only one can have it.
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    // This is the state the old design could never occupy: an order exists,
+    // stock is held, and no money has moved.
+    expect(res.order.status).toBe("pending_payment");
+    expect(res.order.paymentStatus).toBe("unpaid");
+
+    await applyIntentState(succeed(res.payment.ref), {}, db);
+    await settleOrderPayment(res.order.id, db);
+
+    const after = await getOrderById(res.order.id, db);
+    expect(after!.status).toBe("paid");
+    expect(after!.paymentStatus).toBe("paid");
+  });
+
+  it("reserves stock at checkout, before the money arrives", async () => {
+    const { provider } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const before = (await db.product.findUnique({ where: { id: "prod13" } }))!.stockQty;
+    await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 2 }], shippingAddress: ADDRESS },
+      db
+    );
+    const after = (await db.product.findUnique({ where: { id: "prod13" } }))!.stockQty;
+
+    // Deferring this to the webhook would let two customers both be told
+    // "order placed" for the last unit, and refunding a successful charge for
+    // goods that don't exist is worse than a fifteen-minute hold.
+    expect(after).toBe(before - 2);
+  });
+
+  it("charges nobody when a stock race is lost", async () => {
+    const { provider, calls } = fakeStripe();
+    setPaymentProvider(provider);
+
     const buy = () =>
       createOrder(
         "u1",
@@ -483,26 +590,266 @@ describe("the payment provider is a real seam", () => {
     const results = await Promise.all([buy(), buy()]);
 
     expect(results.filter((r) => r.ok)).toHaveLength(1);
-    // Two customers charged, exactly one refunded — nobody is left paid-for-nothing.
-    expect(calls.filter((c) => c.startsWith("capture"))).toHaveLength(2);
-    expect(calls.filter((c) => c.startsWith("refund"))).toHaveLength(1);
+    // The old design charged both and refunded one. Now the loser never had an
+    // intent created at all — there is nothing to give back.
+    expect(calls.filter((c) => c.startsWith("createIntent"))).toHaveLength(1);
+    expect(calls.filter((c) => c.startsWith("refund"))).toHaveLength(0);
   });
 
-  it("refunds through the provider when an order is refunded", async () => {
-    const { provider, calls } = recordingProvider();
+  it("records a failed payment without cancelling the order", async () => {
+    const { provider, fail } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    await applyIntentState(fail(res.payment.ref), {}, db);
+
+    const payment = await db.payment.findUnique({
+      where: { providerRef: res.payment.ref },
+    });
+    expect(payment!.status).toBe("failed");
+    expect(payment!.failureCode).toBe("card_declined");
+    // Stripe keeps a failed intent retryable, so the order stays where it is.
+    const order = await getOrderById(res.order.id, db);
+    expect(order!.status).toBe("pending_payment");
+  });
+
+  it("refuses to mark an order paid for the wrong amount", async () => {
+    const { provider, succeed } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    const applied = await applyIntentState(succeed(res.payment.ref, 1), {}, db);
+    expect(applied).toMatchObject({ ok: false, code: "amount_mismatch" });
+
+    const payment = await db.payment.findUnique({
+      where: { providerRef: res.payment.ref },
+    });
+    expect(payment!.status).toBe("failed");
+  });
+
+  it("is idempotent: the same event twice has one effect", async () => {
+    const { provider, succeed } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    const event = succeed(res.payment.ref);
+    const first = await applyIntentState(event, { eventAt: "2026-09-09T10:00:00.000Z" }, db);
+    const second = await applyIntentState(event, { eventAt: "2026-09-09T10:00:00.000Z" }, db);
+
+    expect(first).toMatchObject({ ok: true, changed: true });
+    expect(second).toMatchObject({ ok: true, changed: false });
+  });
+
+  it("ignores an event older than one it has already applied", async () => {
+    const { provider, succeed, fail } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const res = await createOrder(
+      "u1",
+      { items: [{ productId: "prod13", quantity: 1 }], shippingAddress: ADDRESS },
+      db
+    );
+    if (!res.ok) throw new Error("expected order");
+
+    await applyIntentState(succeed(res.payment.ref), { eventAt: "2026-09-09T12:00:00.000Z" }, db);
+    // A failure notice created *before* the success, arriving after it. Without
+    // the guard this would un-pay a paid order.
+    const stale = await applyIntentState(
+      fail(res.payment.ref),
+      { eventAt: "2026-09-09T11:00:00.000Z" },
+      db
+    );
+
+    expect(stale).toEqual({ ok: false, code: "stale_event" });
+    const payment = await db.payment.findUnique({
+      where: { providerRef: res.payment.ref },
+    });
+    expect(payment!.status).toBe("paid");
+  });
+
+  it("refunds when a paid order is cancelled", async () => {
+    const { provider, calls } = fakeStripe();
+    setPaymentProvider(provider);
+
+    // o3 is seeded `processing` and paid — late enough to have been charged,
+    // early enough that cancelling is still a legal move.
+    const res = await updateOrderStatus("o3", "cancelled", {}, db);
+    expect(res.ok).toBe(true);
+
+    // The bug this covers: cancelling used to restock the items and set
+    // `cancelled` while leaving paymentStatus "paid" — the customer's money
+    // simply stayed with us.
+    expect(calls.filter((c) => c.startsWith("refund"))).toHaveLength(1);
+    const payment = await db.payment.findFirst({ where: { orderId: "o3" } });
+    expect(payment!.status).toBe("refunded");
+    expect(payment!.amountRefundedCents).toBe(payment!.amountCents);
+  });
+
+  it("refunds when an order is refunded", async () => {
+    const { provider, calls } = fakeStripe();
     setPaymentProvider(provider);
 
     const res = await updateOrderStatus("o1", "refunded", {}, db);
     if (!res.ok) throw new Error("expected ok");
-    expect(calls).toEqual([`refund:demo_pay_o1:${res.order.totalCents}`]);
+    expect(calls.filter((c) => c.startsWith("refund"))).toHaveLength(1);
+  });
+
+  it("does not restock goods that already reached the customer", async () => {
+    const { provider } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const delivered = await db.order.findFirst({
+      where: { status: "delivered" },
+      include: { items: true },
+    });
+    if (!delivered) throw new Error("expected a delivered order in the seed");
+    const item = delivered.items[0]!;
+    const before = (await db.product.findUnique({ where: { id: item.productId } }))!.stockQty;
+
+    await updateOrderStatus(delivered.id, "refunded", {}, db);
+
+    // `delivered → refunded` is a legal transition, and restocking on it would
+    // credit inventory for a bag of food sitting in someone's kitchen.
+    const after = (await db.product.findUnique({ where: { id: item.productId } }))!.stockQty;
+    expect(after).toBe(before);
+  });
+
+  it("restocks a returned order when told the goods came back", async () => {
+    const { provider } = fakeStripe();
+    setPaymentProvider(provider);
+
+    const delivered = await db.order.findFirst({
+      where: { status: "delivered" },
+      include: { items: true },
+    });
+    if (!delivered) throw new Error("expected a delivered order in the seed");
+    const item = delivered.items[0]!;
+    const before = (await db.product.findUnique({ where: { id: item.productId } }))!.stockQty;
+
+    await updateOrderStatus(delivered.id, "refunded", { restock: true }, db);
+
+    const after = (await db.product.findUnique({ where: { id: item.productId } }))!.stockQty;
+    expect(after).toBe(before + item.quantity);
+  });
+
+  it("refuses a second concurrent move of the same order", async () => {
+    const { provider } = fakeStripe();
+    setPaymentProvider(provider);
+
+    // Three writers exist now — the ops console, the cron, and the webhook — so
+    // a read-then-write with no guard lets two of them both apply. o3 is
+    // `processing`, from which both of these are individually legal, so the
+    // loser can only be losing the race rather than the transition check.
+    const [a, b] = await Promise.all([
+      updateOrderStatus("o3", "cancelled", {}, db),
+      updateOrderStatus("o3", "refunded", {}, db),
+    ]);
+    expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
+    const loser = a.ok ? b : a;
+    expect(loser.ok).toBe(false);
+    if (!loser.ok) expect(loser.code).toBe("concurrent_change");
+  });
+});
+
+describe("refund accounting", () => {
+  beforeEach(async () => {
+    await resetToSnapshot(db);
+  });
+
+  it("supports a partial refund and tracks the remainder", async () => {
+    const payment = await db.payment.findFirst({ where: { orderId: "o1" } });
+    const half = Math.floor(payment!.amountCents / 2);
+
+    const first = await requestRefund(
+      { paymentId: payment!.id, amountCents: half, initiatedBy: "u22" },
+      db
+    );
+    expect(first.ok).toBe(true);
+
+    const after = await db.payment.findUnique({ where: { id: payment!.id } });
+    expect(after!.status).toBe("partially_refunded");
+    expect(after!.amountRefundedCents).toBe(half);
+  });
+
+  it("refuses to refund more than was captured", async () => {
+    const payment = await db.payment.findFirst({ where: { orderId: "o1" } });
+    const result = await requestRefund(
+      { paymentId: payment!.id, amountCents: payment!.amountCents + 1 },
+      db
+    );
+    expect(result).toMatchObject({ ok: false, code: "exceeds_captured" });
+  });
+
+  it("refuses a second refund while one is pending", async () => {
+    const payment = await db.payment.findFirst({ where: { orderId: "o1" } });
+    await db.refund.create({
+      data: {
+        id: "rfnd_inflight",
+        paymentId: payment!.id,
+        amountCents: 100,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      },
+    });
+    const result = await requestRefund({ paymentId: payment!.id, amountCents: 100 }, db);
+    expect(result).toEqual({ ok: false, code: "already_refunding" });
+  });
+
+  it("records who issued it", async () => {
+    const payment = await db.payment.findFirst({ where: { orderId: "o1" } });
+    await requestRefund({ paymentId: payment!.id, initiatedBy: "u22" }, db);
+    const refund = await db.refund.findFirst({ where: { paymentId: payment!.id } });
+    expect(refund!.initiatedBy).toBe("u22");
+  });
+
+  it("reports when there is no payment to refund", async () => {
+    expect(await requestRefund({ orderId: "nope" }, db)).toEqual({
+      ok: false,
+      code: "no_payment",
+    });
   });
 });
 
 describe("payment state machine", () => {
-  it("allows the normal capture path", () => {
+  it("allows the normal card path", () => {
+    expect(canTransitionPayment("unpaid", "pending")).toBe(true);
+    expect(canTransitionPayment("pending", "requires_action")).toBe(true);
+    expect(canTransitionPayment("requires_action", "paid")).toBe(true);
+    expect(canTransitionPayment("paid", "refunded")).toBe(true);
+  });
+
+  it("still allows the manual-capture path, which stays available", () => {
     expect(canTransitionPayment("unpaid", "authorized")).toBe(true);
     expect(canTransitionPayment("authorized", "paid")).toBe(true);
-    expect(canTransitionPayment("paid", "refunded")).toBe(true);
+  });
+
+  it("allows a partial refund to become a full one", () => {
+    expect(canTransitionPayment("paid", "partially_refunded")).toBe(true);
+    expect(canTransitionPayment("partially_refunded", "refunded")).toBe(true);
+  });
+
+  it("lets a dispute be won as well as lost", () => {
+    expect(canTransitionPayment("paid", "disputed")).toBe(true);
+    expect(canTransitionPayment("disputed", "paid")).toBe(true);
+    expect(canTransitionPayment("disputed", "refunded")).toBe(true);
   });
 
   it("refuses to un-refund or re-charge a refunded payment", () => {
@@ -510,8 +857,9 @@ describe("payment state machine", () => {
     expect(canTransitionPayment("refunded", "authorized")).toBe(false);
   });
 
-  it("lets a failed payment be retried", () => {
-    expect(canTransitionPayment("failed", "authorized")).toBe(true);
+  it("lets a failed payment be retried, because Stripe keeps the intent alive", () => {
+    expect(canTransitionPayment("failed", "pending")).toBe(true);
+    expect(canTransitionPayment("failed", "paid")).toBe(true);
   });
 
   it("treats a no-op as allowed", () => {

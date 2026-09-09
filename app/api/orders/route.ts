@@ -22,13 +22,23 @@ export async function POST(request: Request) {
   if ("response" in parsed) return parsed.response;
 
   const result = await createOrder(auth.uid, parsed.data);
-  if (result.ok) return ok(result.order, 201);
+  // The payment block carries the clientSecret the browser needs to confirm.
+  // It is returned to exactly this one response and never stored.
+  if (result.ok) return ok({ ...result.order, payment: result.payment }, 201);
 
   if (result.code === "empty") return badRequest("Your cart is empty");
   if (result.code === "stock_race") {
     // Someone bought the last one between quoting and paying.
     return error("That item sold out while you were checking out", 409, {
       productId: result.productId,
+    });
+  }
+  if (result.code === "payment_setup_failed") {
+    // The order exists and holds its stock; only the intent failed. 502 rather
+    // than 500 because the fault is the payment provider's, and the orderId is
+    // returned so the client can retry that step instead of the whole cart.
+    return error("We couldn't start the payment. Please try again.", 502, {
+      orderId: result.orderId,
     });
   }
   // 409: the cart is well-formed but no longer satisfiable. The quote comes

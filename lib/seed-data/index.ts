@@ -17,8 +17,8 @@ import type {
   CaretakerProfile,
   Pet,
   Review,
-  User,
 } from "@/types";
+import type { SeedUser } from "./types";
 import {
   CAT_PHOTOS,
   DOG_PHOTOS,
@@ -81,7 +81,7 @@ export function generateAvailability(
 
 /* ── Users (brief §8: mix of owner-only, caretaker-only, both) ──────── */
 
-export const users: User[] = [
+export const users: SeedUser[] = [
   // owner-only ────────────────────────────────
   {
     id: "u1",

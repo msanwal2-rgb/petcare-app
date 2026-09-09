@@ -1,14 +1,20 @@
-import { getUserById, updateUser } from "@/lib/server/users";
+import { getPublicUserById, updateUser } from "@/lib/server/users";
 import { updateUserSchema } from "@/lib/validation/schemas";
 import { forbidden, notFound, ok, parseBody } from "@/lib/server/http";
 import { requireUser } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/users/:id -> User | 404  (public profile)
+// GET /api/users/:id -> PublicUser | 404
+//
+// The *public* projection: name, avatar, roles, city and state. It used to
+// return the whole record — email, phone, and the home coordinates the search
+// map is drawn from — to anyone who asked, against ids that count upward from
+// u1. Your own full record is at /api/me; an administrator reads one through
+// /api/admin/users/:id, where it is a privileged action and recorded as one.
 export async function GET(_request: Request, ctx: Ctx) {
   const { id } = await ctx.params;
-  const user = await getUserById(id);
+  const user = await getPublicUserById(id);
   return user ? ok(user) : notFound(`User ${id} not found`);
 }
 

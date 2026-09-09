@@ -68,7 +68,9 @@ export default function CaretakerDetailPage() {
         <ProfileHero
           imageUrl={user.avatarUrl}
           name={user.name}
-          verified={user.verified}
+          // Background check, not email confirmation — see the note on the vet
+          // profile for why the distinction matters here.
+          verified={caretaker.backgroundCheckStatus === "verified"}
           city={user.address.city}
           state={user.address.state}
           rating={caretaker.rating}

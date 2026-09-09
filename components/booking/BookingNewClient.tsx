@@ -128,7 +128,6 @@ export function BookingNewClient() {
         startDateTime: draft.startDateTime,
         endDateTime: draft.endDateTime,
         notes: draft.notes,
-        priceTotal: total,
       });
       toast.success("Booking requested — we’ll notify you when it’s accepted.");
       draft.reset();

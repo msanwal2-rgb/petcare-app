@@ -19,6 +19,9 @@ import { refreshResponseRate } from "./reputation";
 import { notify } from "./notifications";
 import type { AppointmentStatus, NotificationKind } from "@/types";
 import type { CreateAppointmentBody } from "@/lib/validation/schemas";
+import { getMembership } from "./entitlements";
+import { consultFeeFor } from "@/lib/pricing-vet";
+import { earliestBookableAt, meetsLeadTime } from "@/lib/booking-priority";
 
 const TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
   requested: ["confirmed", "declined", "cancelled"],
@@ -113,16 +116,36 @@ export type CreateAppointmentResult =
   | { ok: true; appointment: ReturnType<typeof toAppointment> }
   | { ok: false; code: "vet_not_found" }
   | { ok: false; code: "species_not_accepted"; species: string }
-  | { ok: false; code: "mode_not_offered"; mode: string };
+  | { ok: false; code: "mode_not_offered"; mode: string }
+  | {
+      ok: false;
+      code: "lead_time";
+      earliestAt: string;
+      memberEarliestAt: string;
+      isMember: boolean;
+    };
 
 /**
- * Book an appointment. The fee is taken from the vet's profile rather than the
- * request body — the client shouldn't get to name its own price, and it's the
- * same reasoning as re-pricing a cart at checkout.
+ * Book an appointment.
+ *
+ * `ownerId` is a parameter rather than a body field.
+ *
+ * The route used to take it from the request and check it matched the session,
+ * which was correct but put a security-relevant equality in the handler instead
+ * of the domain — and `createOrder(userId, input, db)` already had the right
+ * shape. It matters more now than it did: that identity selects a *price*, so a
+ * future route that forgot the check would be handing out members' discounts.
+ *
+ * The fee still comes from the vet's profile rather than the request body, and
+ * three numbers are snapshotted rather than one: what the vet lists, the
+ * discount applied, and what was actually quoted. A membership that lapses next
+ * month must not rewrite what somebody was told last week.
  */
 export async function createAppointment(
+  ownerId: string,
   input: CreateAppointmentBody,
-  db: PrismaClient = defaultPrisma
+  db: PrismaClient = defaultPrisma,
+  now: Date = new Date()
 ): Promise<CreateAppointmentResult> {
   const vet = await db.vetProfile.findUnique({ where: { id: input.vetId } });
   if (!vet) return { ok: false, code: "vet_not_found" };
@@ -140,12 +163,39 @@ export async function createAppointment(
     return { ok: false, code: "mode_not_offered", mode: input.mode };
   }
 
+  const membership = await getMembership(ownerId, now.toISOString(), db);
+  const priority = membership.entitlements.includes("priority_booking");
+
+  // Priority booking, enforced rather than decorated: members may ask for a
+  // slot two hours out, everyone else has to ask a day ahead. That makes
+  // same-day and next-morning appointments a real members-only thing rather
+  // than a badge on a card.
+  if (!meetsLeadTime(input.startDateTime, now, priority)) {
+    return {
+      ok: false,
+      code: "lead_time",
+      earliestAt: earliestBookableAt(now, priority),
+      memberEarliestAt: earliestBookableAt(now, true),
+      isMember: priority,
+    };
+  }
+
+  const pricing = consultFeeFor(vet.consultFee, {
+    discountPct: membership.entitlements.includes("vet_consult_discount")
+      ? membership.consultDiscountPct
+      : 0,
+  });
+
   const a = await db.vetAppointment.create({
     data: {
       ...input,
+      ownerId,
       id: genId("a"),
       status: "requested",
-      fee: vet.consultFee,
+      baseFee: pricing.baseFee,
+      discountPct: pricing.discountPct,
+      fee: pricing.fee,
+      priority,
       createdAt: nowIso(),
     },
   });

@@ -60,6 +60,9 @@ import type {
   BackgroundCheckStatus,
   PricingUnit,
   BookingStatus,
+  StaffRole,
+  AccountStatus,
+  PublicUser,
 } from "@/types";
 import { distanceMiles } from "@/lib/utils";
 
@@ -77,6 +80,28 @@ export function toUser(u: DbUser): User {
       lat: u.lat,
       lng: u.lng,
     },
+    verified: u.verified,
+    createdAt: u.createdAt,
+    staffRoles: u.staffRoles as StaffRole[],
+    status: u.status as AccountStatus,
+  };
+}
+
+/**
+ * The projection for anyone who isn't the user themselves.
+ *
+ * `toUser` returns an email address, a phone number and home coordinates. That
+ * is the right shape for /api/me and for an admin reading one account; it is
+ * the wrong shape for the public profile behind a caretaker card, where ids are
+ * guessable and nobody has consented to publishing their address.
+ */
+export function toPublicUser(u: DbUser): PublicUser {
+  return {
+    id: u.id,
+    name: u.name,
+    avatarUrl: u.avatarUrl,
+    roles: u.roles as UserRole[],
+    address: { city: u.addressCity, state: u.addressState },
     verified: u.verified,
     createdAt: u.createdAt,
   };
@@ -214,6 +239,7 @@ export function toVetProfile(v: DbVetWithRelations): VetProfile {
     specialties: v.specialties as VetSpecialty[],
     licenseNumber: v.licenseNumber,
     licenseState: v.licenseState,
+    verificationStatus: v.verificationStatus as BackgroundCheckStatus,
     yearsExperience: v.yearsExperience,
     acceptedSpecies: v.acceptedSpecies as Species[],
     consultModes: v.consultModes as ConsultMode[],

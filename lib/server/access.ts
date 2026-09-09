@@ -20,16 +20,64 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 
-/** Is this user store operations staff? Gates fulfillment endpoints. */
+/* ── Staff privileges ─────────────────────────────────────────── */
+
+/**
+ * Staff privileges, orthogonal to the marketplace roles in `User.roles`. A
+ * caretaker is a kind of customer; a staff member is a kind of employee, and
+ * conflating the two is how a marketplace ends up letting a vet read the
+ * payments ledger.
+ *
+ * Four, because they answer four different questions:
+ *   ops      — may move parcels (the pre-existing fulfilment console)
+ *   support  — may read a customer's account to answer a ticket
+ *   finance  — may move money
+ *   admin    — may change who is staff, and satisfies every check above
+ */
+export const STAFF_ROLES = ["ops", "support", "finance", "admin"] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
+
+export function isStaffRole(value: string): value is StaffRole {
+  return (STAFF_ROLES as readonly string[]).includes(value);
+}
+
+/** Every staff role held by this user. Empty for an ordinary customer. */
+export async function staffRoles(
+  uid: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<StaffRole[]> {
+  const user = await db.user.findUnique({
+    where: { id: uid },
+    select: { staffRoles: true },
+  });
+  return (user?.staffRoles ?? []).filter(isStaffRole);
+}
+
+/**
+ * Does this user hold `role`? "admin" satisfies every check — stated once here
+ * rather than remembered at each of the twenty call sites, which is the version
+ * somebody eventually forgets.
+ */
+export async function hasStaffRole(
+  uid: string,
+  role: StaffRole,
+  db: PrismaClient = defaultPrisma,
+): Promise<boolean> {
+  const held = await staffRoles(uid, db);
+  return held.includes("admin") || held.includes(role);
+}
+
+/**
+ * Is this user store operations staff? Gates fulfillment endpoints.
+ *
+ * Kept as a named predicate over `hasStaffRole(uid, "ops")` because three route
+ * handlers already read this way and the question they ask hasn't changed.
+ */
 export async function isOps(
   uid: string,
   db: PrismaClient = defaultPrisma,
 ): Promise<boolean> {
-  const user = await db.user.findUnique({
-    where: { id: uid },
-    select: { isOps: true },
-  });
-  return user?.isOps ?? false;
+  return hasStaffRole(uid, "ops", db);
 }
 
 /**
@@ -111,6 +159,47 @@ export async function isAppointmentParticipant(
   if (!appointment) return false;
   if (appointment.ownerId === uid) return true;
   return ownsVetProfile(uid, appointment.vetId, db);
+}
+
+/**
+ * May `uid` see this pet at all?
+ *
+ * Distinct from `canAccessPetRecords`, which governs the clinical history. This
+ * is the pet as a *booking* sees it — name, breed, feeding instructions,
+ * behaviour notes — and the people who need it are the ones looking after the
+ * animal: its owner, a caretaker with a live booking for it, or a vet with a
+ * live appointment.
+ *
+ * It exists because `GET /api/pets/:id` used to be entirely public, on the
+ * reasoning that a caretaker needs to read it. So does anyone who can count:
+ * ids are sequential (`p1`, `p2`, …), and the response carries medications,
+ * allergies, behaviour notes and the household's vet's phone number.
+ */
+export async function canViewPet(
+  uid: string,
+  petId: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<boolean> {
+  if (await ownsPet(uid, petId, db)) return true;
+
+  const caretaker = await db.caretakerProfile.findUnique({
+    where: { userId: uid },
+    select: { id: true },
+  });
+  if (caretaker) {
+    const booked = await db.booking.findFirst({
+      where: {
+        caretakerId: caretaker.id,
+        petIds: { has: petId },
+        status: { notIn: ["declined", "cancelled"] },
+      },
+      select: { id: true },
+    });
+    if (booked) return true;
+  }
+
+  const { allowed } = await canAccessPetRecords(uid, petId, db);
+  return allowed;
 }
 
 /**

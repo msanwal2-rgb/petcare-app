@@ -30,7 +30,10 @@ async function login(page, email) {
 
 /* Routes behind proxy.ts — the cache-poisoning class. */
 const GUARDED = ["/dashboard", "/dashboard/pets/new", "/dashboard/caretaker-profile",
-                 "/dashboard/vet-profile", "/dashboard/orders", "/onboarding", "/booking/new"];
+                 "/dashboard/vet-profile", "/dashboard/orders", "/onboarding", "/booking/new",
+                 "/dashboard/admin", "/dashboard/admin/users", "/dashboard/admin/payments",
+                 "/dashboard/admin/subscriptions", "/dashboard/admin/audit",
+                 "/dashboard/admin/settings", "/account/membership"];
 /* Gated only in the client with <AuthRequired>. */
 const CLIENT_GATED = ["/store/checkout", "/store/orders", "/store/orders/o1",
                       "/vets/book?vetId=v1", "/appointments/a3"];
@@ -66,13 +69,21 @@ for (const route of CLIENT_GATED) {
 
 console.log("\n[C] Every page renders clean, per role");
 const ROLES = [
-  ["maya.chen@example.com", "owner", ["/", "/search", "/vets", "/store", "/pet-health", "/support", "/dashboard",
+  ["maya.chen@example.com", "owner", ["/", "/search", "/vets", "/store", "/pet-health", "/support", "/plus", "/account/membership", "/dashboard",
     "/dashboard/pets/new", "/dashboard/pets/p1", "/booking/new", "/store/cart", "/store/checkout",
     "/store/orders", "/store/orders/o1", "/store/summit-trail-salmon-dry-dog", "/vets/v1", "/vets/book",
     "/caretaker/c1", "/booking/b1", "/onboarding", "/appointments/a3"]],
   ["elena.petrova@example.com", "caretaker", ["/dashboard", "/dashboard/caretaker-profile"]],
   ["naomi.ruiz@example.com", "vet", ["/dashboard", "/dashboard/vet-profile", "/appointments/a1"]],
   ["rosa.delgado@example.com", "ops", ["/dashboard/orders"]],
+  // Staff. Priya is an admin (every console); Tom holds support+finance, which
+  // is what makes the role boundaries visible rather than theoretical.
+  ["priya.raman@example.com", "admin", ["/dashboard/admin", "/dashboard/admin/users",
+    "/dashboard/admin/payments", "/dashboard/admin/subscriptions",
+    "/dashboard/admin/audit", "/dashboard/admin/settings", "/dashboard/orders"]],
+  ["tom.okafor@example.com", "support+finance", ["/dashboard/admin",
+    "/dashboard/admin/users", "/dashboard/admin/payments",
+    "/dashboard/admin/subscriptions"]],
 ];
 for (const [email, role, routes] of ROLES) {
   const { ctx, page } = await newPage();

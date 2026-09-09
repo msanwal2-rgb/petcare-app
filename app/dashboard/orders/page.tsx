@@ -24,8 +24,16 @@ import { formatCents, formatDate } from "@/lib/utils";
  * along and writes the customer-visible tracking event. It's a simulation, and
  * the page says so, but every state change it makes is real.
  */
+/**
+ * There is deliberately no `pending_payment` step here.
+ *
+ * It used to offer "Mark paid", which was harmless while the status was dead
+ * code and is a hole now that it is real: it would let fulfilment staff mark an
+ * unpaid order paid and ship it, bypassing the payment provider entirely. An
+ * order becomes paid because money arrived, and nothing on this screen is
+ * evidence of that. (Unpaid orders no longer reach this queue at all.)
+ */
 const NEXT_STEP: Partial<Record<OrderStatus, { to: OrderStatus; label: string }>> = {
-  pending_payment: { to: "paid", label: "Mark paid" },
   paid: { to: "processing", label: "Start picking" },
   processing: { to: "packed", label: "Mark packed" },
   packed: { to: "shipped", label: "Hand to carrier" },

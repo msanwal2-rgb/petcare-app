@@ -22,31 +22,61 @@ datasource db {
 }
 
 model User {
-  id             String                  @id
-  name           String
-  email          String                  @unique
-  phone          String                  @default("")
-  avatarUrl      String
-  roles          String[] // "owner" | "caretaker" | "vet"
-  addressCity    String
-  addressState   String
-  lat            Float
-  lng            Float
-  verified       Boolean                 @default(false)
-  createdAt      String
+  id                String                  @id
+  name              String
+  email             String                  @unique
+  phone             String                  @default("")
+  avatarUrl         String
+  roles             String[] // "owner" | "caretaker" | "vet"
+  addressCity       String
+  addressState      String
+  lat               Float
+  lng               Float
+  verified          Boolean                 @default(false)
+  createdAt         String
   // Bcrypt hash for email/password login. Null for accounts created purely via
   // an OAuth provider (e.g. Google) that never set a password.
-  passwordHash   String?
+  passwordHash      String?
   // Store operations staff: may advance order fulfillment. Not a marketplace
   // role — it never appears in `roles` or the role toggle.
-  isOps          Boolean                 @default(false)
-  pets           Pet[]
-  caretaker      CaretakerProfile?
-  vet            VetProfile?
-  orders         Order[]
-  notifications  Notification[]
-  assistantChats AssistantConversation[]
+  //
+  // Superseded by `staffRoles` and read only through it; dropped in a later
+  // migration once a release has run clean on the new column.
+  isOps             Boolean                 @default(false)
+  /// Staff privileges, orthogonal to the marketplace `roles` above:
+  /// "ops" | "support" | "finance" | "admin". "admin" satisfies every check.
+  /// Never appears in the role toggle and is never self-editable.
+  staffRoles        String[]
+  /// Google's stable subject id, set when an account is linked to Google.
+  /// Unique so two accounts can never claim the same Google identity.
+  googleId          String?                 @unique
+  /// Account lifecycle: "active" | "suspended" | "deleted". Checked in
+  /// requireUser(), so a suspension takes effect on the next request rather
+  /// than whenever the JWT happens to expire.
+  status            String                  @default("active")
+  suspendedAt       String?
+  suspendedReason   String                  @default("")
+  /// Set by a soft delete. The row stays so orders, payments and reviews keep
+  /// their author; the personal data on it is scrubbed.
+  deletedAt         String?
+  lastLoginAt       String?
+  /// Sessions issued before this instant are refused. Bumped on password reset,
+  /// on suspension, and by an admin forcing a sign-out — this is the only
+  /// revocation mechanism available with JWT sessions and no adapter.
+  sessionsValidFrom String?
+  pets              Pet[]
+  caretaker         CaretakerProfile?
+  vet               VetProfile?
+  orders            Order[]
+  notifications     Notification[]
+  assistantChats    AssistantConversation[]
+  auditEntries      AdminAuditLog[]
+  payments          Payment[]
+  subscriptions     Subscription[]
+  /// Stripe's customer id, so a returning member is not billed as a stranger.
+  stripeCustomerId  String?                 @unique
 
+  @@index([status])
   @@map("users")
 }
 
@@ -188,6 +218,11 @@ model VetProfile {
   specialties        String[] // VetSpecialty[]
   licenseNumber      String
   licenseState       String
+  /// Whether a human has checked that licence: "verified" | "pending" | "none".
+  /// Mirrors CaretakerProfile.backgroundCheckStatus, which existed but was
+  /// display-only — nothing could ever set it, so a "verified" badge meant only
+  /// that a fixture said so.
+  verificationStatus String               @default("none")
   yearsExperience    Int
   acceptedSpecies    String[] // Species[]
   consultModes       String[] // ConsultMode[]
@@ -230,6 +265,14 @@ model VetAppointment {
   startDateTime String
   endDateTime   String
   status        String          @default("requested")
+  /// What the vet lists, before any membership discount. Snapshotted so a later
+  /// profile edit cannot rewrite what somebody was quoted.
+  baseFee       Float           @default(0)
+  /// The member discount applied at booking time, as a percentage.
+  discountPct   Int             @default(0)
+  /// Whether this request was made with priority booking. Snapshotted so a
+  /// lapsed membership cannot demote a request already in the queue.
+  priority      Boolean         @default(false)
   fee           Float
   notes         String          @default("")
   createdAt     String
@@ -329,11 +372,17 @@ model Order {
   placedAt             String
   estimatedDeliveryAt  String?
   deliveredAt          String?
+  /// When an unpaid order's stock hold lapses. Null once it is paid.
+  reservationExpiresAt String?
+  /// Which membership benefits priced this order, snapshotted. History must not
+  /// rewrite itself when someone's membership later lapses.
+  benefitsApplied      String[]
   items                OrderItem[]
   events               OrderEvent[]
 
   @@index([userId])
   @@index([status])
+  @@index([status, reservationExpiresAt])
   @@map("orders")
 }
 
@@ -483,4 +532,242 @@ model KnowledgeChunk {
 
   @@index([source])
   @@map("knowledge_chunks")
+}
+
+/// Every privileged action a staff member takes, append-only.
+///
+/// Written exclusively by `recordAdminAction()` in lib/server/audit.ts — the
+/// same single-seam discipline as `notify()`. An admin console whose actions
+/// leave no trace is not an admin console, it is a shared root account.
+model AdminAuditLog {
+  id          String @id
+  actorUserId String
+  actor       User   @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  /// Dotted verb naming what happened, e.g. "user.suspend", "payment.refund".
+  action      String
+  /// What it happened to: "user" | "order" | "payment" | "subscription" |
+  /// "caretaker_profile" | "vet_profile" | "setting" | "webhook_event".
+  targetType  String
+  targetId    String @default("")
+  /// One human-readable line, written at the call site so the console never has
+  /// to reconstruct intent from the metadata blob.
+  summary     String
+  metadata    Json?
+  ip          String @default("")
+  createdAt   String
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
+  @@map("admin_audit_log")
+}
+
+/// Runtime configuration an admin can change without a deploy.
+///
+/// Deliberately small: a setting belongs here only when someone would
+/// genuinely need to change it at 2am. Anything that is a deploy-time concern
+/// stays an environment variable — `ASSISTANT_ENABLED` in particular is left
+/// as an env kill switch rather than mirrored here, because two switches for
+/// one behaviour is the redundancy this table exists to avoid.
+model SystemSetting {
+  key       String @id
+  value     Json
+  updatedAt String
+  updatedBy String @default("")
+
+  @@map("system_settings")
+}
+
+/// One recorded attempt against a rate-limited endpoint.
+///
+/// Counted in Postgres rather than Redis for the same reason the assistant's
+/// limiter is: this stack has no Redis, and adding one for a handful of
+/// counters would be the wrong trade. Two indexed `count` queries per attempt
+/// is cheap.
+///
+/// The window is a true sliding one. ISO-8601 sorts chronologically — the whole
+/// reason this codebase stores timestamps as strings — so `createdAt >= <an
+/// hour ago>` is a plain indexed comparison. An hourly bucket would let someone
+/// spend two hours' budget in the two minutes either side of the hour.
+model RateLimitHit {
+  id        String @id
+  /// Which limit this counts against, e.g. "signin" | "signup" | "password-reset".
+  bucket    String
+  /// Who is being counted: a user id, or a salted hash of IP + user agent.
+  /// Never a raw IP — this table must not become a log of who visited.
+  key       String
+  createdAt String
+
+  @@index([bucket, key, createdAt])
+  @@map("rate_limit_hits")
+}
+
+/// A movement of money, or an attempt at one.
+///
+/// The order model carried `paymentStatus` and `paymentRef` as two loose
+/// columns, which meant there was nowhere to record that money moved but the
+/// order didn't — precisely the state a crash between capture and commit used
+/// to produce. This is that ledger.
+///
+/// One row per provider intent or invoice. `orderId` is indexed but NOT unique:
+/// a customer whose first intent is cancelled can be issued a fresh one, and
+/// the order's live payment is the newest row that has not failed.
+model Payment {
+  id                  String   @id
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "order" | "subscription_invoice"
+  kind                String   @default("order")
+  /// Exactly one of these is set. Plain columns rather than a polymorphic FK,
+  /// following the precedent of Review.bookingId + Review.kind.
+  orderId             String?
+  subscriptionId      String?
+  /// "stripe" | "demo" | "none" (a zero-value order) | "manual"
+  provider            String   @default("stripe")
+  /// pi_… / in_… / demo_pi_…. Unique, which is what makes webhook replay safe.
+  providerRef         String   @unique
+  providerCustomerId  String   @default("")
+  /// PaymentStatus — see types/index.ts. Every write goes through the ledger's
+  /// applyIntentState, which checks canTransitionPayment first.
+  status              String   @default("unpaid")
+  amountCents         Int
+  amountRefundedCents Int      @default(0)
+  currency            String   @default("usd")
+  /// Snapshot for the receipt. Never a card number, never a token.
+  methodBrand         String   @default("")
+  methodLast4         String   @default("")
+  failureCode         String   @default("")
+  failureMessage      String   @default("")
+  /// `event.created` of the newest provider event applied, as ISO. Guards
+  /// against a delayed event overwriting a newer one.
+  lastEventAt         String   @default("")
+  createdAt           String
+  updatedAt           String
+  succeededAt         String?
+  refunds             Refund[]
+
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("payments")
+}
+
+/// Money going back.
+///
+/// Written at "pending" *before* the provider is called, so a crash between the
+/// two leaves a row a sweep can retry rather than a refund nobody knows was
+/// owed. Separate from Payment because a partial refund, a second partial, and
+/// who authorised each are all things a finance team asks about.
+model Refund {
+  id          String  @id
+  paymentId   String
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// re_… — null until the provider call returns.
+  providerRef String? @unique
+  amountCents Int
+  /// "pending" | "succeeded" | "failed" | "canceled"
+  status      String  @default("pending")
+  /// "requested_by_customer" | "duplicate" | "fraudulent" | "order_cancelled"
+  reason      String  @default("")
+  /// The staff member who issued it, or "system" when a cancellation did.
+  initiatedBy String  @default("system")
+  note        String  @default("")
+  createdAt   String
+  settledAt   String?
+
+  @@index([paymentId])
+  @@index([status])
+  @@map("refunds")
+}
+
+/// A subscription product. One row today: Leash Plus.
+///
+/// Thin on purpose — Stripe is the billing authority, and anything duplicated
+/// here is something that can disagree with it. What earns its place is what
+/// the app needs without a network call: the price to render on a marketing
+/// page, and the `stripePriceId` a webhook resolves back to a plan.
+model Plan {
+  id                 String         @id
+  key                String         @unique
+  name               String
+  description        String         @default("")
+  priceCents         Int
+  currency           String         @default("usd")
+  /// "month" | "year"
+  interval           String         @default("month")
+  stripeProductId    String         @default("")
+  stripePriceId      String         @default("")
+  /// "free_shipping" | "vet_consult_discount" | "priority_booking"
+  entitlements       String[]
+  consultDiscountPct Int            @default(0)
+  active             Boolean        @default(true)
+  createdAt          String
+  subscriptions      Subscription[]
+
+  @@map("plans")
+}
+
+/// Somebody's membership.
+///
+/// Status mirrors Stripe's own vocabulary rather than inventing a parallel one,
+/// because every value here arrives from a webhook and a translation layer is
+/// somewhere for the two to drift.
+model Subscription {
+  id                 String  @id
+  userId             String
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId             String
+  plan               Plan    @relation(fields: [planId], references: [id])
+  provider           String  @default("stripe")
+  providerRef        String  @unique
+  providerCustomerId String  @default("")
+  /// "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due"
+  /// | "unpaid" | "canceled"
+  status             String  @default("incomplete")
+  currentPeriodStart String
+  currentPeriodEnd   String
+  cancelAtPeriodEnd  Boolean @default(false)
+  canceledAt         String?
+  endedAt            String?
+  /// Set when dunning starts. Benefits survive until this passes — a card
+  /// expiring should not strip someone's free shipping mid-order while Stripe
+  /// is still retrying.
+  graceEndsAt        String?
+  latestInvoiceRef   String  @default("")
+  lastEventAt        String  @default("")
+  createdAt          String
+  updatedAt          String
+
+  @@index([userId, status])
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
+}
+
+/// One received provider event, kept for idempotency and for replay.
+///
+/// Keyed on the provider's own event id. The payload is stored so a staff
+/// member can re-run an event the automatic retries gave up on — which costs
+/// one JSON column and is the difference between "we lost a payment" and "we
+/// replayed it".
+model WebhookEvent {
+  id          String  @id
+  provider    String  @default("stripe")
+  type        String
+  apiVersion  String  @default("")
+  /// `event.created` as ISO, for ordering and the staleness guard.
+  eventAt     String
+  payload     Json
+  /// "received" | "processed" | "failed" | "skipped"
+  status      String  @default("received")
+  attempts    Int     @default(0)
+  /// When the current attempt claimed it. A stale lock means a previous attempt
+  /// died mid-flight and the event may be retried.
+  lockedAt    String?
+  error       String  @default("")
+  receivedAt  String
+  processedAt String?
+
+  @@index([type, eventAt])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
 }

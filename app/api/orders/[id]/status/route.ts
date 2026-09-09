@@ -25,6 +25,13 @@ export async function PATCH(request: Request, ctx: Ctx) {
   const result = await updateOrderStatus(id, status, options);
   if (result.ok) return ok(result.order);
   if (result.code === "not_found") return notFound(`Order ${id} not found`);
+  if (result.code === "concurrent_change") {
+    // Someone else moved it while this request was deciding — the cron, or
+    // another operator. Retrying against fresh state is the right answer.
+    return error("That order was just changed by someone else. Reload and try again.", 409, {
+      from: result.from,
+    });
+  }
   return error(
     `Cannot move an order from "${result.from}" to "${result.to}"`,
     409,

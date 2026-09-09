@@ -25,6 +25,12 @@ export const authConfig = {
       if (token.uid && session.user) {
         session.user.id = token.uid as string;
       }
+      // The JWT's own `iat`, carried through so requireUser() can refuse tokens
+      // minted before a password reset or a suspension. Copying a claim keeps
+      // this file free of the database import that proxy.ts could not load.
+      if (typeof token.iat === "number" && session.user) {
+        session.user.issuedAt = token.iat;
+      }
       return session;
     },
   },

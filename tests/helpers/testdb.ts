@@ -68,6 +68,18 @@ const SEED_TABLES = [
   "order_events",
   "assistant_conversations",
   "assistant_messages",
+  // Admin foundations. `admin_audit_log` references users, so it must follow
+  // them in this list — the INSERTs below run in order inside one transaction.
+  "admin_audit_log",
+  "system_settings",
+  // Payments. Order matters for the same reason: plans before subscriptions,
+  // payments before refunds.
+  "plans",
+  "subscriptions",
+  "payments",
+  "refunds",
+  "webhook_events",
+  "rate_limit_hits",
 ] as const;
 
 const q = (schema: string, table: string) => `"${schema}"."${table}"`;

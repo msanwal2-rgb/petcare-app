@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { cancelOrder, getOrderById } from "@/lib/api/orders";
+import { cancelOrder, getOrderById, syncOrderPayment } from "@/lib/api/orders";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { OrderTracking } from "@/components/store/OrderTracking";
@@ -25,7 +25,28 @@ export default function OrderDetailPage() {
   const { currentUser, hasHydrated } = useSession();
   const [cancelling, setCancelling] = useState(false);
 
-  const { data: order, loading, reload } = useAsync(() => getOrderById(id), [id]);
+  /**
+   * Arriving straight from the payment step. The browser knowing the card went
+   * through is not the same as the server knowing — that arrives on a webhook,
+   * which can lag by seconds. So the first fetch after paying asks the server
+   * to reconcile with the provider first, and the page shows the settled state
+   * rather than "awaiting payment" to somebody who has just paid.
+   */
+  const [justPaid] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("paid") === "1";
+  });
+
+  const { data: order, loading, reload } = useAsync(async () => {
+    if (justPaid) {
+      try {
+        return await syncOrderPayment(id);
+      } catch {
+        // The webhook may still land; fall through to a plain read.
+      }
+    }
+    return getOrderById(id);
+  }, [id, justPaid]);
 
   if (!hasHydrated || loading) {
     return (

@@ -73,7 +73,16 @@ export async function refreshSessionUser(): Promise<User | null> {
 /** Email + password sign-in. Throws on bad credentials. */
 export async function loginWithPassword(email: string, password: string): Promise<User> {
   const res = await signIn("credentials", { email, password, redirect: false });
-  if (!res || res.error) throw new Error("Invalid email or password");
+  if (!res || res.error) {
+    // Auth.js reports our thrown CredentialsSignin subclasses by `code`. Only
+    // the throttle is worth distinguishing: telling someone "wrong password"
+    // versus "no such account" is what makes an address list enumerable.
+    throw new Error(
+      res?.code === "RateLimited"
+        ? "Too many sign-in attempts. Try again in a few minutes."
+        : "Invalid email or password"
+    );
+  }
   const user = await refreshSessionUser();
   if (!user) throw new Error("Could not load your account");
   return user;
@@ -84,9 +93,22 @@ export function loginAsDemo(email: string): Promise<User> {
   return loginWithPassword(email, DEMO_PASSWORD);
 }
 
-/** Start the Google OAuth flow (redirects). */
+/**
+ * Start the Google OAuth flow (redirects).
+ *
+ * Honours the page's own `callbackUrl` through the same same-origin check the
+ * password path uses, so someone bounced off /booking/new who signs in with
+ * Google lands back on /booking/new rather than on a generic dashboard. A
+ * brand-new account has no roles yet, and /dashboard would only tell them to go
+ * and choose some, so they go straight to /onboarding — which is where the
+ * password signup flow already sends them.
+ */
 export function loginWithGoogle(): void {
-  void signIn("google", { callbackUrl: "/dashboard" });
+  const requested =
+    typeof window !== "undefined"
+      ? safeInternalPath(new URLSearchParams(window.location.search).get("callbackUrl"))
+      : null;
+  void signIn("google", { callbackUrl: requested ?? "/dashboard" });
 }
 
 /** Sign out everywhere: clear the Auth.js cookie and the local store. */

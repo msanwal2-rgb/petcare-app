@@ -9,15 +9,25 @@ import {
   updateAppointmentStatus,
 } from "@/lib/server/appointments";
 
+/**
+ * A fixed clock, and a slot comfortably beyond the 24-hour standard lead time.
+ *
+ * Both are needed now that booking enforces lead times: a fixture pinned to a
+ * past date would be refused, and "far enough ahead" has to be measured from
+ * something that does not move while the suite runs.
+ */
+const NOW = new Date("2026-08-01T09:00:00.000Z");
+const soon = (hoursFromNow: number) =>
+  new Date(NOW.getTime() + hoursFromNow * 3_600_000).toISOString();
+
 const newAppointment = {
-  ownerId: "u1",
   vetId: "v1",
   petId: "p1",
   mode: "in_clinic" as const,
   reason: "Limping after a long walk",
   symptoms: ["Limping"],
-  startDateTime: "2026-08-01T15:00:00Z",
-  endDateTime: "2026-08-01T15:30:00Z",
+  startDateTime: soon(48),
+  endDateTime: soon(48.5),
   notes: "",
 };
 
@@ -68,7 +78,7 @@ describe("appointment creation", () => {
   });
 
   it("creates an appointment in the requested state", async () => {
-    const res = await createAppointment(newAppointment, db);
+    const res = await createAppointment("u1", newAppointment, db, NOW);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.appointment.id).toMatch(/^a_/);
@@ -77,32 +87,26 @@ describe("appointment creation", () => {
   });
 
   it("takes the fee from the vet's profile, not the request", async () => {
-    const res = await createAppointment(
-      { ...newAppointment, vetId: "v2" },
-      db
-    );
+    const res = await createAppointment("u1", { ...newAppointment, vetId: "v2" }, db, NOW);
     expect(res.ok).toBe(true);
     // v2 charges 140; nothing in the request body could have said otherwise
     if (res.ok) expect(res.appointment.fee).toBe(140);
   });
 
   it("rejects an unknown vet", async () => {
-    const res = await createAppointment({ ...newAppointment, vetId: "ghost" }, db);
+    const res = await createAppointment("u1", { ...newAppointment, vetId: "ghost" }, db, NOW);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("vet_not_found");
   });
 
   it("rejects an unknown pet", async () => {
-    const res = await createAppointment({ ...newAppointment, petId: "ghost" }, db);
+    const res = await createAppointment("u1", { ...newAppointment, petId: "ghost" }, db, NOW);
     expect(res.ok).toBe(false);
   });
 
   it("rejects a species the vet doesn't treat", async () => {
     // p7 (Ziggy) is an "other" species; v1 accepts only dogs and cats
-    const res = await createAppointment(
-      { ...newAppointment, ownerId: "u5", petId: "p7" },
-      db
-    );
+    const res = await createAppointment("u5", { ...newAppointment, petId: "p7" }, db, NOW);
     expect(res.ok).toBe(false);
     if (!res.ok && res.code === "species_not_accepted") {
       expect(res.species).toBe("other");
@@ -111,7 +115,7 @@ describe("appointment creation", () => {
 
   it("rejects a consult mode the vet doesn't offer", async () => {
     // v1 offers in_clinic and video, not home visits
-    const res = await createAppointment({ ...newAppointment, mode: "home_visit" }, db);
+    const res = await createAppointment("u1", { ...newAppointment, mode: "home_visit" }, db, NOW);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.code).toBe("mode_not_offered");
   });

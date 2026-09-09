@@ -20,7 +20,7 @@ import {
   vetUsers as seedVetUsers,
 } from "@/lib/seed-data/vets";
 import {
-  opsUser as seedOpsUser,
+  staffUsers as seedStaffUsers,
   orders as seedOrders,
   products as seedProducts,
 } from "@/lib/seed-data/store";
@@ -28,8 +28,19 @@ import { hashPassword } from "./auth-logic";
 import { refreshResponseRate } from "./reputation";
 import { DEMO_PASSWORD } from "@/lib/auth/demo";
 
+/** Relative to seed time, so a seeded membership is never already expired. */
+function daysFromNow(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+
 /** Delete every row, in FK-safe order. */
 async function resetDatabase(db: PrismaClient) {
+  await db.refund.deleteMany();
+  await db.payment.deleteMany();
+  await db.subscription.deleteMany();
+  await db.plan.deleteMany();
+  await db.webhookEvent.deleteMany();
+  await db.rateLimitHit.deleteMany();
   await db.orderEvent.deleteMany();
   await db.orderItem.deleteMany();
   await db.order.deleteMany();
@@ -46,7 +57,9 @@ async function resetDatabase(db: PrismaClient) {
   await db.pricingEntry.deleteMany();
   await db.caretakerProfile.deleteMany();
   await db.pet.deleteMany();
+  await db.adminAuditLog.deleteMany();
   await db.user.deleteMany();
+  await db.systemSetting.deleteMany();
 }
 
 /** Reset, then insert the full mock dataset. Safe to run repeatedly. */
@@ -57,8 +70,31 @@ export async function seedDatabase(db: PrismaClient) {
   // (bcrypt.compare still validates it — the salt is embedded in the hash).
   const demoHash = await hashPassword(DEMO_PASSWORD);
 
-  // Owners/caretakers, vets, and the store's ops account all share one table.
-  const allUsers = [...seedUsers, ...seedVetUsers, seedOpsUser];
+  /**
+   * Staff do not get the demo password.
+   *
+   * Every other seeded account shares one password that is printed on the login
+   * page and in the README, which is fine for accounts that own a fictional
+   * dog. It is not fine for an account that can refund payments and grant
+   * itself colleagues — publishing the password to the admin console alongside
+   * the console's own address makes the site administrable by anyone who reads
+   * the docs.
+   *
+   * Set STAFF_PASSWORD to something real before seeding anything public.
+   */
+  const staffPassword = process.env.STAFF_PASSWORD;
+  if (!staffPassword) {
+    console.warn(
+      "\n⚠️  STAFF_PASSWORD is not set — the staff accounts (ops, support,\n" +
+        "   finance, admin) will share the public demo password. Fine locally;\n" +
+        "   set it to something real before seeding a database anyone can reach.\n"
+    );
+  }
+  const staffHash = staffPassword ? await hashPassword(staffPassword) : demoHash;
+  const staffIds = new Set(seedStaffUsers.map((u) => u.id));
+
+  // Owners/caretakers, vets, and the staff accounts all share one table.
+  const allUsers = [...seedUsers, ...seedVetUsers, ...seedStaffUsers];
   await db.user.createMany({
     data: allUsers.map((u) => ({
       id: u.id,
@@ -73,8 +109,11 @@ export async function seedDatabase(db: PrismaClient) {
       lng: u.address.lng,
       verified: u.verified,
       createdAt: u.createdAt,
-      passwordHash: demoHash,
-      isOps: u.id === seedOpsUser.id,
+      passwordHash: staffIds.has(u.id) ? staffHash : demoHash,
+      staffRoles: u.staffRoles ?? [],
+      // Kept in step with staffRoles until the column is dropped, so a rollback
+      // to the previous release finds the fulfilment console still reachable.
+      isOps: (u.staffRoles ?? []).some((r) => r === "ops" || r === "admin"),
     })),
   });
 
@@ -186,6 +225,9 @@ export async function seedDatabase(db: PrismaClient) {
         specialties: v.specialties,
         licenseNumber: v.licenseNumber,
         licenseState: v.licenseState,
+        // The seeded vets are the demo's licensed professionals, so the
+        // directory doesn't read as entirely unverified on a fresh database.
+        verificationStatus: v.verificationStatus ?? "verified",
         yearsExperience: v.yearsExperience,
         acceptedSpecies: v.acceptedSpecies,
         consultModes: v.consultModes,
@@ -233,7 +275,111 @@ export async function seedDatabase(db: PrismaClient) {
         events: { create: events },
       },
     });
+
+    // A ledger row for each seeded order.
+    //
+    // Seeded orders carry `paymentRef` and `paymentStatus` because they predate
+    // the ledger, and without a matching Payment row a refund from the admin
+    // console would find nothing to refund. Reconstructed rather than
+    // hand-authored so the two can't disagree.
+    if (order.paymentRef) {
+      await db.payment.create({
+        data: {
+          id: `pay_seed_${order.id}`,
+          userId: order.userId,
+          kind: "order",
+          orderId: order.id,
+          provider: "demo",
+          providerRef: order.paymentRef,
+          status: order.paymentStatus ?? "paid",
+          amountCents: order.totalCents,
+          amountRefundedCents:
+            order.paymentStatus === "refunded" ? order.totalCents : 0,
+          currency: "usd",
+          methodBrand: "demo",
+          methodLast4: "0000",
+          createdAt: order.placedAt,
+          updatedAt: order.placedAt,
+          succeededAt: order.paymentStatus === "paid" ? order.placedAt : null,
+        },
+      });
+    }
   }
+
+  /* ── Membership ───────────────────────────────────────────────────── */
+
+  // The plan itself is inserted by migration 9 rather than seeded, because it
+  // is configuration the production database needs whether or not it was ever
+  // seeded. Re-asserted here so a `db push` test schema, which runs no
+  // migrations, has one too.
+  const plan = await db.plan.upsert({
+    where: { id: "plan_leash_plus" },
+    update: {},
+    create: {
+      id: "plan_leash_plus",
+      key: "leash_plus",
+      name: "Leash Plus",
+      description:
+        "Free delivery on everything, 20% off every vet consultation, and same-day booking.",
+      priceCents: 999,
+      currency: "usd",
+      interval: "month",
+      entitlements: ["free_shipping", "vet_consult_discount", "priority_booking"],
+      consultDiscountPct: 20,
+      active: true,
+      createdAt: "2026-09-09T00:00:00.000Z",
+    },
+  });
+
+  // Three subscribers, one per state worth being able to demonstrate: a member
+  // in good standing, one whose card just failed, and one who has left.
+  //
+  // ⚠️ Deliberately NOT u1 (Maya) or any account whose order totals the test
+  // suite asserts on — free shipping changes what `quoteCart` returns, and
+  // tests/orders.test.ts checks exact cents for u1.
+  await db.subscription.createMany({
+    data: [
+      {
+        id: "sub_seed_active",
+        userId: "u5",
+        planId: plan.id,
+        provider: "demo",
+        providerRef: "demo_sub_active",
+        status: "active",
+        currentPeriodStart: daysFromNow(-4),
+        currentPeriodEnd: daysFromNow(26),
+        createdAt: daysFromNow(-64),
+        updatedAt: daysFromNow(-4),
+      },
+      {
+        id: "sub_seed_past_due",
+        userId: "u6",
+        planId: plan.id,
+        provider: "demo",
+        providerRef: "demo_sub_past_due",
+        status: "past_due",
+        currentPeriodStart: daysFromNow(-2),
+        currentPeriodEnd: daysFromNow(28),
+        graceEndsAt: daysFromNow(5),
+        createdAt: daysFromNow(-92),
+        updatedAt: daysFromNow(-2),
+      },
+      {
+        id: "sub_seed_canceled",
+        userId: "u8",
+        planId: plan.id,
+        provider: "demo",
+        providerRef: "demo_sub_canceled",
+        status: "canceled",
+        currentPeriodStart: daysFromNow(-40),
+        currentPeriodEnd: daysFromNow(-10),
+        canceledAt: daysFromNow(-12),
+        endedAt: daysFromNow(-10),
+        createdAt: daysFromNow(-130),
+        updatedAt: daysFromNow(-10),
+      },
+    ],
+  });
 
   // responseRatePct is derived, so the fixtures must not get to hand-author it
   // either — otherwise the seeded number contradicts the real one the moment

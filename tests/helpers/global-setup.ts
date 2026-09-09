@@ -56,6 +56,15 @@ export default async function setup() {
   // Seed once, then snapshot it for the per-test restore.
   const db = new PrismaClient({ datasources: { db: { url: testUrl } } });
   try {
+    // `db push` builds from schema.prisma alone, so anything the migrations
+    // write by hand does not exist here. Re-apply it, or the constraint the
+    // production database enforces is one the tests never see.
+    await db.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "subscriptions_one_live_per_user"
+        ON "${TEST_SCHEMA}"."subscriptions"("userId")
+        WHERE "status" IN ('trialing', 'active', 'past_due', 'unpaid')
+    `);
+
     await seedDatabase(db);
 
     // The assistant's retrieval corpus, embedded with the deterministic hash

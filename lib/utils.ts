@@ -10,7 +10,10 @@ import type {
   BookingStatus,
   UserRole,
   VetSpecialty,
+  StaffRole,
+  AccountStatus,
 } from "@/types";
+import type { StatusTone } from "@/components/ui/StatusBadge";
 
 /** Tiny className joiner — one dependency fewer than clsx, same ergonomics. */
 export function cn(...parts: Array<string | false | null | undefined>): string {
@@ -124,6 +127,32 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   owner: "Owner",
   caretaker: "Caretaker",
   vet: "Vet",
+};
+export const ROLE_OPTIONS = Object.keys(ROLE_LABELS) as UserRole[];
+
+/** Staff privileges, spelled out. The console shows these, never the raw slug. */
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  ops: "Fulfilment",
+  support: "Support",
+  finance: "Finance",
+  admin: "Administrator",
+};
+export const STAFF_ROLE_OPTIONS = Object.keys(STAFF_ROLE_LABELS) as StaffRole[];
+
+export const ACCOUNT_STATUS_LABELS: Record<AccountStatus, string> = {
+  active: "Active",
+  suspended: "Suspended",
+  deleted: "Deleted",
+};
+export const ACCOUNT_STATUS_OPTIONS = Object.keys(
+  ACCOUNT_STATUS_LABELS
+) as AccountStatus[];
+
+/** Which status colour an account gets in a list. */
+export const ACCOUNT_STATUS_TONE: Record<AccountStatus, StatusTone> = {
+  active: "done",
+  suspended: "failed",
+  deleted: "muted",
 };
 
 /* ── Vet care labels ─────────────────────────────────────────────────── */

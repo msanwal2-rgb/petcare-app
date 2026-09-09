@@ -8,6 +8,8 @@ import {
 } from "@/lib/server/users";
 import { users as seedUsers } from "@/lib/seed-data";
 import { vetUsers } from "@/lib/seed-data/vets";
+import { staffUsers } from "@/lib/seed-data/store";
+import { updateUserSchema } from "@/lib/validation/schemas";
 
 beforeEach(async () => {
   await resetToSnapshot(db);
@@ -45,7 +47,7 @@ describe("users", () => {
 
   it("lists all seeded users", async () => {
     // Derived, not a magic number — adding a seed user shouldn't fail this.
-    const expected = seedUsers.length + vetUsers.length + 1; // +1 store ops account
+    const expected = seedUsers.length + vetUsers.length + staffUsers.length;
     expect((await listUsers(db)).length).toBe(expected);
   });
 
@@ -54,14 +56,26 @@ describe("users", () => {
       "u2",
       {
         name: "Daniel R.",
-        verified: true,
         address: { city: "Dallas", state: "TX", lat: 32.78, lng: -96.8 },
       },
       db
     );
     expect(updated!.name).toBe("Daniel R.");
-    expect(updated!.verified).toBe(true);
     expect(updated!.address.city).toBe("Dallas");
+  });
+
+  it("cannot be used to mark yourself verified", () => {
+    // The email-verification badge is not self-service. Enforced by the schema
+    // rather than the handler, so every caller inherits it.
+    const parsed = updateUserSchema.safeParse({ name: "x", verified: true });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && "verified" in parsed.data).toBe(false);
+  });
+
+  it("cannot be used to change the account email", () => {
+    const parsed = updateUserSchema.safeParse({ email: "someone.else@example.com" });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && "email" in parsed.data).toBe(false);
   });
 
   it("updates roles (onboarding role selection)", async () => {

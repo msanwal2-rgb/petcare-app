@@ -7,6 +7,14 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { ShippingAddress } from "@/types";
 import { placeOrder, quoteCart } from "@/lib/api/orders";
+import { PaymentForm } from "@/components/store/PaymentForm";
+
+/**
+ * Publishable by design — it identifies the account, it authorises nothing, and
+ * Stripe's own docs put it in client code. The secret key never leaves the
+ * server. An empty value means the demo provider is active.
+ */
+const STRIPE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 import { getPetsByOwner } from "@/lib/api/pets";
 import { getBookingsByOwner } from "@/lib/api/bookings";
 import { getCaretakerById } from "@/lib/api/caretakers";
@@ -22,7 +30,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { AlertIcon, HomeIcon } from "@/components/ui/icons";
 import { cn, formatCents, formatRange } from "@/lib/utils";
 
-const STEPS = ["Address", "Review", "Placed"];
+/**
+ * "Pay" is its own step now that a card is genuinely collected. With the demo
+ * provider the order settles the instant it is created, so that step is skipped
+ * and the flow is the two it always was.
+ */
+const STEPS = ["Address", "Review", "Pay"];
 
 const EMPTY_ADDRESS: ShippingAddress = {
   name: "",
@@ -48,6 +61,12 @@ export default function CheckoutPage() {
   const [instructions, setInstructions] = useState("");
   const [step, setStep] = useState(0);
   const [placing, setPlacing] = useState(false);
+  /** Set once an order exists and is waiting for the customer to confirm a card. */
+  const [pending, setPending] = useState<{
+    orderId: string;
+    clientSecret: string;
+    amountCents: number;
+  } | null>(null);
 
   const { data: pets } = useAsync(
     () => (currentUser ? getPetsByOwner(currentUser.id) : Promise.resolve([])),
@@ -145,6 +164,25 @@ export default function CheckoutPage() {
         deliveryInstructions: instructions.trim(),
         petId: petId ?? undefined,
       });
+
+      // A synchronous provider (the demo) has already settled, and the order
+      // comes back paid. A real one hands back a client secret and the customer
+      // has a card to enter.
+      if (order.payment?.clientSecret) {
+        setPending({
+          orderId: order.id,
+          clientSecret: order.payment.clientSecret,
+          amountCents: order.totalCents,
+        });
+        // The basket is cleared here rather than after payment: the order now
+        // exists and holds the stock, so leaving the cart full would let them
+        // place a second one for the same items.
+        clear();
+        setStep(2);
+        setPlacing(false);
+        return;
+      }
+
       clear();
       toast.success("Order placed", { description: "We'll start picking it now." });
       router.push(`/store/orders/${order.id}`);
@@ -363,20 +401,53 @@ export default function CheckoutPage() {
                 </ul>
               </div>
 
-              <p className="rounded-xl bg-fog px-4 py-3 text-xs text-charcoal/70">
-                <strong className="text-ink">Demo payment.</strong> No card is
-                collected and no money moves. The order, its charges and its
-                delivery tracking are otherwise real.
-              </p>
+              {!STRIPE_KEY && (
+                <p className="rounded-xl bg-fog px-4 py-3 text-xs text-charcoal/70">
+                  <strong className="text-ink">Demo payment.</strong> No card is
+                  collected and no money moves. The order, its charges and its
+                  delivery tracking are otherwise real.
+                </p>
+              )}
 
               <div className="flex justify-between">
                 <Button variant="ghost" onClick={() => setStep(0)}>
                   Back
                 </Button>
                 <Button variant="cta" disabled={placing || blocked} onClick={submit}>
-                  {placing ? "Placing order…" : `Pay ${formatCents(quote.totalCents)}`}
+                  {placing
+                    ? "Placing order…"
+                    : STRIPE_KEY
+                      ? "Continue to payment"
+                      : `Pay ${formatCents(quote.totalCents)}`}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {step === 2 && pending && STRIPE_KEY && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold text-ink">Payment</h2>
+              <PaymentForm
+                clientSecret={pending.clientSecret}
+                publishableKey={STRIPE_KEY}
+                amountCents={pending.amountCents}
+                returnUrl={`${typeof window === "undefined" ? "" : window.location.origin}/store/orders/${pending.orderId}?paid=1`}
+                onPaid={() => {
+                  toast.success("Payment received", {
+                    description: "We'll start picking your order.",
+                  });
+                  router.push(`/store/orders/${pending.orderId}?paid=1`);
+                }}
+                onBack={() => setStep(1)}
+              />
+              <p className="text-xs text-charcoal/55">
+                Your order is held for 15 minutes while you pay. If you leave
+                now you can finish from your{" "}
+                <Link href="/store/orders" className="underline hover:text-ink">
+                  order list
+                </Link>
+                .
+              </p>
             </div>
           )}
         </div>

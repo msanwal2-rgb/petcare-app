@@ -20,20 +20,20 @@ of these, and pages call **only** those functions.
 
 | Method | Path | Auth | Response |
 |---|---|---|---|
-| GET | `/api/users/:id` | public | `User` · 404 |
-| GET | `/api/users?ids=a,b,c` | signed in | `User[]` |
+| GET | `/api/users/:id` | public | **`PublicUser`** · 404 — name, avatar, roles, city/state. It used to return the whole record, email and home coordinates included, against ids that count upward from `u1` |
+| GET | `/api/users?ids=a,b,c` | signed in | `PublicUser[]`, capped at 50 ids |
 | GET | `/api/users` | signed in, **development only** | `User[]` — returns every email, so it is refused in production |
 | GET | `/api/me` | signed in | the authenticated `User` |
 | POST | `/api/signup` | public | `User` (201) · 409 if the email is taken. The only way to create an account: hashes a password and sends a verification link |
-| PATCH | `/api/users/:id` | self only | `User` |
+| PATCH | `/api/users/:id` | self only | `User`. Accepts name, phone, avatar, roles and address — **not** `verified` (that was self-service privilege escalation) and not `email` (no re-verification flow exists) |
 
 ## Pets — `/lib/api/pets.ts`
 
 | Method | Path | Request | Response | Called by |
 |---|---|---|---|---|
 | GET | `/api/owners/:ownerId/pets` | — | `Pet[]` | `/dashboard` (owner), `/booking/new` |
-| GET | `/api/pets/:id` | — | `Pet` · 404 → `null` | `/dashboard/pets/[id]`, `/booking/[id]` |
-| GET | `/api/pets?ids=a,b,c` | query `ids` (csv) | `Pet[]` | `/booking/[id]`, caretaker request view |
+| GET | `/api/pets/:id` | — | `Pet` · 404 | the owner, or a caretaker/vet currently looking after it. Was public, and returned medications, allergies, behaviour notes and the household vet's phone |
+| GET | `/api/pets?ids=a,b,c` | query `ids` (csv, max 50) | `Pet[]` — filtered to the ones you may see | `/booking/[id]`, caretaker request view |
 | POST | `/api/owners/:ownerId/pets` | `PetInput` (`Pet` w/o `id`) | `Pet` (201) | `/dashboard/pets/new` |
 | PATCH | `/api/pets/:id` | `Partial<PetInput>` | `Pet` | `/dashboard/pets/[id]` |
 
@@ -59,13 +59,22 @@ ascending; otherwise sort by rating descending.
 | GET | `/api/owners/:ownerId/bookings` | — | `Booking[]` (newest first) | `/dashboard` (owner) |
 | GET | `/api/caretakers/:caretakerId/bookings` | — | `Booking[]` (newest first) | `/dashboard` (caretaker) |
 | GET | `/api/bookings/:id` | — | `Booking` · 404 → `null` | `/booking/[id]` |
-| POST | `/api/bookings` | `CreateBookingInput` | `Booking` (201, status=`requested`) | `/booking/new` |
+| POST | `/api/bookings` | `CreateBookingInput` — **no price** | `Booking` (201, status=`requested`) · 400 unknown caretaker/service/dates | `/booking/new` |
 | PATCH | `/api/bookings/:id/status` | `{ status: BookingStatus }` | `Booking` | `/booking/[id]`, `/dashboard` (accept/decline), Confirm & Pay |
 
 **Status lifecycle:** `requested → accepted → in_progress → completed`, with
-`declined` (caretaker) and `cancelled` (either party) as terminal branches. The
-mock "Confirm & Pay" step transitions `accepted → in_progress` — a real build
-would authorize/hold payment here (foundation §3, §5; Stripe Connect escrow).
+`declined` (caretaker) and `cancelled` (either party) as terminal branches.
+
+Two things are enforced separately, as they always were for appointments:
+`TRANSITIONS` says what is reachable and `ACTOR_ALLOWED` says who may do it.
+Accepting, declining, starting and completing belong to the **caretaker**;
+either party may cancel. Without the second check an owner could accept and
+complete their own booking, which feeds `refreshResponseRate` and unlocks the
+review form.
+
+`priceTotal` is **computed by the server** from the caretaker's `PricingEntry`
+multiplied by the duration. It used to arrive in the request body as a bare
+`z.number()`, so a booking could be created for $0 or a negative amount.
 
 ## Reviews — `/lib/api/reviews.ts`
 
@@ -101,7 +110,7 @@ from the rows would erase it.
 
 | Method | Path | Auth | Response |
 |---|---|---|---|
-| POST | `/api/appointments` | signed in, `ownerId` = you, pet is yours | `VetAppointment` (201, `requested`). **No `fee`** — the server reads it off the vet's profile. 400 if the vet doesn't treat that species or offer that format |
+| POST | `/api/appointments` | signed in, pet is yours | `VetAppointment` (201, `requested`). **No `fee` and no `ownerId`** — the fee comes off the vet's profile and the owner is whoever is signed in. 400 if the vet doesn't treat that species or offer that format; 409 `lead_time` if the slot is sooner than the caller may book |
 | GET | `/api/appointments/:id` | participant | `VetAppointment` · 404 |
 | PATCH | `/api/appointments/:id/status` | participant | `VetAppointment` · 409 illegal transition · 403 wrong party. Owner may `cancel`; only the vet may `confirm`, `decline`, start or complete |
 | GET | `/api/owners/:ownerId/appointments` | self only | `VetAppointment[]` |
@@ -146,16 +155,28 @@ product slugs it names in the store.
 | Method | Path | Auth | Response |
 |---|---|---|---|
 | POST | `/api/orders/quote` | signed in; `petId` must be yours | `CartQuote` — server-side re-pricing plus the prescription check |
-| POST | `/api/orders` | signed in | `Order` (201). The body carries items and an address, **never prices**. 409 with the quote when a line is unavailable, or with `productId` when stock ran out mid-checkout |
+| POST | `/api/orders` | signed in | `PlacedOrder` (201) — the order plus a `payment` block carrying the `clientSecret` the browser needs. The body carries items and an address, **never prices**. 409 with the quote when a line is unavailable, or with `productId` when stock ran out mid-checkout; 502 `payment_setup_failed` with the `orderId` when the provider could not be reached |
 | GET | `/api/orders` | signed in | your `Order[]`, newest first |
 | GET | `/api/orders/:id` | the customer, or ops | `Order` with items and the tracking timeline |
 | POST | `/api/orders/:id/cancel` | the customer | `Order` · 409 once shipped. Returns the stock |
 | PATCH | `/api/orders/:id/status` | **ops only** | `Order` · 409 illegal transition. Appends the tracking event |
-| GET | `/api/ops/orders` | **ops only** | the fulfilment queue, oldest first |
+| POST | `/api/orders/:id/payment/sync` | the customer | `Order` — re-checks with the provider. The confirmation page calls it because the browser knowing a card went through is not the same as the server knowing |
+| GET | `/api/ops/orders` | **ops only** | the fulfilment queue, oldest first. Excludes `pending_payment`: an unpaid basket is not a parcel |
 
 Lifecycle: `pending_payment → paid → processing → packed → shipped →
 out_for_delivery → delivered`, with `cancelled` and `refunded` as terminal
-branches. Cancelling or refunding returns stock to the catalog.
+branches.
+
+`pending_payment` is where an order now *starts*. Checkout reserves the stock
+and creates the order before any money moves, then creates a payment intent; the
+order becomes `paid` when the provider says so, on a webhook. The previous order
+of operations — charge, then write the row — meant a crash in between left a
+real charge with no order and no trace of it anywhere.
+
+Cancelling or refunding returns stock to the catalogue **only if the order never
+shipped**; `delivered → refunded` is legal, and restocking it would credit
+inventory for goods sitting in someone's house. Cancelling a paid order now also
+refunds it, which it previously did not.
 
 ---
 
@@ -201,6 +222,100 @@ probed. Rate limits are counted in Postgres over a sliding window: 10/hour and
 30/day for anonymous visitors keyed on a salted hash of IP and user agent,
 40/hour and 200/day for signed-in customers keyed on their user id.
 
+
+---
+
+## Membership — `/lib/api/membership.ts`
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/membership` | signed in | `MembershipView` — what you're entitled to, and the plan you could buy |
+| POST | `/api/membership/checkout` | signed in | `{ url }` — hosted checkout. 409 if already a member, 503 when the provider or the price isn't configured |
+| POST | `/api/membership/cancel` | signed in | `{ ok, endsAt }` — at the end of the period already paid for |
+| POST | `/api/membership/resume` | signed in | `{ ok }` — undo a cancellation that hasn't taken effect |
+| POST | `/api/membership/portal` | signed in | `{ url }` — the provider's billing portal, for cards and invoices |
+| POST | `/api/membership/sync` | signed in | `Membership` — for a slow or lost webhook |
+
+**Leash Plus** grants three things, and all three are enforced server-side
+rather than displayed:
+
+- **free shipping** — `quoteCart` reads the membership itself and passes a
+  boolean to `shippingFor`. There is no membership field in `quoteCartSchema` or
+  `createOrderSchema`, so there is nothing for a client to claim.
+- **a consultation discount** — `createAppointment` snapshots `baseFee`,
+  `discountPct` and `fee`, so a membership that lapses later cannot rewrite what
+  somebody was quoted.
+- **priority booking** — members may request a slot 2 hours out; everyone else
+  24. Same-day appointments are the benefit, not a badge.
+
+Membership is **never a session claim**. Sessions are JWTs with no adapter, so
+there is no row to invalidate: a `plus: true` claim would keep asserting itself
+after a cancellation for the token's full thirty-day life, and the user decides
+when to re-authenticate. Every pricing path reads the database.
+
+Benefits survive a failed renewal for a grace window (`DUNNING_GRACE_DAYS`)
+while the provider retries — a card expiring should not strip someone's free
+shipping mid-order.
+
+## Administration — `/lib/api/admin.ts`
+
+Every endpoint opens with `requireStaff(role)`; every mutation writes an
+`AdminAuditLog` row through `recordAdminAction()`, which is the only thing that
+writes one.
+
+| Method | Path | Role | Response |
+|---|---|---|---|
+| GET | `/api/admin/stats` | support | `AdminStats` |
+| GET | `/api/admin/users` | support | `AdminUserPage` — `q`, `role`, `staffRole`, `status`, `verified`, `authMethod`, `sort`, `limit`/`offset` |
+| GET | `/api/admin/users/:id` | support | `AdminUserDetail` — the account, its counts, its recent orders and its professional profiles in one round trip |
+| PATCH | `/api/admin/users/:id` | support | `User`. One action per request: `verify`, `suspend`, `reactivate`, `sign_out`, `set_roles`, `set_staff_roles` (**admin**) |
+| DELETE | `/api/admin/users/:id` | admin | soft delete — the row survives, the person is scrubbed |
+| GET | `/api/admin/payments` | finance | `AdminPaymentPage`, with captured/refunded totals over the filtered set |
+| POST | `/api/admin/payments/:id/refund` | finance | full or partial refund, through the same `requestRefund` a cancellation uses |
+| GET | `/api/admin/subscriptions` | finance | `AdminSubscriptionPage`, with active count and normalised MRR |
+| PATCH | `/api/admin/subscriptions/:id` | finance | `cancel` (at period end, or immediately) · `extend_grace` |
+| GET | `/api/admin/audit` | admin | every privileged action, filterable by actor, action and target |
+| GET/PATCH | `/api/admin/settings` | admin | `SystemSettings` |
+
+**Staff roles** are `User.staffRoles` — `"ops" | "support" | "finance" |
+"admin"`, replacing the single `isOps` boolean. `admin` satisfies every other
+role, stated once in `hasStaffRole` rather than remembered at each call site.
+Two refusals are enforced in the domain, not the route: nobody may edit their
+own staff roles, and the last active admin cannot be demoted or deleted.
+
+Deletion is deliberately **soft**. `OrderItem.product` is `onDelete: Restrict`
+while most relations cascade, so a hard delete would either fail or take the
+customer's order history, their reviews and the other side of their bookings
+with it. Identity is erased; the financial and reputational skeleton stays.
+
+## Webhooks
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| POST | `/api/webhooks/stripe` | the provider's signature over the raw body | `{ received: true }` · 400 unsigned or invalid · 403 when `STRIPE_WEBHOOK_SECRET` is unset |
+
+The one route that must **not** use `parseBody`: verification is computed over
+the exact bytes sent, and parsing then re-serialising produces a different
+string. It reads `request.text()` and verifies before looking at the contents.
+With no secret configured it refuses everything, the same posture the cron takes
+without `CRON_SECRET`.
+
+Idempotency is a `WebhookEvent` table keyed on the provider's event id, with a
+claim protocol rather than dedupe-on-insert — inserting `received`, crashing,
+and then returning 200 to the retry loses the event permanently. Claims are
+`new`, `duplicate`, `retry` (a stale lock, so a previous attempt died),
+`in_flight` (→ 500, come back later) and `exhausted`.
+
+Ordering is by `event.created`, never arrival: subscription payloads carry
+complete state, so last-writer-wins is only correct if "last" means most
+recently created. A delayed `past_due` landing after a later `invoice.paid`
+would otherwise strip a paying member's benefits.
+
+**Business-level refusals answer 200** — an unhandled type, an unresolvable
+subject, a stale event, an illegal transition. None of them become possible on a
+retry, and a 500 buys three days of redelivery for an event that will be refused
+identically every time. Only a genuine failure answers 500.
+
 ## Scheduled jobs
 
 | Method | Path | Auth | Response |
@@ -217,19 +332,20 @@ endpoint refuses everything rather than falling open.
 
 ## What is simulated
 
-Everything above is real: real accounts, sessions, records and rules. Two
-things are deliberately not, and both are isolated behind a seam so replacing
-them is an implementation, not a rewrite:
+Everything above is real: real accounts, sessions, records and rules. One thing
+is deliberately not:
 
-- **Payments.** `lib/server/payments.ts` defines a `PaymentProvider` interface
-  with a demo implementation that authorises and captures instantly. No card is
-  collected and no money moves. The `paymentStatus` machine, the refund path
-  and the order totals are real; going live means a new implementation plus a
-  webhook into the order status machine.
 - **Fulfilment.** There is no warehouse. Orders advance either from the ops
   console at `/dashboard/orders` or from the cron at
   `POST /api/cron/advance-orders`, and each advance writes the same
   customer-visible tracking event a real carrier integration would.
+
+**Payments are real when configured.** `lib/server/payments.ts` chooses a
+provider from `LEASH_PAYMENTS` and **fails closed**: `stripe` with no secret key
+throws at startup rather than taking pretend money for real orders. The demo
+provider remains, settling inline through the *same* reconciler the webhook
+uses, so the seeded data and most of the test suite run with no credential —
+one code path, not two.
 
 Not simulated, despite what an older version of this file claimed:
 authentication (Auth.js with real sessions and password hashing), email

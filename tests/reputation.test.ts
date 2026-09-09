@@ -81,7 +81,6 @@ describe("caretaker response rate", () => {
         startDateTime: "2026-09-01T09:00:00Z",
         endDateTime: "2026-09-01T10:00:00Z",
         notes: "",
-        priceTotal: 28,
       },
       db
     );
@@ -108,19 +107,25 @@ describe("vet response rate", () => {
 
   it("falls when a new appointment request arrives", async () => {
     const before = await rate("v1", "vet");
+    // Two days out, measured from a fixed clock, so the lead-time rule is
+    // satisfied without the fixture ageing into the past.
+    const now = new Date("2026-09-01T09:00:00.000Z");
+    const at = (h: number) =>
+      new Date(now.getTime() + h * 3_600_000).toISOString();
     await createAppointment(
+      "u1",
       {
-        ownerId: "u1",
         vetId: "v1",
         petId: "p1",
         mode: "in_clinic",
         reason: "Second opinion",
         symptoms: [],
-        startDateTime: "2026-09-02T15:00:00Z",
-        endDateTime: "2026-09-02T15:30:00Z",
+        startDateTime: at(48),
+        endDateTime: at(48.5),
         notes: "",
       },
-      db
+      db,
+      now
     );
     expect(await rate("v1", "vet")).toBeLessThan(before);
   });

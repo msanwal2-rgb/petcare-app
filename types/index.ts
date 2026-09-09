@@ -6,6 +6,15 @@
 
 export type UserRole = "owner" | "caretaker" | "vet";
 
+/**
+ * Staff privileges. Orthogonal to `UserRole` — those say what someone does in
+ * the marketplace, these say what they may do to it. "admin" satisfies every
+ * check.
+ */
+export type StaffRole = "ops" | "support" | "finance" | "admin";
+
+export type AccountStatus = "active" | "suspended" | "deleted";
+
 export interface User {
   id: string;
   name: string;
@@ -16,6 +25,285 @@ export interface User {
   address: { city: string; state: string; lat: number; lng: number };
   verified: boolean;
   createdAt: string; // ISO 8601
+  /**
+   * The caller's own staff privileges. Safe to send to the client because it
+   * only ever describes the user it is sent to — it is what lets the header
+   * decide whether to show an "Admin" link, and nothing is authorised by it.
+   */
+  staffRoles: StaffRole[];
+  status: AccountStatus;
+}
+
+/**
+ * A user as anyone may see them: enough to render a caretaker card or a review
+ * byline, and nothing that would make the id space worth enumerating. Contrast
+ * `User`, which carries email, phone and home coordinates.
+ */
+export interface PublicUser {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  roles: UserRole[];
+  address: { city: string; state: string };
+  verified: boolean;
+  createdAt: string;
+}
+
+/* ── Membership ───────────────────────────────────────────────── */
+
+/** What a plan grants. Enforced server-side, never a badge. */
+export type Entitlement =
+  | "free_shipping"
+  | "vet_consult_discount"
+  | "priority_booking";
+
+/**
+ * Stripe's own subscription vocabulary rather than a parallel one of our own —
+ * every value arrives from a webhook, and a translation layer is somewhere for
+ * the two to drift.
+ */
+export type SubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "unpaid"
+  | "canceled";
+
+export interface Plan {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  currency: string;
+  interval: string;
+  entitlements: Entitlement[];
+  consultDiscountPct: number;
+  active: boolean;
+  /** False until the plan exists in the payment provider. */
+  purchasable: boolean;
+}
+
+/** The answer to "what is this customer entitled to, right now?". */
+export interface Membership {
+  active: boolean;
+  planKey: string | null;
+  planName: string | null;
+  status: SubscriptionStatus | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  /** True while a failed renewal is still being retried. */
+  inGrace: boolean;
+  entitlements: Entitlement[];
+  consultDiscountPct: number;
+}
+
+/** What /api/membership returns: what you have, and what you could have. */
+export interface MembershipView {
+  membership: Membership;
+  plan: Plan | null;
+}
+
+export type RefundStatus = "pending" | "succeeded" | "failed" | "canceled";
+
+/* ── Administration ───────────────────────────────────────────── */
+
+/** How an account can authenticate. The presence of a credential, never the credential. */
+export type AuthMethod = "password" | "google";
+
+export interface AdminUserSummary {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string;
+  roles: UserRole[];
+  staffRoles: StaffRole[];
+  status: AccountStatus;
+  verified: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  city: string;
+  state: string;
+  authMethods: AuthMethod[];
+}
+
+export interface AdminUserPage {
+  items: AdminUserSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdminOrderSummary {
+  id: string;
+  status: string;
+  paymentStatus: string;
+  totalCents: number;
+  placedAt: string;
+}
+
+export interface AdminUserDetail extends AdminUserSummary {
+  phone: string;
+  address: { city: string; state: string; lat: number; lng: number };
+  suspendedAt: string | null;
+  suspendedReason: string;
+  deletedAt: string | null;
+  sessionsValidFrom: string | null;
+  counts: {
+    pets: number;
+    bookings: number;
+    appointments: number;
+    orders: number;
+    unreadNotifications: number;
+  };
+  recentOrders: AdminOrderSummary[];
+  caretakerProfile: {
+    id: string;
+    backgroundCheckStatus: string;
+    rating: number;
+    reviewCount: number;
+  } | null;
+  vetProfile: {
+    id: string;
+    clinicName: string;
+    licenseNumber: string;
+    licenseState: string;
+  } | null;
+}
+
+/** The overview page. Every number here is a link to the list that explains it. */
+export interface AdminStats {
+  users: {
+    total: number;
+    newLast7Days: number;
+    newLast30Days: number;
+    suspended: number;
+    unverified: number;
+    staff: number;
+  };
+  bookings: { total: number; byStatus: Record<string, number> };
+  appointments: { total: number; byStatus: Record<string, number> };
+  orders: {
+    total: number;
+    grossCents: number;
+    byStatus: Record<string, number>;
+    awaitingFulfilment: number;
+  };
+  catalog: { active: number; outOfStock: number };
+  assistant: { conversations: number; messagesLast7Days: number };
+}
+
+export interface AdminRefundRow {
+  id: string;
+  amountCents: number;
+  status: RefundStatus;
+  reason: string;
+  initiatedBy: string;
+  createdAt: string;
+  settledAt: string | null;
+}
+
+export interface AdminPaymentRow {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  kind: string;
+  orderId: string | null;
+  provider: string;
+  providerRef: string;
+  status: PaymentStatus;
+  amountCents: number;
+  amountRefundedCents: number;
+  currency: string;
+  methodBrand: string;
+  methodLast4: string;
+  failureMessage: string;
+  createdAt: string;
+  succeededAt: string | null;
+  refunds: AdminRefundRow[];
+}
+
+export interface AdminPaymentPage {
+  items: AdminPaymentRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  /** Totals over the filtered set, so they describe what is on screen. */
+  capturedCents: number;
+  refundedCents: number;
+}
+
+export interface AdminSubscriptionRow {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  planName: string;
+  priceCents: number;
+  status: SubscriptionStatus;
+  providerRef: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  graceEndsAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminSubscriptionPage {
+  items: AdminSubscriptionRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  activeCount: number;
+  /** Normalised to a month, so annual and monthly plans are comparable. */
+  mrrCents: number;
+}
+
+export type VerificationStatus = BackgroundCheckStatus;
+
+export interface AdminProfessionalRow {
+  id: string;
+  kind: "caretaker" | "vet";
+  userId: string;
+  userName: string;
+  userEmail: string;
+  avatarUrl: string;
+  status: VerificationStatus;
+  rating: number;
+  reviewCount: number;
+  /** One line of whatever is worth checking for this kind of professional. */
+  detail: string;
+}
+
+export interface AdminProfessionalPage {
+  items: AdminProfessionalRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  awaitingReview: number;
+}
+
+/** Non-sensitive settings the browser may read. See /api/config. */
+export interface PublicConfig {
+  signupsOpen: boolean;
+  maintenanceBanner: string;
+  demoLoginVisible: boolean;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  actorUserId: string;
+  actorName: string;
+  actorEmail: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  summary: string;
+  metadata: Record<string, unknown> | null;
+  ip: string;
+  createdAt: string;
 }
 
 export type Species = "dog" | "cat" | "other";
@@ -147,6 +435,11 @@ export interface VetProfile {
   specialties: VetSpecialty[];
   licenseNumber: string;
   licenseState: string;
+  /**
+   * Whether a person has checked that licence. Public, because it is the whole
+   * point: a badge nobody can grant means nothing to the owner reading it.
+   */
+  verificationStatus: BackgroundCheckStatus;
   yearsExperience: number;
   acceptedSpecies: Species[];
   consultModes: ConsultMode[];
@@ -221,7 +514,6 @@ export interface MedicalRecord {
 }
 
 export interface CreateAppointmentInput {
-  ownerId: string;
   vetId: string;
   petId: string;
   mode: ConsultMode;
@@ -321,7 +613,26 @@ export type OrderStatus =
   | "cancelled"
   | "refunded";
 
-export type PaymentStatus = "unpaid" | "authorized" | "paid" | "refunded" | "failed";
+/**
+ * Where a payment stands.
+ *
+ * Wider than it was, because a real card payment has states a demo provider
+ * never needed: `pending` while the customer has not confirmed, `requires_action`
+ * when their bank interposes a challenge, `processing` for methods that settle
+ * over days, `partially_refunded` when only some of it came back, and
+ * `disputed` for a chargeback.
+ */
+export type PaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "requires_action"
+  | "processing"
+  | "authorized"
+  | "paid"
+  | "partially_refunded"
+  | "refunded"
+  | "failed"
+  | "disputed";
 
 export interface ShippingAddress {
   name: string;
@@ -397,6 +708,17 @@ export interface CreateOrderInput {
  * Server-side re-pricing result. The client's cart totals are display-only;
  * this is the authority, and it reports back anything that changed.
  */
+/**
+ * What POST /api/orders answers with: the order, plus what the browser needs to
+ * finish paying for it.
+ *
+ * `clientSecret` reaches exactly one response and is never stored — it
+ * authorises confirming this one payment.
+ */
+export interface PlacedOrder extends Order {
+  payment?: { ref: string; clientSecret: string | null; provider: string };
+}
+
 export interface CartQuote {
   lines: {
     productId: string;
@@ -414,6 +736,12 @@ export interface CartQuote {
   totalCents: number;
   /** Non-empty when the client's assumptions no longer hold. */
   problems: { productId: string; code: CartProblemCode; message: string }[];
+  /** Whether the customer pricing this cart is a member, for honest UI. */
+  membership: { active: boolean; planKey: string | null };
+  /** True when membership is what made shipping free, not the basket size. */
+  shippingWaivedByMembership: boolean;
+  /** What a non-member would have paid extra on this basket. */
+  membershipSavingsCents: number;
 }
 
 /* ── Notifications ─────────────────────────────────────────────────── */
@@ -426,7 +754,12 @@ export type NotificationKind =
   | "appointment_completed"
   | "order_shipped"
   | "order_out_for_delivery"
-  | "order_delivered";
+  | "order_delivered"
+  | "order_payment_failed"
+  | "membership_started"
+  | "membership_payment_failed"
+  | "membership_cancelled"
+  | "membership_ended";
 
 export interface Notification {
   id: string;
@@ -482,5 +815,7 @@ export interface CreateBookingInput {
   startDateTime: string;
   endDateTime: string;
   notes: string;
-  priceTotal: number;
+  // No price. The server reads the caretaker's rate card and multiplies by the
+  // duration; the form's running total is an estimate shown to the customer,
+  // not an input.
 }

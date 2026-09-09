@@ -37,6 +37,7 @@ export async function getAppointmentById(
 export async function createAppointment(
   input: Omit<CreateAppointmentInput, "fee">
 ): Promise<VetAppointment> {
+  // No owner id: the server books it as whoever is signed in.
   return postJson<VetAppointment>(`/api/appointments`, input);
 }
 

@@ -17,9 +17,8 @@ import type {
   MedicalRecord,
   Review,
   VetAppointment,
-  VetProfile,
-  User,
 } from "@/types";
+import type { SeedUser, SeedVetProfile } from "./types";
 import { generateAvailability, TODAY } from "./index";
 import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 
@@ -29,7 +28,7 @@ const avatar = (i: number) => unsplash(HEADSHOTS[i % HEADSHOTS.length], 240, 240
    Kept separate from the main `users` array only for readability; the seeder
    inserts both lists into the same table. */
 
-export const vetUsers: User[] = [
+export const vetUsers: SeedUser[] = [
   {
     id: "u17",
     name: "Dr. Naomi Ruiz",
@@ -78,7 +77,7 @@ export const vetUsers: User[] = [
 
 /* ── Clinic profiles ──────────────────────────────────────────────────── */
 
-export const vets: VetProfile[] = [
+export const vets: SeedVetProfile[] = [
   {
     id: "v1",
     userId: "u17",

@@ -17,5 +17,14 @@ const { auth } = NextAuth(authConfig);
 export default auth;
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/booking/:path*"],
+  // Pages only. /api is deliberately absent: the route handlers resolve the
+  // session themselves, the assistant endpoint answers signed-out callers on
+  // purpose, and the Stripe webhook must reach us unauthenticated so its own
+  // signature check can be the gate.
+  matcher: [
+    "/dashboard/:path*",
+    "/onboarding/:path*",
+    "/booking/:path*",
+    "/account/:path*",
+  ],
 };

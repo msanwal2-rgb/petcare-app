@@ -9,14 +9,24 @@ import {
 
 describe("validation schemas", () => {
   it("accepts a valid user patch", () => {
-    expect(
-      updateUserSchema.safeParse({ name: "A", email: "a@b.com" }).success
-    ).toBe(true);
+    expect(updateUserSchema.safeParse({ name: "A", phone: "555" }).success).toBe(true);
   });
 
-  it("rejects a bad email and an empty name", () => {
-    expect(updateUserSchema.safeParse({ email: "nope" }).success).toBe(false);
+  it("rejects an empty name", () => {
     expect(updateUserSchema.safeParse({ name: "" }).success).toBe(false);
+  });
+
+  it("ignores an email rather than validating one", () => {
+    // Stronger than rejecting a *bad* address: the field is not accepted at
+    // all. Changing the identifier an account is recovered by needs
+    // re-verification of the new address, and that flow does not exist — so a
+    // well-formed one is dropped just as silently as "nope".
+    const bad = updateUserSchema.safeParse({ email: "nope" });
+    const good = updateUserSchema.safeParse({ email: "a@b.com" });
+    expect(bad.success).toBe(true);
+    expect(good.success).toBe(true);
+    expect(bad.success && "email" in bad.data).toBe(false);
+    expect(good.success && "email" in good.data).toBe(false);
   });
 
   it("coerces numeric search params from strings", () => {

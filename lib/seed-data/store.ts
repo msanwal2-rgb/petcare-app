@@ -11,16 +11,20 @@
  * 404 the way a hotlinked photo can.
  */
 
-import type { Order, OrderEvent, OrderItem, Product, User } from "@/types";
+import type { Order, OrderEvent, OrderItem, Product } from "@/types";
+import type { SeedUser } from "./types";
 import { HEADSHOTS, unsplash } from "@/lib/media/photos";
 import { taxFor } from "@/lib/pricing";
 
 /**
- * Store operations staff. `isOps` is not a marketplace role — it never appears
- * in `roles` or the role toggle; it only unlocks /dashboard/orders, where
- * fulfilment is advanced.
+ * Staff accounts. `staffRoles` is not a marketplace role — it never appears in
+ * `roles` or the role toggle; it unlocks the internal consoles.
+ *
+ * Two accounts rather than one, deliberately: Rosa can move parcels and nothing
+ * else, which is what makes it possible to demonstrate that the role boundaries
+ * are real. An "admin" who is the only staff member proves nothing.
  */
-export const opsUser: User = {
+export const opsUser: SeedUser = {
   id: "u21",
   name: "Rosa Delgado",
   email: "rosa.delgado@example.com",
@@ -30,7 +34,39 @@ export const opsUser: User = {
   address: { city: "Austin", state: "TX", lat: 30.2711, lng: -97.7437 },
   verified: true,
   createdAt: "2025-08-01T08:00:00Z",
+  staffRoles: ["ops"],
 };
+
+/** Platform administrator: every console, including staff-role changes. */
+export const adminUser: SeedUser = {
+  id: "u22",
+  name: "Priya Raman",
+  email: "priya.raman@example.com",
+  phone: "(512) 555-0901",
+  avatarUrl: unsplash(HEADSHOTS[9], 240, 240, "faces"),
+  roles: ["owner"],
+  address: { city: "Austin", state: "TX", lat: 30.2669, lng: -97.7502 },
+  verified: true,
+  createdAt: "2025-07-15T08:00:00Z",
+  staffRoles: ["admin"],
+};
+
+/** Support and finance without administration — the middle of the ladder. */
+export const supportUser: SeedUser = {
+  id: "u23",
+  name: "Tom Okafor",
+  email: "tom.okafor@example.com",
+  phone: "(512) 555-0902",
+  avatarUrl: unsplash(HEADSHOTS[10], 240, 240, "faces"),
+  roles: ["owner"],
+  address: { city: "Austin", state: "TX", lat: 30.2705, lng: -97.7401 },
+  verified: true,
+  createdAt: "2025-07-20T08:00:00Z",
+  staffRoles: ["support", "finance"],
+};
+
+/** Everyone with staff privileges, for the seeder to insert in one pass. */
+export const staffUsers: SeedUser[] = [opsUser, adminUser, supportUser];
 
 const art = (slug: string) => `/products/${slug}.svg`;
 

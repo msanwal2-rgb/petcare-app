@@ -64,7 +64,11 @@ export default function VetDetailPage() {
         <ProfileHero
           imageUrl={user.avatarUrl}
           name={user.name}
-          verified={user.verified}
+          // The shield next to a vet's name means their *licence* has been
+          // checked, not that they confirmed an email address. Those are very
+          // different claims, and an owner choosing who treats their animal
+          // will read it as the first one.
+          verified={vet.verificationStatus === "verified"}
           subtitle={vet.clinicName}
           city={vet.clinic.city}
           state={vet.clinic.state}

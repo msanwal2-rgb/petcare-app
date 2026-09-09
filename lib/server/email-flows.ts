@@ -7,6 +7,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toUser } from "./serialize";
+import { nowIso } from "./ids";
 import { hashPassword } from "./auth-logic";
 import { createToken, consumeToken } from "./tokens";
 import { sendMail } from "./mailer";
@@ -92,7 +93,16 @@ export async function resetPassword(
   if (!existing) return false;
   await db.user.update({
     where: { id: userId },
-    data: { passwordHash: await hashPassword(newPassword) },
+    data: {
+      passwordHash: await hashPassword(newPassword),
+      // Every session issued before now is refused from here on.
+      //
+      // Sessions are JWTs with no database adapter, so there is no row to
+      // delete: without this, someone who resets their password because their
+      // account was compromised changes nothing for the attacker, whose cookie
+      // stays valid for its full thirty days. `requireUser()` enforces it.
+      sessionsValidFrom: nowIso(),
+    },
   });
   return true;
 }

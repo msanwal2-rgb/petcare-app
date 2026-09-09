@@ -83,17 +83,63 @@ export async function registerUser(
   return toUser(row);
 }
 
+export type OAuthSignInResult =
+  | { ok: true; user: ReturnType<typeof toUser>; created: boolean }
+  | { ok: false; reason: "email_unverified" | "account_exists" };
+
 /**
- * Find (by email) or create a user for an OAuth sign-in. OAuth users get no
- * passwordHash; they can only ever sign in through the provider.
+ * Resolve a Google sign-in to one of our users: link it, or create one.
+ *
+ * The version this replaces looked up the address and returned whatever it
+ * found, with `allowDangerousEmailAccountLinking: true` on the provider. That
+ * combination is account pre-hijacking: register a password account at
+ * victim@gmail.com before they ever visit, wait, and when the real owner of
+ * that Gmail address signs in with Google they land inside the account you
+ * control — with your password still on it.
+ *
+ * So an existing row is only ever *linked* when linking cannot hand someone
+ * else's session over:
+ *
+ *  - already linked to this Google id  → sign in, the unambiguous case;
+ *  - no password on the account        → link, because nobody can reach it by
+ *                                        password, so there is no second owner
+ *                                        to displace;
+ *  - a password is set                 → refuse. The safe order is to sign in
+ *                                        with the password you already have and
+ *                                        link Google from account settings,
+ *                                        where the person doing the linking has
+ *                                        proved they hold the account.
+ *
+ * `emailVerified` is Google's own claim and is checked rather than assumed. An
+ * unverified Google address is not proof of anything: Workspace accounts can be
+ * created with an address the holder never confirmed.
  */
-export async function findOrCreateOAuthUser(
-  input: { email: string; name?: string | null; image?: string | null },
+export async function linkOrCreateOAuthUser(
+  input: {
+    email: string;
+    emailVerified: boolean;
+    googleId: string;
+    name?: string | null;
+    image?: string | null;
+  },
   db: PrismaClient = defaultPrisma
-) {
+): Promise<OAuthSignInResult> {
+  if (!input.emailVerified) return { ok: false, reason: "email_unverified" };
+
   const email = input.email.toLowerCase().trim();
+
+  const linked = await db.user.findUnique({ where: { googleId: input.googleId } });
+  if (linked) return { ok: true, user: toUser(linked), created: false };
+
   const existing = await db.user.findUnique({ where: { email } });
-  if (existing) return toUser(existing);
+  if (existing) {
+    if (existing.passwordHash) return { ok: false, reason: "account_exists" };
+    const adopted = await db.user.update({
+      where: { id: existing.id },
+      data: { googleId: input.googleId, verified: true },
+    });
+    return { ok: true, user: toUser(adopted), created: false };
+  }
 
   const count = await db.user.count();
   const row = await db.user.create({
@@ -110,9 +156,26 @@ export async function findOrCreateOAuthUser(
       addressState: "TX",
       lat: 30.2672,
       lng: -97.7431,
-      verified: true, // email verified by the OAuth provider
+      // Google told us it verified this address, and we checked that it said so.
+      verified: true,
+      googleId: input.googleId,
       createdAt: nowIso(),
     },
   });
-  return toUser(row);
+  return { ok: true, user: toUser(row), created: true };
+}
+
+/**
+ * Link Google to the account already signed in. This is the safe direction: the
+ * caller has proved they hold the account before the link is made.
+ */
+export async function linkGoogleToUser(
+  uid: string,
+  googleId: string,
+  db: PrismaClient = defaultPrisma
+): Promise<{ ok: true } | { ok: false; reason: "taken" }> {
+  const claimed = await db.user.findUnique({ where: { googleId } });
+  if (claimed && claimed.id !== uid) return { ok: false, reason: "taken" };
+  await db.user.update({ where: { id: uid }, data: { googleId } });
+  return { ok: true };
 }

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { Review, User } from "@/types";
+import type { PublicUser, Review } from "@/types";
 import { RatingStars } from "./RatingStars";
 import { BLUR_DATA_URL } from "@/lib/media/photos";
 import { formatDate } from "@/lib/utils";
@@ -9,7 +9,8 @@ export function ReviewCard({
   author,
 }: {
   review: Review;
-  author?: User;
+  /** The public projection is all a byline needs: a name and a face. */
+  author?: PublicUser;
 }) {
   return (
     <article className="rounded-[12px] border border-mist bg-white p-5">

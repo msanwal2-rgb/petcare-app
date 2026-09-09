@@ -57,7 +57,13 @@ export default function CartPage() {
   }
 
   const displaySubtotal = displaySubtotalCents(lines);
-  const toFreeShipping = amountToFreeShipping(quote?.subtotalCents ?? displaySubtotal);
+  // A member is always already there, so never nag them to spend more. The
+  // quote is the authority on whether membership applied — the client does not
+  // decide, it reports.
+  const toFreeShipping = amountToFreeShipping(
+    quote?.subtotalCents ?? displaySubtotal,
+    { freeShipping: quote?.shippingWaivedByMembership }
+  );
   const problemFor = (productId: string) =>
     quote?.problems.find((p) => p.productId === productId);
   const blocked = (quote?.problems.length ?? 0) > 0;
@@ -216,10 +222,21 @@ export default function CartPage() {
               </div>
             </dl>
 
-            {toFreeShipping > 0 && (
-              <p className="mt-3 rounded-xl bg-fog px-3 py-2 text-xs text-charcoal/70">
-                Add {formatCents(toFreeShipping)} more for free shipping.
+            {quote?.shippingWaivedByMembership ? (
+              <p className="mt-3 rounded-xl bg-[#2F6F5E]/10 px-3 py-2 text-xs text-[#215144]">
+                Free delivery, included with Leash Plus — saving you{" "}
+                {formatCents(quote.membershipSavingsCents)} on this order.
               </p>
+            ) : (
+              toFreeShipping > 0 && (
+                <p className="mt-3 rounded-xl bg-fog px-3 py-2 text-xs text-charcoal/70">
+                  Add {formatCents(toFreeShipping)} more for free shipping, or{" "}
+                  <Link href="/plus" className="underline hover:text-ink">
+                    get it on everything with Leash Plus
+                  </Link>
+                  .
+                </p>
+              )
             )}
 
             {!currentUser ? (

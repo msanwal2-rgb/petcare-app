@@ -20,5 +20,13 @@ export async function POST(request: Request) {
     return forbidden();
   }
 
-  return ok(await quoteCart(parsed.data.items, parsed.data.petId));
+  // `userId` comes from the session, never the body: it is what decides whether
+  // membership shipping applies, and there is deliberately no field in
+  // quoteCartSchema for a client to claim it with.
+  return ok(
+    await quoteCart(parsed.data.items, {
+      petId: parsed.data.petId,
+      userId: auth.uid,
+    })
+  );
 }

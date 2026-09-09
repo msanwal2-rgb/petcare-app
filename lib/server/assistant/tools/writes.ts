@@ -94,15 +94,19 @@ export function writeTools(ctx: AssistantContext) {
         const uid = await assertBookingParticipant(ctx, bookingId);
         if (typeof uid !== "string") return uid;
 
+        // No actor is passed: cancelling is open to either party, and the
+        // participant check above has already established this caller is one.
         const result = await updateBookingStatus(bookingId, "cancelled", ctx.db);
         if (!result.ok) {
-          return result.code === "not_found"
-            ? refuse("not_found")
-            : {
-                ok: false as const,
-                code: result.code,
-                detail: `A booking that is already "${result.from}" cannot be cancelled.`,
-              };
+          if (result.code === "not_found") return refuse("not_found");
+          return {
+            ok: false as const,
+            code: result.code,
+            detail:
+              result.code === "invalid_transition"
+                ? `A booking that is already "${result.from}" cannot be cancelled.`
+                : "Only the other party can make that change.",
+          };
         }
         return { ok: true as const, cancelled: presentBooking(result.booking) };
       },

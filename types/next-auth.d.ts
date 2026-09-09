@@ -4,6 +4,8 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
+      /** The session JWT's `iat`, in seconds. Used to honour revocation. */
+      issuedAt?: number;
     } & DefaultSession["user"];
   }
 }

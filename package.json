@@ -29,6 +29,8 @@
     "@ai-sdk/react": "3.0.269",
     "@hookform/resolvers": "^5.4.0",
     "@prisma/client": "^6.19.3",
+    "@stripe/react-stripe-js": "^6.9.0",
+    "@stripe/stripe-js": "^9.15.0",
     "ai": "6.0.266",
     "bcryptjs": "^3.0.3",
     "framer-motion": "^12.42.2",
@@ -38,6 +40,7 @@
     "react-dom": "19.2.4",
     "react-hook-form": "^7.81.0",
     "sonner": "^2.0.7",
+    "stripe": "^22.6.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

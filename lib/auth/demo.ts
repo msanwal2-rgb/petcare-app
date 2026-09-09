@@ -12,11 +12,21 @@
 
 export const DEMO_PASSWORD = "leashdemo123";
 
-/** One seeded account per role, for the one-tap demo buttons. */
+/**
+ * One seeded account per role, for the one-tap demo buttons.
+ *
+ * The email is here alongside the id because signing in needs it, and
+ * /api/users/:id no longer hands out email addresses — a public profile
+ * endpoint had no business doing so. Both halves are public knowledge anyway:
+ * the README lists them, and the password below unlocks nothing but fixtures.
+ */
 export const DEMO_ACCOUNTS = {
-  owner: "u1", // Maya Chen — two pets, active bookings, orders in flight
-  caretaker: "u10", // Elena Petrova — 5.0 rating, incoming requests
-  vet: "u17", // Dr. Naomi Ruiz — general practice, a full schedule
+  // Maya Chen — two pets, active bookings, orders in flight
+  owner: { id: "u1", email: "maya.chen@example.com" },
+  // Elena Petrova — 5.0 rating, incoming requests
+  caretaker: { id: "u10", email: "elena.petrova@example.com" },
+  // Dr. Naomi Ruiz — general practice, a full schedule
+  vet: { id: "u17", email: "naomi.ruiz@example.com" },
 } as const;
 
 export type DemoRole = keyof typeof DEMO_ACCOUNTS;

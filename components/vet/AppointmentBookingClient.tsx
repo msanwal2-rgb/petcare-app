@@ -109,7 +109,6 @@ export function AppointmentBookingClient() {
     setSubmitting(true);
     try {
       const appointment = await createAppointment({
-        ownerId: currentUser.id,
         vetId: vet.id,
         petId: pet.id,
         mode,
