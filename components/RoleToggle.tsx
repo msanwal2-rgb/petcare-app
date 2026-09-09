@@ -12,7 +12,7 @@ import { ROLE_LABELS } from "@/lib/utils";
  * order, and renders nothing at all for single-role users — so callers can
  * drop it in unconditionally.
  */
-const ORDER: UserRole[] = ["owner", "caretaker", "vet"];
+const ORDER: UserRole[] = ["owner", "caretaker", "vet", "shelter"];
 
 export function RoleToggle() {
   const { currentUser, activeRole, setActiveRole } = useSession();

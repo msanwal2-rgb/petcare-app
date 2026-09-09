@@ -9,7 +9,14 @@ import {
 import { ButtonLink } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { Reveal } from "@/components/ui/Reveal";
-import { BagIcon, PawIcon, StethoscopeIcon, ShieldCheckIcon, UserIcon } from "@/components/ui/icons";
+import {
+  BagIcon,
+  PawIcon,
+  StethoscopeIcon,
+  ShieldCheckIcon,
+  UserIcon,
+  HeartIcon,
+} from "@/components/ui/icons";
 
 export const metadata: Metadata = {
   title: "Help and policies",
@@ -21,6 +28,7 @@ const TOPIC_ICONS: Record<PolicyTopic, React.ReactNode> = {
   orders: <BagIcon width={22} height={22} />,
   care: <PawIcon width={22} height={22} />,
   vet: <StethoscopeIcon width={22} height={22} />,
+  adoption: <HeartIcon width={22} height={22} />,
   trust: <ShieldCheckIcon width={22} height={22} />,
   account: <UserIcon width={22} height={22} />,
 };

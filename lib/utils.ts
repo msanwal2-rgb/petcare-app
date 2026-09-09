@@ -127,6 +127,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   owner: "Owner",
   caretaker: "Caretaker",
   vet: "Vet",
+  shelter: "Shelter",
 };
 export const ROLE_OPTIONS = Object.keys(ROLE_LABELS) as UserRole[];
 

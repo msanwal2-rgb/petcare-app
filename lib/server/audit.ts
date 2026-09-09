@@ -33,7 +33,8 @@ export type AuditAction =
   | "subscription.cancel"
   | "subscription.grace_extend"
   | "setting.update"
-  | "webhook.replay";
+  | "webhook.replay"
+  | "adoption.reverse";
 
 export type AuditTargetType =
   | "user"
@@ -42,8 +43,10 @@ export type AuditTargetType =
   | "subscription"
   | "caretaker_profile"
   | "vet_profile"
+  | "shelter_profile"
   | "setting"
-  | "webhook_event";
+  | "webhook_event"
+  | "adoption_application";
 
 export interface RecordAdminActionInput {
   actorUserId: string;

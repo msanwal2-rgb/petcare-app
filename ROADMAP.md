@@ -44,6 +44,30 @@ are unfinished:
   `caretakerId` and `/vets/book` reads `vetId` and `date`; the remaining params
   are ignored, so the form opens partly filled rather than fully.
 
+## Adoption: what is left
+
+The module ships with listings, applications, the fee, the transfer and a
+staff route to put an animal back. Three things around it are deliberate gaps:
+
+- **Shelter reviews.** `ShelterProfile` has no `rating` or `reviewCount`, and
+  should not until `Review.kind` grows an `"adoption"` arm and
+  `reputation.ts` gets a third `applyRating` path. Shipping the columns first
+  is what `backgroundCheckStatus` did, and it meant a badge nothing could
+  write. `responseRatePct` *is* wired, because it is computable.
+- **Foster as a first-class thing.** Today a fostered animal is a pet under a
+  long boarding booking, which is why completing an adoption refuses while one
+  is open and offers an explicit override. A real foster model would make that
+  refusal unnecessary.
+- **Meet-and-greet scheduling.** Shelters arrange these by phone right now.
+  The booking machinery already exists and could carry them.
+
+Also worth knowing: `ownedSince` fixes access that outlives *ownership*, not
+access that outlives *time*. Under a single owner, a vet who saw a pet once in
+2019 still has record access — and record access includes writing prescriptions,
+which unlock Rx products in the store. A trailing window on
+`canAccessPetRecords` is the fix, and it needs its own change with its own seed
+adjustments (the seeded appointments are only ~90 days old).
+
 ## Smaller, unblocked
 
 - **Notification preferences.** Per-user opt-out per kind. `notify()` is the

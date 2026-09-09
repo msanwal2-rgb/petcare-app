@@ -1,0 +1,24 @@
+-- When the current owner acquired each animal.
+--
+-- This is what makes a caretaker's or a vet's access to a pet *end* when the
+-- animal changes hands. Both predicates in lib/server/access.ts now require the
+-- booking or appointment that grants access to have been created at or after
+-- this instant, so one write moves ownership and severs every prior grant
+-- atomically — there is no list of grants to walk and no half-severed state.
+--
+-- ⚠️ The default is the epoch, deliberately, and it must stay that way.
+--
+-- Backfilled to now(), every existing booking and appointment would predate the
+-- column and every non-owner grant in the database would evaporate: a vet
+-- mid-treatment would lose the record they are writing, and a sitter with an
+-- animal in their house would lose its feeding instructions. We do not know when
+-- these ownerships actually began, and the epoch says so honestly — it
+-- grandfathers every engagement that already exists rather than inventing a date
+-- that looks meaningful and is a guess.
+--
+-- NOTE for the next migration: `prisma migrate diff` wants to drop
+-- "knowledge_chunks_embedding_idx" (a hand-written pgvector HNSW index Prisma
+-- cannot represent). Never accept that drop.
+
+-- AlterTable
+ALTER TABLE "pets" ADD COLUMN "ownedSince" TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z';

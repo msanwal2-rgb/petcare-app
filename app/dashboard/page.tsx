@@ -5,6 +5,7 @@ import { useSession } from "@/lib/store/session";
 import { OwnerDashboard } from "@/components/dashboard/OwnerDashboard";
 import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
 import { VetDashboard } from "@/components/dashboard/VetDashboard";
+import { ShelterDashboard } from "@/components/dashboard/ShelterDashboard";
 import { AuthRequired } from "@/components/AuthRequired";
 import { EmptyState } from "@/components/EmptyState";
 import { RoleToggle } from "@/components/RoleToggle";
@@ -50,6 +51,7 @@ export default function DashboardPage() {
     owner: "Owner dashboard",
     caretaker: "Caretaker dashboard",
     vet: "Vet dashboard",
+    shelter: "Shelter dashboard",
   };
 
   return (
@@ -75,6 +77,7 @@ export default function DashboardPage() {
       {view === "owner" && <OwnerDashboard user={currentUser} />}
       {view === "caretaker" && <CaretakerDashboard user={currentUser} />}
       {view === "vet" && <VetDashboard user={currentUser} />}
+      {view === "shelter" && <ShelterDashboard />}
     </div>
   );
 }

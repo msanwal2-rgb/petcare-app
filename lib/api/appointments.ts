@@ -4,6 +4,7 @@
 
 import type {
   AppointmentStatus,
+  ClinicalAppointment,
   CreateAppointmentInput,
   VetAppointment,
 } from "@/types";
@@ -47,4 +48,17 @@ export async function updateAppointmentStatus(
   status: AppointmentStatus
 ): Promise<VetAppointment> {
   return patchJson<VetAppointment>(`/api/appointments/${id}/status`, { status });
+}
+
+/**
+ * GET /api/pets/:id/appointments -> ClinicalAppointment[]
+ *
+ * The animal's own visit history — the right read for a health record, because
+ * it belongs to the pet rather than to whoever booked each visit. Visits you
+ * did not book come back without their fee.
+ */
+export async function getAppointmentsByPet(
+  petId: string
+): Promise<ClinicalAppointment[]> {
+  return getJson<ClinicalAppointment[]>(`/api/pets/${petId}/appointments`);
 }

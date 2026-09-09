@@ -4,7 +4,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { MedicalRecord, Pet } from "@/types";
 import { deleteRecord, getRecordsForPet } from "@/lib/api/medical-records";
-import { getAppointmentsByOwner } from "@/lib/api/appointments";
+import { getAppointmentsByPet } from "@/lib/api/appointments";
 import { useAsync } from "@/lib/hooks/useAsync";
 import { useSession } from "@/lib/store/session";
 import { MedicalRecordCard } from "./MedicalRecordCard";
@@ -48,9 +48,15 @@ export function HealthRecordSection({ pet }: { pet: Pet }) {
     () => getRecordsForPet(pet.id),
     [pet.id]
   );
+  // Scoped by the pet, not by its owner.
+  //
+  // This used to ask `/api/owners/:ownerId/appointments`, which is self-only —
+  // so a treating vet or a caretaker opening this panel got a 403 and an empty
+  // list, and once an animal can change hands it would have shown the wrong
+  // history to its new owner as well.
   const { data: appointments } = useAsync(
-    () => getAppointmentsByOwner(pet.ownerId),
-    [pet.ownerId]
+    () => getAppointmentsByPet(pet.id),
+    [pet.id]
   );
 
   if (loading || records === null) {
@@ -64,7 +70,7 @@ export function HealthRecordSection({ pet }: { pet: Pet }) {
 
   const due = dueSoon(records);
   const active = activePrescriptions(records);
-  const petAppointments = (appointments ?? []).filter((a) => a.petId === pet.id);
+  const petAppointments = appointments ?? [];
 
   async function remove(record: MedicalRecord) {
     try {

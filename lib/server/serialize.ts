@@ -63,6 +63,17 @@ import type {
   StaffRole,
   AccountStatus,
   PublicUser,
+  ClinicalAppointment,
+  ShelterProfile,
+  ShelterWithUser,
+  ShelterKind,
+  AdoptionListing,
+  AdoptionApplication,
+  ListingStatus,
+  ApplicationStatus,
+  TriState,
+  EnergyLevel,
+  HomeType,
 } from "@/types";
 import { distanceMiles } from "@/lib/utils";
 
@@ -259,6 +270,154 @@ export function toVetProfile(v: DbVetWithRelations): VetProfile {
   };
 }
 
+/* ── Adoption ─────────────────────────────────────────────────── */
+
+type DbListing = {
+  id: string; shelterId: string; petId: string; status: string;
+  feeCents: number; currency: string; headline: string; story: string;
+  goodWithKids: string; goodWithDogs: string; goodWithCats: string;
+  houseTrained: string; energyLevel: string; specialNeeds: boolean;
+  specialNeedsNotes: string; spayedNeutered: boolean; microchipped: boolean;
+  city: string; state: string; lat: number; lng: number;
+  intakeAt: string; publishedAt: string | null; closedAt: string | null;
+  createdAt: string;
+};
+
+export function toAdoptionListing(l: DbListing): AdoptionListing {
+  return {
+    id: l.id,
+    shelterId: l.shelterId,
+    petId: l.petId,
+    status: l.status as ListingStatus,
+    feeCents: l.feeCents,
+    currency: l.currency,
+    headline: l.headline,
+    story: l.story,
+    goodWithKids: l.goodWithKids as TriState,
+    goodWithDogs: l.goodWithDogs as TriState,
+    goodWithCats: l.goodWithCats as TriState,
+    houseTrained: l.houseTrained as TriState,
+    energyLevel: l.energyLevel as EnergyLevel,
+    specialNeeds: l.specialNeeds,
+    specialNeedsNotes: l.specialNeedsNotes,
+    spayedNeutered: l.spayedNeutered,
+    microchipped: l.microchipped,
+    location: { city: l.city, state: l.state, lat: l.lat, lng: l.lng },
+    intakeAt: l.intakeAt,
+    publishedAt: l.publishedAt,
+    closedAt: l.closedAt,
+    createdAt: l.createdAt,
+  };
+}
+
+type DbApplication = {
+  id: string; listingId: string; shelterId: string; petId: string;
+  petName: string; petPhotoUrl: string; applicantId: string; status: string;
+  feeCents: number; householdAdults: number; householdChildren: number;
+  hasOtherPets: boolean; otherPetsNotes: string; homeType: string;
+  fencedYard: boolean; ownsHome: boolean; hoursAlonePerDay: number;
+  experience: string; message: string; decisionNote: string;
+  decidedAt: string | null; completedAt: string | null; createdAt: string;
+};
+
+export function toAdoptionApplication(a: DbApplication): AdoptionApplication {
+  return {
+    id: a.id,
+    listingId: a.listingId,
+    shelterId: a.shelterId,
+    petId: a.petId,
+    petName: a.petName,
+    petPhotoUrl: a.petPhotoUrl,
+    applicantId: a.applicantId,
+    status: a.status as ApplicationStatus,
+    feeCents: a.feeCents,
+    householdAdults: a.householdAdults,
+    householdChildren: a.householdChildren,
+    hasOtherPets: a.hasOtherPets,
+    otherPetsNotes: a.otherPetsNotes,
+    homeType: a.homeType as HomeType,
+    fencedYard: a.fencedYard,
+    ownsHome: a.ownsHome,
+    hoursAlonePerDay: a.hoursAlonePerDay,
+    experience: a.experience,
+    message: a.message,
+    decisionNote: a.decisionNote,
+    decidedAt: a.decidedAt,
+    completedAt: a.completedAt,
+    createdAt: a.createdAt,
+  };
+}
+
+/* ── Shelters ─────────────────────────────────────────────────── */
+
+type DbShelter = {
+  id: string;
+  userId: string;
+  name: string;
+  bio: string;
+  kind: string;
+  registrationNumber: string;
+  registrationState: string;
+  verificationStatus: string;
+  acceptedSpecies: string[];
+  websiteUrl: string;
+  phone: string;
+  email: string;
+  addressLine: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+  adoptionPolicy: string;
+  responseRatePct: number;
+  createdAt: string;
+};
+
+export function toShelterProfile(sh: DbShelter): ShelterProfile {
+  return {
+    id: sh.id,
+    userId: sh.userId,
+    name: sh.name,
+    bio: sh.bio,
+    kind: sh.kind as ShelterKind,
+    registrationNumber: sh.registrationNumber,
+    registrationState: sh.registrationState,
+    verificationStatus: sh.verificationStatus as BackgroundCheckStatus,
+    acceptedSpecies: sh.acceptedSpecies as Species[],
+    websiteUrl: sh.websiteUrl,
+    phone: sh.phone,
+    email: sh.email,
+    address: {
+      line: sh.addressLine,
+      city: sh.city,
+      state: sh.state,
+      lat: sh.lat,
+      lng: sh.lng,
+    },
+    adoptionPolicy: sh.adoptionPolicy,
+    responseRatePct: sh.responseRatePct,
+    createdAt: sh.createdAt,
+  };
+}
+
+export function toShelterWithUser(
+  sh: DbShelter & { user: DbUser },
+  availableCount: number,
+  origin?: { lat: number; lng: number }
+): ShelterWithUser {
+  const profile = toShelterProfile(sh);
+  return {
+    ...profile,
+    // The public projection: an adopter browsing shelters has no business with
+    // the account holder's email address and home coordinates.
+    user: toPublicUser(sh.user),
+    availableCount,
+    // Distance is to the shelter, which is where the animal actually is and
+    // where somebody has to drive to meet it.
+    distanceMiles: origin ? distanceMiles(origin, profile.address) : undefined,
+  };
+}
+
 export function toVetWithUser(
   v: DbVetWithRelations & { user: DbUser },
   origin?: { lat: number; lng: number }
@@ -289,6 +448,20 @@ export function toAppointment(a: DbVetAppointment): VetAppointment {
     notes: a.notes,
     createdAt: a.createdAt,
   };
+}
+
+/**
+ * The same visit, without what it cost.
+ *
+ * Returned by `GET /api/pets/:id/appointments` to anyone who is not the person
+ * who booked it — a treating vet, a caretaker, or an adopter looking at the
+ * history their animal arrived with. The clinical content is the point; the fee
+ * belonged to whoever paid it, and a shelter's discounted invoice is not the
+ * adopter's business.
+ */
+export function toClinicalAppointment(a: DbVetAppointment): ClinicalAppointment {
+  const { fee: _fee, ...clinical } = toAppointment(a);
+  return clinical;
 }
 
 export function toMedicalRecord(r: DbMedicalRecord): MedicalRecord {

@@ -213,7 +213,7 @@ export async function extendGrace(id: string, days: number): Promise<{ ok: boole
 
 export interface AdminProfessionalFilters {
   q?: string;
-  kind?: "caretaker" | "vet";
+  kind?: "caretaker" | "vet" | "shelter";
   status?: VerificationStatus;
   limit?: number;
   offset?: number;
@@ -231,7 +231,7 @@ export async function searchProfessionals(
 /** PATCH /api/admin/professionals/:id -> { ok } */
 export async function setVerification(
   id: string,
-  kind: "caretaker" | "vet",
+  kind: "caretaker" | "vet" | "shelter",
   status: VerificationStatus,
   note?: string
 ): Promise<{ ok: boolean }> {

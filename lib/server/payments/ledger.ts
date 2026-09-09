@@ -62,9 +62,10 @@ export async function currentPaymentForOrder(
 export async function createPaymentRow(
   input: {
     userId: string;
-    kind: "order" | "subscription_invoice";
+    kind: "order" | "subscription_invoice" | "adoption_fee";
     orderId?: string;
     subscriptionId?: string;
+    adoptionApplicationId?: string;
     provider: string;
     providerRef: string;
     providerCustomerId?: string;
@@ -82,6 +83,7 @@ export async function createPaymentRow(
       kind: input.kind,
       orderId: input.orderId ?? null,
       subscriptionId: input.subscriptionId ?? null,
+      adoptionApplicationId: input.adoptionApplicationId ?? null,
       provider: input.provider,
       providerRef: input.providerRef,
       providerCustomerId: input.providerCustomerId ?? "",

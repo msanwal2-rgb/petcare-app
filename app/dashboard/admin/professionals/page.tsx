@@ -74,7 +74,7 @@ export default function AdminProfessionalsPage() {
 
   async function decide(
     id: string,
-    profKind: "caretaker" | "vet",
+    profKind: "caretaker" | "vet" | "shelter",
     next: VerificationStatus,
     name: string
   ) {
@@ -122,8 +122,10 @@ export default function AdminProfessionalsPage() {
           id="prof-kind"
           label="Kind"
           anyLabel="Both"
-          options={["caretaker", "vet"] as const}
-          optionLabel={(k) => (k === "vet" ? "Vets" : "Caretakers")}
+          options={["caretaker", "vet", "shelter"] as const}
+          optionLabel={(k) =>
+            k === "vet" ? "Vets" : k === "shelter" ? "Shelters" : "Caretakers"
+          }
           value={kind}
           onChange={(v) => {
             setKind(v);
@@ -200,7 +202,13 @@ export default function AdminProfessionalsPage() {
                       <StatusBadge tone={TONE[p.status]} label={LABEL[p.status]} />
                       <StatusBadge
                         tone="active"
-                        label={p.kind === "vet" ? "Vet" : "Caretaker"}
+                        label={
+                          p.kind === "vet"
+                            ? "Vet"
+                            : p.kind === "shelter"
+                              ? "Shelter"
+                              : "Caretaker"
+                        }
                       />
                     </div>
                     <p className="mt-1 truncate text-sm text-charcoal/70">{p.detail}</p>

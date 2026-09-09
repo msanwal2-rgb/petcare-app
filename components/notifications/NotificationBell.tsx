@@ -11,6 +11,7 @@ import {
   AlertIcon,
   BellIcon,
   CheckIcon,
+  HeartIcon,
   ShieldCheckIcon,
   StethoscopeIcon,
   TruckIcon,
@@ -32,6 +33,12 @@ const ICON: Record<NotificationKind, typeof CheckIcon> = {
   membership_payment_failed: AlertIcon,
   membership_cancelled: ShieldCheckIcon,
   membership_ended: ShieldCheckIcon,
+  adoption_application_received: HeartIcon,
+  adoption_under_review: HeartIcon,
+  adoption_approved: CheckIcon,
+  adoption_rejected: AlertIcon,
+  adoption_completed: HeartIcon,
+  adoption_reversed: AlertIcon,
 };
 
 /**

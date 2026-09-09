@@ -5,7 +5,11 @@
 import type { Pet } from "@/types";
 import { getJson, getJsonOrNull, patchJson, postJson, qs } from "./_client";
 
-export type PetInput = Omit<Pet, "id">;
+/**
+ * No `ownerId`: it is a path parameter on create and unchangeable thereafter.
+ * Ownership moves only by completing an adoption.
+ */
+export type PetInput = Omit<Pet, "id" | "ownerId">;
 
 /** GET /api/owners/:ownerId/pets -> Pet[] */
 export async function getPetsByOwner(ownerId: string): Promise<Pet[]> {
@@ -24,8 +28,8 @@ export async function getPetsByIds(ids: string[]): Promise<Pet[]> {
 }
 
 /** POST /api/owners/:ownerId/pets -> Pet (201) */
-export async function createPet(input: PetInput): Promise<Pet> {
-  return postJson<Pet>(`/api/owners/${input.ownerId}/pets`, input);
+export async function createPet(ownerId: string, input: PetInput): Promise<Pet> {
+  return postJson<Pet>(`/api/owners/${ownerId}/pets`, input);
 }
 
 /** PATCH /api/pets/:id -> Pet */

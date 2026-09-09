@@ -115,6 +115,19 @@ export async function ownsCaretakerProfile(
   return caretaker?.userId === uid;
 }
 
+/** Does `uid` own the shelter profile with this id? */
+export async function ownsShelterProfile(
+  uid: string,
+  shelterId: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<boolean> {
+  const shelter = await db.shelterProfile.findUnique({
+    where: { id: shelterId },
+    select: { userId: true },
+  });
+  return shelter?.userId === uid;
+}
+
 /* ── Vet care ─────────────────────────────────────────────────────────── */
 
 /** Does `uid` own the vet profile with this id? */
@@ -130,16 +143,29 @@ export async function ownsVetProfile(
   return vet?.userId === uid;
 }
 
+/**
+ * The ownership boundary: who owns this animal, and since when.
+ *
+ * Loaded once and threaded through the predicates below, which between them
+ * used to fetch the same row three times for a single `canViewPet` call.
+ */
+async function petOwnership(
+  petId: string,
+  db: PrismaClient,
+): Promise<{ ownerId: string; ownedSince: string } | null> {
+  return db.pet.findUnique({
+    where: { id: petId },
+    select: { ownerId: true, ownedSince: true },
+  });
+}
+
 /** Does `uid` own this pet? */
 export async function ownsPet(
   uid: string,
   petId: string,
   db: PrismaClient = defaultPrisma,
 ): Promise<boolean> {
-  const pet = await db.pet.findUnique({
-    where: { id: petId },
-    select: { ownerId: true },
-  });
+  const pet = await petOwnership(petId, db);
   return pet?.ownerId === uid;
 }
 
@@ -180,7 +206,9 @@ export async function canViewPet(
   petId: string,
   db: PrismaClient = defaultPrisma,
 ): Promise<boolean> {
-  if (await ownsPet(uid, petId, db)) return true;
+  const pet = await petOwnership(petId, db);
+  if (!pet) return false;
+  if (pet.ownerId === uid) return true;
 
   const caretaker = await db.caretakerProfile.findUnique({
     where: { userId: uid },
@@ -192,13 +220,18 @@ export async function canViewPet(
         caretakerId: caretaker.id,
         petIds: { has: petId },
         status: { notIn: ["declined", "cancelled"] },
+        // Only a booking made under the *current* owner counts. Without this,
+        // a sitter who looked after an animal at a shelter would keep reading
+        // its medications and its household vet's phone number for as long as
+        // the row existed, in someone else's home.
+        createdAt: { gte: pet.ownedSince },
       },
       select: { id: true },
     });
     if (booked) return true;
   }
 
-  const { allowed } = await canAccessPetRecords(uid, petId, db);
+  const { allowed } = await recordAccessFor(uid, petId, pet, db);
   return allowed;
 }
 
@@ -214,7 +247,19 @@ export async function canAccessPetRecords(
   petId: string,
   db: PrismaClient = defaultPrisma,
 ): Promise<{ allowed: boolean; asVetId: string | null }> {
-  if (await ownsPet(uid, petId, db)) return { allowed: true, asVetId: null };
+  const pet = await petOwnership(petId, db);
+  if (!pet) return { allowed: false, asVetId: null };
+  return recordAccessFor(uid, petId, pet, db);
+}
+
+/** The body of `canAccessPetRecords`, with the pet already loaded. */
+async function recordAccessFor(
+  uid: string,
+  petId: string,
+  pet: { ownerId: string; ownedSince: string },
+  db: PrismaClient,
+): Promise<{ allowed: boolean; asVetId: string | null }> {
+  if (pet.ownerId === uid) return { allowed: true, asVetId: null };
 
   const vet = await db.vetProfile.findUnique({
     where: { userId: uid },
@@ -227,6 +272,14 @@ export async function canAccessPetRecords(
       petId,
       vetId: vet.id,
       status: { notIn: ["declined", "cancelled"] },
+      // As in `canViewPet`: only an appointment made under the current owner.
+      //
+      // This one matters more, because record access is *write* access — a vet
+      // who kept it could go on writing `prescription` records, and an unexpired
+      // prescription is what unlocks Rx products in the store. Without this
+      // clause, adopting an animal would hand every vet who ever treated it at
+      // the shelter a standing line of credit against the adopter's account.
+      createdAt: { gte: pet.ownedSince },
     },
     select: { id: true },
   });

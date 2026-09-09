@@ -1,6 +1,6 @@
 import { createPet, getPetsByOwner } from "@/lib/server/pets";
 import { petInputSchema } from "@/lib/validation/schemas";
-import { error, forbidden, ok, parseBody } from "@/lib/server/http";
+import { forbidden, ok, parseBody } from "@/lib/server/http";
 import { requireUser } from "@/lib/server/session";
 
 type Ctx = { params: Promise<{ ownerId: string }> };
@@ -22,10 +22,8 @@ export async function POST(request: Request, ctx: Ctx) {
   if (auth.uid !== ownerId) return forbidden();
   const parsed = await parseBody(request, petInputSchema);
   if ("response" in parsed) return parsed.response;
-  if (parsed.data.ownerId && parsed.data.ownerId !== ownerId) {
-    return error("ownerId in body does not match path", 400);
-  }
-  // The path owns the id; drop the body's copy rather than passing it twice.
-  const { ownerId: _bodyOwnerId, ...petData } = parsed.data;
-  return ok(await createPet(ownerId, petData), 201);
+  // The body no longer carries an owner at all — the path owns the id, and the
+  // check above owns the authorization. A client still sending one gets a 400
+  // from the schema's `.strict()`.
+  return ok(await createPet(ownerId, parsed.data), 201);
 }

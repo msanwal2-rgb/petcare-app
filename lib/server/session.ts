@@ -102,6 +102,7 @@ export {
   isBookingParticipant,
   ownsCaretakerProfile,
   ownsVetProfile,
+  ownsShelterProfile,
   ownsPet,
   canViewPet,
   isAppointmentParticipant,

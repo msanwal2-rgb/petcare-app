@@ -9,7 +9,13 @@ import { navigateAfterAuth } from "@/lib/auth/session-client";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { HomeIcon, PawIcon, CheckIcon, StethoscopeIcon } from "@/components/ui/icons";
+import {
+  HomeIcon,
+  PawIcon,
+  CheckIcon,
+  StethoscopeIcon,
+  HeartIcon,
+} from "@/components/ui/icons";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: {
@@ -36,6 +42,12 @@ const OPTIONS: {
     body: "List your practice, take appointments, and write straight into your patients' health records.",
     icon: StethoscopeIcon,
   },
+  {
+    role: "shelter",
+    title: "I rehome animals",
+    body: "List animals for adoption, take applications, and hand over each one's health record with it.",
+    icon: HeartIcon,
+  },
 ];
 
 /**
@@ -47,6 +59,7 @@ function nextStepFor(roles: UserRole[]): string {
   if (roles.includes("owner")) return "/dashboard";
   if (roles.includes("vet")) return "/dashboard/vet-profile";
   if (roles.includes("caretaker")) return "/dashboard/caretaker-profile";
+  if (roles.includes("shelter")) return "/dashboard/shelter-profile";
   return "/dashboard";
 }
 

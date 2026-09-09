@@ -5,7 +5,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
 import { toPet } from "./serialize";
-import { genId } from "./ids";
+import { genId, nowIso } from "./ids";
 import type { PetInputBody, PetPatchBody } from "@/lib/validation/schemas";
 
 export async function getPetsByOwner(ownerId: string, db: PrismaClient = defaultPrisma) {
@@ -26,7 +26,7 @@ export async function getPetsByIds(ids: string[], db: PrismaClient = defaultPris
 
 export async function createPet(
   ownerId: string,
-  input: Omit<PetInputBody, "ownerId">,
+  input: PetInputBody,
   db: PrismaClient = defaultPrisma
 ) {
   const { vetContact, ...rest } = input;
@@ -35,6 +35,9 @@ export async function createPet(
       ...rest,
       id: genId("p"),
       ownerId,
+      // This owner has had the animal since now, which is the honest answer for
+      // a pet somebody is entering themselves.
+      ownedSince: nowIso(),
       vetName: vetContact.name,
       vetPhone: vetContact.phone,
     },
@@ -51,12 +54,15 @@ export async function updatePet(
   const existing = await db.pet.findUnique({ where: { id } });
   if (!existing) return null;
 
-  const { vetContact, ownerId, ...rest } = patch;
+  // No `ownerId`, and none accepted by the schema either. Ownership moves in
+  // exactly one place — completing an adoption, in
+  // lib/server/adoptions/transfer.ts, which moves `ownedSince` with it so the
+  // previous owner's caretakers and vets lose access in the same write.
+  const { vetContact, ...rest } = patch;
   const p = await db.pet.update({
     where: { id },
     data: {
       ...rest,
-      ...(ownerId ? { ownerId } : {}),
       ...(vetContact
         ? { vetName: vetContact.name, vetPhone: vetContact.phone }
         : {}),

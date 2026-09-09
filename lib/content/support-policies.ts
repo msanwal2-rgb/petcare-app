@@ -31,6 +31,7 @@ export type PolicyTopic =
   | "orders"
   | "care"
   | "vet"
+  | "adoption"
   | "account"
   | "trust";
 
@@ -89,6 +90,65 @@ function inHours(hours: number): string {
 }
 
 /* ── Policies ────────────────────────────────────────────────────── */
+
+/* ── Adoption ────────────────────────────────────────────────────── */
+
+const ADOPTION_POLICIES: PolicySection[] = [
+  {
+    slug: "adoption-what-comes-with-them",
+    topic: "adoption",
+    title: "The health record comes with the animal",
+    summary:
+      "When an adoption completes, the animal's whole record moves to you — vaccinations, allergies, medications and every note a vet has written.",
+    points: [
+      "Nothing is retyped and nothing is lost. The record does not move; the ownership does, so the same record your new vet opens is the one the shelter's vet was writing in.",
+      "Any unexpired prescription comes with them, which means prescription-only food and medication stay orderable from the store without a fresh vet visit.",
+      "The shelter's own access ends the moment the adoption completes. So does the access of any caretaker or vet they had booked — an animal's history is yours from that point, and only yours.",
+    ],
+    href: "/adopt",
+  },
+  {
+    slug: "adoption-applying",
+    topic: "adoption",
+    title: "Applying to adopt",
+    summary:
+      "You apply, the shelter reviews, and if they approve you there is a fee to settle before you collect.",
+    points: [
+      "An application asks about your household, your hours and your other animals. Answer honestly — it is how a shelter places an animal well, not a test to pass.",
+      "You can have one open application per animal, and you can apply for more than one animal at a time.",
+      "Only one applicant is approved for an animal at a time, and nobody is asked for money before they are approved. If a shelter changes its mind after approving you, any fee you have paid is refunded automatically.",
+      "You can withdraw at any point before the adoption completes.",
+    ],
+    href: "/adopt",
+  },
+  {
+    slug: "adoption-fees",
+    topic: "adoption",
+    title: "Adoption fees",
+    summary:
+      "The fee is set by the shelter and shown on every listing. Some waive it entirely.",
+    points: [
+      "You pay through Leash once you have been approved, and the shelter completes the adoption once it has settled.",
+      "The fee is fixed when you apply, so a shelter editing its listing afterwards cannot change what you were quoted.",
+      "What it covers is up to the shelter — usually neutering, microchipping and vaccination. Their profile says.",
+      "If an adoption falls through before it completes, the fee is refunded.",
+    ],
+    href: "/adopt",
+  },
+  {
+    slug: "adoption-returns",
+    topic: "adoption",
+    title: "If it doesn't work out",
+    summary:
+      "Adoptions do fall through. Contact the shelter — they can arrange for the animal to come back.",
+    points: [
+      "Returning an animal is arranged with the shelter directly, and our support team records it so ownership and the health record go back with them.",
+      "Whether the fee is returned is between you and the shelter; most have a policy and it will be on their profile.",
+      "Nobody is penalised for returning an animal. A placement that is wrong for the animal is worth undoing.",
+    ],
+    href: "/adopt",
+  },
+];
 
 export const POLICIES: PolicySection[] = [
   {
@@ -300,6 +360,7 @@ export const POLICIES: PolicySection[] = [
       "Deleting your account takes your conversations, notifications and orders history with it.",
     ],
   },
+  ...ADOPTION_POLICIES,
 ];
 
 /* ── FAQs ────────────────────────────────────────────────────────── */
@@ -423,6 +484,11 @@ export const POLICY_TOPICS: { topic: PolicyTopic; title: string; blurb: string }
     topic: "trust",
     title: "Trust and reviews",
     blurb: "How ratings, response rates and verification actually work.",
+  },
+  {
+    topic: "adoption",
+    title: "Adopting",
+    blurb: "Applying, fees, and what comes with the animal.",
   },
   {
     topic: "account",

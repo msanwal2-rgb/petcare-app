@@ -4,7 +4,7 @@
  * types are used by the mock data layer today and the real API later.
  */
 
-export type UserRole = "owner" | "caretaker" | "vet";
+export type UserRole = "owner" | "caretaker" | "vet" | "shelter";
 
 /**
  * Staff privileges. Orthogonal to `UserRole` — those say what someone does in
@@ -47,6 +47,137 @@ export interface PublicUser {
   address: { city: string; state: string };
   verified: boolean;
   createdAt: string;
+}
+
+/* ── Shelters ─────────────────────────────────────────────────── */
+
+export type ShelterKind = "municipal" | "rescue" | "sanctuary" | "foster_network";
+
+export interface ShelterProfile {
+  id: string;
+  userId: string;
+  /** The shelter's public name; the account holder's is on the User. */
+  name: string;
+  bio: string;
+  kind: ShelterKind;
+  registrationNumber: string;
+  registrationState: string;
+  /** Checked by a human in the admin console. */
+  verificationStatus: BackgroundCheckStatus;
+  acceptedSpecies: Species[];
+  websiteUrl: string;
+  phone: string;
+  email: string;
+  address: { line: string; city: string; state: string; lat: number; lng: number };
+  adoptionPolicy: string;
+  /** Derived from application statuses. Never patchable. */
+  responseRatePct: number;
+  createdAt: string;
+}
+
+export interface ShelterWithUser extends ShelterProfile {
+  user: PublicUser;
+  distanceMiles?: number;
+  /** How many animals they currently have available. */
+  availableCount: number;
+}
+
+/* ── Adoption ─────────────────────────────────────────────────── */
+
+export type ListingStatus =
+  | "draft"
+  | "available"
+  | "pending"
+  | "adopted"
+  | "withdrawn";
+
+export type ApplicationStatus =
+  | "submitted"
+  | "under_review"
+  | "approved"
+  | "completed"
+  | "rejected"
+  | "withdrawn";
+
+/** "unknown" is the honest answer for an animal nobody has tested yet. */
+export type TriState = "yes" | "no" | "unknown";
+export type EnergyLevel = "low" | "moderate" | "high";
+export type HomeType = "house" | "apartment" | "condo" | "other";
+
+export interface AdoptionListing {
+  id: string;
+  shelterId: string;
+  petId: string;
+  status: ListingStatus;
+  /** Integer cents — this reaches the payment ledger, which counts in cents. */
+  feeCents: number;
+  currency: string;
+  headline: string;
+  story: string;
+  goodWithKids: TriState;
+  goodWithDogs: TriState;
+  goodWithCats: TriState;
+  houseTrained: TriState;
+  energyLevel: EnergyLevel;
+  specialNeeds: boolean;
+  specialNeedsNotes: string;
+  spayedNeutered: boolean;
+  microchipped: boolean;
+  /** Where the animal actually is — a fostered dog is not at the shelter. */
+  location: { city: string; state: string; lat: number; lng: number };
+  intakeAt: string;
+  publishedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+}
+
+/** A listing with the animal it is about, which is what a card renders. */
+export interface AdoptionListingWithPet extends AdoptionListing {
+  pet: Pet;
+  shelterName: string;
+  distanceMiles?: number;
+}
+
+export interface AdoptionListingPage {
+  items: AdoptionListingWithPet[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AdoptionApplication {
+  id: string;
+  listingId: string;
+  shelterId: string;
+  petId: string;
+  /** Snapshotted, so the row still means something if the listing is gone. */
+  petName: string;
+  petPhotoUrl: string;
+  applicantId: string;
+  status: ApplicationStatus;
+  /** Snapshotted at submission — a later edit can't rewrite the quote. */
+  feeCents: number;
+  householdAdults: number;
+  householdChildren: number;
+  hasOtherPets: boolean;
+  otherPetsNotes: string;
+  homeType: HomeType;
+  fencedYard: boolean;
+  ownsHome: boolean;
+  hoursAlonePerDay: number;
+  experience: string;
+  message: string;
+  decisionNote: string;
+  decidedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+/** An application as the shelter reviewing it sees it. */
+export interface AdoptionApplicationWithApplicant extends AdoptionApplication {
+  applicant: PublicUser;
+  /** Set once a fee has been charged; null for a waived one. */
+  paymentStatus: PaymentStatus | null;
 }
 
 /* ── Membership ───────────────────────────────────────────────── */
@@ -265,7 +396,7 @@ export type VerificationStatus = BackgroundCheckStatus;
 
 export interface AdminProfessionalRow {
   id: string;
-  kind: "caretaker" | "vet";
+  kind: "caretaker" | "vet" | "shelter";
   userId: string;
   userName: string;
   userEmail: string;
@@ -513,6 +644,12 @@ export interface MedicalRecord {
   createdAt: string; // ISO 8601
 }
 
+/**
+ * A visit as somebody other than its booker sees it: everything clinical, no
+ * money. See `toClinicalAppointment`.
+ */
+export type ClinicalAppointment = Omit<VetAppointment, "fee">;
+
 export interface CreateAppointmentInput {
   vetId: string;
   petId: string;
@@ -759,7 +896,13 @@ export type NotificationKind =
   | "membership_started"
   | "membership_payment_failed"
   | "membership_cancelled"
-  | "membership_ended";
+  | "membership_ended"
+  | "adoption_application_received"
+  | "adoption_under_review"
+  | "adoption_approved"
+  | "adoption_rejected"
+  | "adoption_completed"
+  | "adoption_reversed";
 
 export interface Notification {
   id: string;

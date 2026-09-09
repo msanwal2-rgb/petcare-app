@@ -43,6 +43,7 @@ function Logo() {
 const NAV = [
   { href: "/search", label: "Find care" },
   { href: "/vets", label: "Vets" },
+  { href: "/adopt", label: "Adopt" },
   { href: "/store", label: "Store" },
   { href: "/dashboard", label: "Dashboard", guarded: true },
 ];

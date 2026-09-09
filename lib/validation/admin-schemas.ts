@@ -50,7 +50,7 @@ export const adminUserActionSchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("reactivate") }),
   z.object({ action: z.literal("sign_out") }),
-  z.object({ action: z.literal("set_roles"), roles: z.array(userRole).max(3) }),
+  z.object({ action: z.literal("set_roles"), roles: z.array(userRole).max(4) }),
   z.object({
     action: z.literal("set_staff_roles"),
     staffRoles: z.array(staffRole).max(STAFF_ROLES.length),
@@ -145,7 +145,7 @@ export const subscriptionActionSchema = z.discriminatedUnion("action", [
 
 export const adminProfessionalQuerySchema = z.object({
   q: z.string().trim().min(1).max(200).optional(),
-  kind: z.enum(["caretaker", "vet"]).optional(),
+  kind: z.enum(["caretaker", "vet", "shelter"]).optional(),
   status: z.enum(["verified", "pending", "none"]).optional(),
   limit: intish.max(100).optional(),
   offset: intish.optional(),
@@ -153,7 +153,7 @@ export const adminProfessionalQuerySchema = z.object({
 export type AdminProfessionalQuery = z.infer<typeof adminProfessionalQuerySchema>;
 
 export const verificationSchema = z.object({
-  kind: z.enum(["caretaker", "vet"]),
+  kind: z.enum(["caretaker", "vet", "shelter"]),
   status: z.enum(["verified", "pending", "none"]),
   note: z.string().trim().max(500).optional(),
 });

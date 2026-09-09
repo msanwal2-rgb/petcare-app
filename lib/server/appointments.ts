@@ -13,7 +13,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db/prisma";
-import { toAppointment } from "./serialize";
+import { toAppointment, toClinicalAppointment } from "./serialize";
 import { genId, nowIso } from "./ids";
 import { refreshResponseRate } from "./reputation";
 import { notify } from "./notifications";
@@ -93,6 +93,17 @@ export async function getAppointmentsByVet(
   return rows.map(toAppointment);
 }
 
+/**
+ * Every visit this animal has had, whoever booked it.
+ *
+ * Scoped by the *pet*, not the booker, which is the read a health record
+ * actually wants: a treating vet needs the history regardless of who made the
+ * appointments, and after an adoption the animal's history is the adopter's
+ * business even though the shelter booked it.
+ *
+ * `forBooker` decides how much of each row comes back. Anyone who is not the
+ * person who paid gets the clinical version, without the fee.
+ */
 export async function getAppointmentsByPet(
   petId: string,
   db: PrismaClient = defaultPrisma
@@ -102,6 +113,20 @@ export async function getAppointmentsByPet(
     orderBy: { startDateTime: "desc" },
   });
   return rows.map(toAppointment);
+}
+
+export async function getClinicalAppointmentsByPet(
+  petId: string,
+  viewerId: string,
+  db: PrismaClient = defaultPrisma
+) {
+  const rows = await db.vetAppointment.findMany({
+    where: { petId },
+    orderBy: { startDateTime: "desc" },
+  });
+  return rows.map((a) =>
+    a.ownerId === viewerId ? toAppointment(a) : toClinicalAppointment(a)
+  );
 }
 
 export async function getAppointmentById(

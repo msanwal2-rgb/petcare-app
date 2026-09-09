@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-export const userRole = z.enum(["owner", "caretaker", "vet"]);
+export const userRole = z.enum(["owner", "caretaker", "vet", "shelter"]);
 const species = z.enum(["dog", "cat", "other"]);
 const sex = z.enum(["male", "female"]);
 const serviceType = z.enum(["walking", "sitting", "boarding", "daycare"]);
@@ -66,24 +66,43 @@ export const updateUserSchema = z
 
 const vetContact = z.object({ name: z.string(), phone: z.string() });
 
-export const petInputSchema = z.object({
-  ownerId: z.string(),
-  name: z.string().min(1),
-  species: species,
-  breed: z.string(),
-  sex: sex,
-  dob: z.string(),
-  weightLbs: z.number(),
-  photoUrl: z.string(),
-  vaccinated: z.boolean(),
-  allergies: z.array(z.string()),
-  medications: z.array(z.string()),
-  behaviorNotes: z.string(),
-  feedingInstructions: z.string(),
-  vetContact: vetContact,
-});
+/**
+ * No `ownerId`.
+ *
+ * It used to be here, and `updatePet` used to write it, and `PATCH /api/pets/:id`
+ * checked only that the caller was the *outgoing* owner — so any user could hand
+ * an animal to any user id, with no consent from the recipient, no audit, no
+ * notification, and no check that the recipient existed. `PetForm` made it worse
+ * by spreading `ownerId` into every edit payload, so a stale prop could rewrite
+ * ownership silently.
+ *
+ * Who owns an animal now changes in exactly one place: completing an adoption
+ * (`lib/server/adoptions/transfer.ts`), which also moves `ownedSince` and so
+ * severs the previous owner's caretakers and vets in the same write.
+ *
+ * `.strict()` rather than Zod's default key-stripping, so a client still sending
+ * the old shape gets a loud 400 instead of a silent no-op.
+ */
+export const petInputSchema = z
+  .object({
+    name: z.string().min(1),
+    species: species,
+    breed: z.string(),
+    sex: sex,
+    dob: z.string(),
+    weightLbs: z.number(),
+    photoUrl: z.string(),
+    vaccinated: z.boolean(),
+    allergies: z.array(z.string()),
+    medications: z.array(z.string()),
+    behaviorNotes: z.string(),
+    feedingInstructions: z.string(),
+    vetContact: vetContact,
+  })
+  .strict();
 
-export const petPatchSchema = petInputSchema.partial();
+/** Derived, so `ownerId` cannot creep back onto one side and not the other. */
+export const petPatchSchema = petInputSchema.partial().strict();
 
 /* ── Caretakers ─────────────────────────────────────────────────────── */
 
@@ -144,6 +163,182 @@ export const createBookingSchema = z.object({
 
 export const updateBookingStatusSchema = z.object({ status: bookingStatus });
 
+/* Query strings arrive as strings. These coerce them into the shapes the
+   search functions expect, failing loudly on garbage rather than silently
+   producing NaN. Declared here because the shelter and adoption schemas below
+   use them too. */
+
+const numeric = z
+  .string()
+  .transform((v) => Number(v))
+  .refine((n) => !Number.isNaN(n), "must be a number");
+
+const boolish = z
+  .string()
+  .transform((v) => v === "true" || v === "1")
+  .pipe(z.boolean());
+
+/* ── Shelters ───────────────────────────────────────────────────────── */
+
+export const shelterKind = z.enum([
+  "municipal",
+  "rescue",
+  "sanctuary",
+  "foster_network",
+]);
+
+const shelterAddress = z.object({
+  line: z.string(),
+  city: z.string(),
+  state: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+});
+
+/**
+ * Note what is absent, by the same rule that keeps `rating` out of
+ * `vetPatchSchema`: `verificationStatus` is decided by a person in the admin
+ * console, and `responseRatePct` is computed from application statuses. A
+ * profile form that could set either would make both meaningless.
+ */
+export const shelterPatchSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    bio: z.string().max(4000),
+    kind: shelterKind,
+    registrationNumber: z.string().max(60),
+    registrationState: z.string().max(60),
+    acceptedSpecies: z.array(species),
+    websiteUrl: z.string().max(300),
+    phone: z.string().max(40),
+    email: z.string().max(200),
+    address: shelterAddress,
+    adoptionPolicy: z.string().max(4000),
+  })
+  .partial();
+export type ShelterPatchBody = z.infer<typeof shelterPatchSchema>;
+
+export const shelterSearchQuerySchema = z.object({
+  lat: numeric.optional(),
+  lng: numeric.optional(),
+  radiusMiles: numeric.optional(),
+  species: species.optional(),
+  kind: shelterKind.optional(),
+  withAvailable: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  verifiedOnly: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+});
+
+/* ── Adoption ───────────────────────────────────────────────────────── */
+
+export const listingStatus = z.enum([
+  "draft",
+  "available",
+  "pending",
+  "adopted",
+  "withdrawn",
+]);
+export const triState = z.enum(["yes", "no", "unknown"]);
+export const energyLevel = z.enum(["low", "moderate", "high"]);
+
+/** No `status` — a listing moves through its own endpoint, not a patch. */
+export const adoptionListingSchema = z
+  .object({
+    petId: z.string(),
+    feeCents: z.number().int().min(0).max(1_000_000),
+    headline: z.string().max(200),
+    story: z.string().max(8000),
+    goodWithKids: triState,
+    goodWithDogs: triState,
+    goodWithCats: triState,
+    houseTrained: triState,
+    energyLevel: energyLevel,
+    specialNeeds: z.boolean(),
+    specialNeedsNotes: z.string().max(2000),
+    spayedNeutered: z.boolean(),
+    microchipped: z.boolean(),
+    city: z.string().min(1),
+    state: z.string().min(1),
+    lat: z.number(),
+    lng: z.number(),
+    intakeAt: z.string(),
+  })
+  .partial({
+    feeCents: true,
+    headline: true,
+    story: true,
+    goodWithKids: true,
+    goodWithDogs: true,
+    goodWithCats: true,
+    houseTrained: true,
+    energyLevel: true,
+    specialNeeds: true,
+    specialNeedsNotes: true,
+    spayedNeutered: true,
+    microchipped: true,
+    intakeAt: true,
+  });
+export type AdoptionListingBody = z.infer<typeof adoptionListingSchema>;
+
+export const adoptionListingPatchSchema = adoptionListingSchema
+  .partial()
+  .omit({ petId: true });
+
+export const listingStatusSchema = z.object({ status: listingStatus });
+
+export const adoptionListingQuerySchema = z.object({
+  lat: numeric.optional(),
+  lng: numeric.optional(),
+  radiusMiles: numeric.optional(),
+  species: species.optional(),
+  shelterId: z.string().optional(),
+  goodWithKids: z.literal("yes").optional(),
+  goodWithDogs: z.literal("yes").optional(),
+  goodWithCats: z.literal("yes").optional(),
+  energyLevel: energyLevel.optional(),
+  maxFeeCents: numeric.optional(),
+  q: z.string().trim().min(1).max(200).optional(),
+  limit: numeric.optional(),
+  offset: numeric.optional(),
+});
+export type AdoptionListingQuery = z.infer<typeof adoptionListingQuerySchema>;
+
+/** No `applicantId` — it is the caller, taken from the session. */
+export const adoptionApplicationSchema = z.object({
+  listingId: z.string(),
+  householdAdults: z.number().int().min(1).max(20),
+  householdChildren: z.number().int().min(0).max(20),
+  hasOtherPets: z.boolean(),
+  otherPetsNotes: z.string().max(2000).optional(),
+  homeType: z.enum(["house", "apartment", "condo", "other"]),
+  fencedYard: z.boolean(),
+  ownsHome: z.boolean(),
+  hoursAlonePerDay: z.number().int().min(0).max(24),
+  experience: z.string().max(4000).optional(),
+  message: z.string().max(4000).optional(),
+});
+export type AdoptionApplicationBody = z.infer<typeof adoptionApplicationSchema>;
+
+export const applicationStatusSchema = z.object({
+  status: z.enum([
+    "under_review",
+    "approved",
+    "rejected",
+    "withdrawn",
+  ]),
+  note: z.string().max(1000).optional(),
+});
+
+export const completeAdoptionSchema = z.object({
+  /**
+   * Cancel any live booking or appointment standing in the way.
+   *
+   * Off by default: cancelling a sitter's booking out from under them, while
+   * the animal is in their house, from a flow they are not party to, is worse
+   * than refusing to complete. The UI names the engagements first.
+   */
+  force: z.boolean().optional(),
+});
+
 /* ── Reviews ────────────────────────────────────────────────────────── */
 
 export const reviewKind = z.enum(["booking", "vet_appointment"]);
@@ -164,16 +359,6 @@ export const markReadSchema = z.object({ id: z.string().optional() });
    Query params arrive as strings; these turn them back into the types the
    search functions expect, failing loudly on garbage rather than silently
    producing NaN. */
-
-const numeric = z
-  .string()
-  .transform((v) => Number(v))
-  .refine((n) => !Number.isNaN(n), "must be a number");
-
-const boolish = z
-  .string()
-  .transform((v) => v === "true" || v === "1")
-  .pipe(z.boolean());
 
 /* ── Vet care ───────────────────────────────────────────────────────── */
 
@@ -402,11 +587,13 @@ export const assistantChatSchema = z.object({
    */
   messages: z
     .array(
-      z.object({
-        id: z.string().optional(),
-        role: z.enum(["user", "assistant", "system"]),
-        parts: z.array(z.object({ type: z.string() }).loose()).max(50),
-      }).loose(),
+      z
+        .object({
+          id: z.string().optional(),
+          role: z.enum(["user", "assistant", "system"]),
+          parts: z.array(z.object({ type: z.string() }).loose()).max(50),
+        })
+        .loose(),
     )
     .min(1)
     .max(40),

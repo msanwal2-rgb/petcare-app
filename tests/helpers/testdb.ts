@@ -80,6 +80,12 @@ const SEED_TABLES = [
   "refunds",
   "webhook_events",
   "rate_limit_hits",
+  // Adoption. `shelter_profiles` references users, and the two adoption tables
+  // reference nothing (deliberately — see the schema), but insert order still
+  // matters for reading them back in a sensible state.
+  "shelter_profiles",
+  "adoption_listings",
+  "adoption_applications",
 ] as const;
 
 const q = (schema: string, table: string) => `"${schema}"."${table}"`;

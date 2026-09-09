@@ -9,6 +9,7 @@ import {
 import { users as seedUsers } from "@/lib/seed-data";
 import { vetUsers } from "@/lib/seed-data/vets";
 import { staffUsers } from "@/lib/seed-data/store";
+import { shelterUsers } from "@/lib/seed-data/shelters";
 import { updateUserSchema } from "@/lib/validation/schemas";
 
 beforeEach(async () => {
@@ -47,7 +48,11 @@ describe("users", () => {
 
   it("lists all seeded users", async () => {
     // Derived, not a magic number — adding a seed user shouldn't fail this.
-    const expected = seedUsers.length + vetUsers.length + staffUsers.length;
+    const expected =
+      seedUsers.length +
+      vetUsers.length +
+      staffUsers.length +
+      shelterUsers.length;
     expect((await listUsers(db)).length).toBe(expected);
   });
 

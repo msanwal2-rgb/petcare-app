@@ -13,8 +13,15 @@
 
 import type { PrismaClient } from "@prisma/client";
 
-/** Which side of the marketplace is being scored. */
-export type Professional = "caretaker" | "vet";
+/**
+ * Which side of the marketplace is being scored.
+ *
+ * Shelters are here for `responseRatePct` only — they have no `rating` or
+ * `reviewCount` columns, deliberately, until `Review.kind` grows an "adoption"
+ * arm. `applyRating` no-ops for them, which it already did for anyone without a
+ * profile.
+ */
+export type Professional = "caretaker" | "vet" | "shelter";
 
 type ProfileRef = { id: string } | { userId: string };
 
@@ -29,6 +36,9 @@ function loadProfile(
   where: ProfileRef,
   db: PrismaClient
 ): Promise<ProfileRow | null> {
+  // A shelter has no rating to load. Returning null here is what makes
+  // `applyRating` a no-op for them without a second branch.
+  if (kind === "shelter") return Promise.resolve(null);
   return kind === "vet"
     ? db.vetProfile.findUnique({ where })
     : db.caretakerProfile.findUnique({ where });
@@ -40,8 +50,13 @@ async function patchProfile(
   data: Partial<{ rating: number; reviewCount: number; responseRatePct: number }>,
   db: PrismaClient
 ): Promise<void> {
-  if (kind === "vet") await db.vetProfile.update({ where: { id }, data });
-  else await db.caretakerProfile.update({ where: { id }, data });
+  if (kind === "shelter") {
+    await db.shelterProfile.update({ where: { id }, data });
+  } else if (kind === "vet") {
+    await db.vetProfile.update({ where: { id }, data });
+  } else {
+    await db.caretakerProfile.update({ where: { id }, data });
+  }
 }
 
 /**
@@ -52,6 +67,14 @@ async function patchProfile(
 const ANSWERED: Record<Professional, string[]> = {
   caretaker: ["accepted", "declined", "in_progress", "completed"],
   vet: ["confirmed", "declined", "in_progress", "completed"],
+  shelter: ["under_review", "approved", "rejected", "completed"],
+};
+
+/** What is still sitting unanswered, per kind. */
+const WAITING: Record<Professional, string> = {
+  caretaker: "requested",
+  vet: "requested",
+  shelter: "submitted",
 };
 
 /**
@@ -68,20 +91,29 @@ async function requestCounts(
   profileId: string,
   db: PrismaClient
 ): Promise<{ answered: number; waiting: number }> {
-  if (kind === "vet") {
-    const [answered, waiting] = await Promise.all([
-      db.vetAppointment.count({
-        where: { vetId: profileId, status: { in: ANSWERED.vet } },
-      }),
-      db.vetAppointment.count({ where: { vetId: profileId, status: "requested" } }),
-    ]);
-    return { answered, waiting };
-  }
+  // One table of accessors rather than a branch per kind. The third kind is
+  // what made the if/else version ugly enough to be worth generalising: each
+  // arm differs only in which table to count and which column names the
+  // profile.
+  const count = (statuses: { in: string[] } | string) => {
+    if (kind === "vet") {
+      return db.vetAppointment.count({
+        where: { vetId: profileId, status: statuses },
+      });
+    }
+    if (kind === "shelter") {
+      return db.adoptionApplication.count({
+        where: { shelterId: profileId, status: statuses },
+      });
+    }
+    return db.booking.count({
+      where: { caretakerId: profileId, status: statuses },
+    });
+  };
+
   const [answered, waiting] = await Promise.all([
-    db.booking.count({
-      where: { caretakerId: profileId, status: { in: ANSWERED.caretaker } },
-    }),
-    db.booking.count({ where: { caretakerId: profileId, status: "requested" } }),
+    count({ in: ANSWERED[kind] }),
+    count(WAITING[kind]),
   ]);
   return { answered, waiting };
 }

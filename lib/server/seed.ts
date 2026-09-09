@@ -24,6 +24,14 @@ import {
   orders as seedOrders,
   products as seedProducts,
 } from "@/lib/seed-data/store";
+import {
+  shelterUsers as seedShelterUsers,
+  shelters as seedShelters,
+  shelterPets as seedShelterPets,
+  listings as seedListings,
+  applications as seedApplications,
+  shelterPetOwnedSince,
+} from "@/lib/seed-data/shelters";
 import { hashPassword } from "./auth-logic";
 import { refreshResponseRate } from "./reputation";
 import { DEMO_PASSWORD } from "@/lib/auth/demo";
@@ -35,6 +43,9 @@ function daysFromNow(days: number): string {
 
 /** Delete every row, in FK-safe order. */
 async function resetDatabase(db: PrismaClient) {
+  await db.adoptionApplication.deleteMany();
+  await db.adoptionListing.deleteMany();
+  await db.shelterProfile.deleteMany();
   await db.refund.deleteMany();
   await db.payment.deleteMany();
   await db.subscription.deleteMany();
@@ -94,7 +105,12 @@ export async function seedDatabase(db: PrismaClient) {
   const staffIds = new Set(seedStaffUsers.map((u) => u.id));
 
   // Owners/caretakers, vets, and the staff accounts all share one table.
-  const allUsers = [...seedUsers, ...seedVetUsers, ...seedStaffUsers];
+  const allUsers = [
+    ...seedUsers,
+    ...seedVetUsers,
+    ...seedStaffUsers,
+    ...seedShelterUsers,
+  ];
   await db.user.createMany({
     data: allUsers.map((u) => ({
       id: u.id,
@@ -118,9 +134,18 @@ export async function seedDatabase(db: PrismaClient) {
   });
 
   await db.pet.createMany({
-    data: seedPets.map((p) => ({
+    data: [...seedPets, ...seedShelterPets].map((p) => ({
       id: p.id,
       ownerId: p.ownerId,
+      // The epoch, matching the migration's backfill: these ownerships predate
+      // the column, and every seeded booking and appointment carries a fixed
+      // 2025–26 date. Set to seed time instead, every non-owner grant in the
+      // demo would evaporate — the treating vet would lose the patient record
+      // they are supposed to be writing.
+      // Epoch for the pets that predate the column, so their existing bookings
+      // and appointments still grant access. Shelter animals are new, so they
+      // get the date the shelter actually took them in.
+      ownedSince: shelterPetOwnedSince[p.id] ?? "1970-01-01T00:00:00.000Z",
       name: p.name,
       species: p.species,
       breed: p.breed,
@@ -381,11 +406,18 @@ export async function seedDatabase(db: PrismaClient) {
     ],
   });
 
+  /* ── Adoption ─────────────────────────────────────────────────────── */
+
+  await db.shelterProfile.createMany({ data: seedShelters });
+  await db.adoptionListing.createMany({ data: seedListings });
+  await db.adoptionApplication.createMany({ data: seedApplications });
+
   // responseRatePct is derived, so the fixtures must not get to hand-author it
   // either — otherwise the seeded number contradicts the real one the moment
   // anybody accepts a request.
   for (const c of seedCaretakers) await refreshResponseRate("caretaker", c.id, db);
   for (const v of seedVets) await refreshResponseRate("vet", v.id, db);
+  for (const sh of seedShelters) await refreshResponseRate("shelter", sh.id, db);
 
   return {
     users: allUsers.length,
@@ -398,6 +430,9 @@ export async function seedDatabase(db: PrismaClient) {
     appointments: seedAppointments.length,
     medicalRecords: seedMedicalRecords.length,
     products: seedProducts.length,
+    shelters: seedShelters.length,
+    listings: seedListings.length,
+    applications: seedApplications.length,
     orders: seedOrders.length,
   };
 }

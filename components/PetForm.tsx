@@ -104,8 +104,9 @@ export function PetForm({
   async function onSubmit(values: FormValues) {
     const toList = (s: string) =>
       s.split(",").map((x) => x.trim()).filter(Boolean);
+    // No `ownerId`. It used to be spread into every payload, including edits,
+    // which meant a stale prop could hand somebody's animal away silently.
     const payload: PetInput = {
-      ownerId,
       name: values.name,
       species: values.species,
       breed: values.breed,
@@ -126,7 +127,7 @@ export function PetForm({
         await updatePet(pet.id, payload);
         toast.success(`${values.name}’s profile updated.`);
       } else {
-        await createPet(payload);
+        await createPet(ownerId, payload);
         toast.success(`${values.name} added to your pets.`);
       }
       router.push("/dashboard");

@@ -22,59 +22,61 @@ datasource db {
 }
 
 model User {
-  id                String                  @id
-  name              String
-  email             String                  @unique
-  phone             String                  @default("")
-  avatarUrl         String
-  roles             String[] // "owner" | "caretaker" | "vet"
-  addressCity       String
-  addressState      String
-  lat               Float
-  lng               Float
-  verified          Boolean                 @default(false)
-  createdAt         String
+  id                   String                  @id
+  name                 String
+  email                String                  @unique
+  phone                String                  @default("")
+  avatarUrl            String
+  roles                String[] // "owner" | "caretaker" | "vet"
+  addressCity          String
+  addressState         String
+  lat                  Float
+  lng                  Float
+  verified             Boolean                 @default(false)
+  createdAt            String
   // Bcrypt hash for email/password login. Null for accounts created purely via
   // an OAuth provider (e.g. Google) that never set a password.
-  passwordHash      String?
+  passwordHash         String?
   // Store operations staff: may advance order fulfillment. Not a marketplace
   // role — it never appears in `roles` or the role toggle.
   //
   // Superseded by `staffRoles` and read only through it; dropped in a later
   // migration once a release has run clean on the new column.
-  isOps             Boolean                 @default(false)
+  isOps                Boolean                 @default(false)
   /// Staff privileges, orthogonal to the marketplace `roles` above:
   /// "ops" | "support" | "finance" | "admin". "admin" satisfies every check.
   /// Never appears in the role toggle and is never self-editable.
-  staffRoles        String[]
+  staffRoles           String[]
   /// Google's stable subject id, set when an account is linked to Google.
   /// Unique so two accounts can never claim the same Google identity.
-  googleId          String?                 @unique
+  googleId             String?                 @unique
   /// Account lifecycle: "active" | "suspended" | "deleted". Checked in
   /// requireUser(), so a suspension takes effect on the next request rather
   /// than whenever the JWT happens to expire.
-  status            String                  @default("active")
-  suspendedAt       String?
-  suspendedReason   String                  @default("")
+  status               String                  @default("active")
+  suspendedAt          String?
+  suspendedReason      String                  @default("")
   /// Set by a soft delete. The row stays so orders, payments and reviews keep
   /// their author; the personal data on it is scrubbed.
-  deletedAt         String?
-  lastLoginAt       String?
+  deletedAt            String?
+  lastLoginAt          String?
   /// Sessions issued before this instant are refused. Bumped on password reset,
   /// on suspension, and by an admin forcing a sign-out — this is the only
   /// revocation mechanism available with JWT sessions and no adapter.
-  sessionsValidFrom String?
-  pets              Pet[]
-  caretaker         CaretakerProfile?
-  vet               VetProfile?
-  orders            Order[]
-  notifications     Notification[]
-  assistantChats    AssistantConversation[]
-  auditEntries      AdminAuditLog[]
-  payments          Payment[]
-  subscriptions     Subscription[]
+  sessionsValidFrom    String?
+  pets                 Pet[]
+  caretaker            CaretakerProfile?
+  vet                  VetProfile?
+  orders               Order[]
+  notifications        Notification[]
+  assistantChats       AssistantConversation[]
+  auditEntries         AdminAuditLog[]
+  payments             Payment[]
+  subscriptions        Subscription[]
+  shelter              ShelterProfile?
+  adoptionApplications AdoptionApplication[]
   /// Stripe's customer id, so a returning member is not billed as a stranger.
-  stripeCustomerId  String?                 @unique
+  stripeCustomerId     String?                 @unique
 
   @@index([status])
   @@map("users")
@@ -84,6 +86,20 @@ model Pet {
   id                  String           @id
   ownerId             String
   owner               User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// When the current owner acquired this animal.
+  ///
+  /// An authorization input, not a display field — it is what makes a caretaker's
+  /// or a vet's access *end* when a pet changes hands. Both predicates in
+  /// lib/server/access.ts require the engagement that grants access to have been
+  /// created at or after this instant.
+  ///
+  /// Deliberately NOT "match the engagement's ownerId to the pet's ownerId",
+  /// which needs no column and is exact rather than inferred. That version makes
+  /// authorization depend on a *mutable* column, and `VetAppointment.ownerId` is
+  /// one somebody may reasonably want to backfill one day — which would silently
+  /// restore every grant this is here to end. `createdAt` is written once and
+  /// never touched, so this stays correct whatever happens to `ownerId`.
+  ownedSince          String           @default("1970-01-01T00:00:00.000Z")
   name                String
   species             String // "dog" | "cat" | "other"
   breed               String
@@ -100,6 +116,7 @@ model Pet {
   vetPhone            String
   appointments        VetAppointment[]
   medicalRecords      MedicalRecord[]
+  adoptionListing     AdoptionListing?
 
   @@index([ownerId])
   @@map("pets")
@@ -613,38 +630,42 @@ model RateLimitHit {
 /// a customer whose first intent is cancelled can be issued a fresh one, and
 /// the order's live payment is the newest row that has not failed.
 model Payment {
-  id                  String   @id
-  userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String   @id
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// "order" | "subscription_invoice"
-  kind                String   @default("order")
+  /// "order" | "subscription_invoice" | "adoption_fee"
+  kind                  String   @default("order")
   /// Exactly one of these is set. Plain columns rather than a polymorphic FK,
   /// following the precedent of Review.bookingId + Review.kind.
-  orderId             String?
-  subscriptionId      String?
+  orderId               String?
+  subscriptionId        String?
+  /// Unique: one fee per adoption, and the uniqueness is what makes a
+  /// double-submitted payment impossible rather than merely unlikely.
+  adoptionApplicationId String?  @unique
   /// "stripe" | "demo" | "none" (a zero-value order) | "manual"
-  provider            String   @default("stripe")
+  provider              String   @default("stripe")
   /// pi_… / in_… / demo_pi_…. Unique, which is what makes webhook replay safe.
-  providerRef         String   @unique
-  providerCustomerId  String   @default("")
+  providerRef           String   @unique
+  providerCustomerId    String   @default("")
   /// PaymentStatus — see types/index.ts. Every write goes through the ledger's
   /// applyIntentState, which checks canTransitionPayment first.
-  status              String   @default("unpaid")
-  amountCents         Int
-  amountRefundedCents Int      @default(0)
-  currency            String   @default("usd")
+  status                String   @default("unpaid")
+  amountCents           Int
+  amountRefundedCents   Int      @default(0)
+  currency              String   @default("usd")
   /// Snapshot for the receipt. Never a card number, never a token.
-  methodBrand         String   @default("")
-  methodLast4         String   @default("")
-  failureCode         String   @default("")
-  failureMessage      String   @default("")
+  methodBrand           String   @default("")
+  methodLast4           String   @default("")
+  failureCode           String   @default("")
+  failureMessage        String   @default("")
   /// `event.created` of the newest provider event applied, as ISO. Guards
   /// against a delayed event overwriting a newer one.
-  lastEventAt         String   @default("")
-  createdAt           String
-  updatedAt           String
-  succeededAt         String?
-  refunds             Refund[]
+  lastEventAt           String   @default("")
+  createdAt             String
+  updatedAt             String
+  succeededAt           String?
+  refunds               Refund[]
 
   @@index([orderId])
   @@index([userId, createdAt])
@@ -770,4 +791,161 @@ model WebhookEvent {
   @@index([type, eventAt])
   @@index([status, receivedAt])
   @@map("webhook_events")
+}
+
+/// An adoption shelter or rescue.
+///
+/// Mirrors VetProfile, which is the newer and tidier of the two professional
+/// profiles — it derives its option lists from label maps and its patch schema
+/// refuses the derived fields. Copy that side, not the caretaker one.
+///
+/// Two deliberate omissions:
+///
+/// - **No availability relation.** A shelter is not booked by the hour; you
+///   apply to adopt and they get back to you.
+/// - **No `rating` / `reviewCount`.** `backgroundCheckStatus` sat on
+///   CaretakerProfile for months with nothing able to write to it, so a
+///   "verified" badge meant only that a fixture said so. Adding rating columns
+///   before `Review.kind` has an "adoption" arm would commit the same sin twice.
+///   `responseRatePct` is different — it is computed from application statuses
+///   by lib/server/reputation.ts, and it is genuinely what an adopter wants to
+///   know before spending an afternoon on a form.
+model ShelterProfile {
+  id                 String   @id
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The shelter's public name. `User.name` is the account holder's.
+  name               String
+  bio                String   @default("")
+  /// "municipal" | "rescue" | "sanctuary" | "foster_network"
+  kind               String   @default("rescue")
+  /// The licence analogue: EIN, charity number, state registration.
+  registrationNumber String   @default("")
+  registrationState  String   @default("")
+  /// Checked by a human in the admin console. "verified" | "pending" | "none"
+  verificationStatus String   @default("none")
+  acceptedSpecies    String[] // Species[]
+  websiteUrl         String   @default("")
+  phone              String   @default("")
+  email              String   @default("")
+  addressLine        String   @default("")
+  city               String
+  state              String
+  lat                Float
+  lng                Float
+  /// What an applicant should expect: home checks, references, fees, waiting.
+  adoptionPolicy     String   @default("")
+  /// Derived — the share of applications they have answered. Never patchable.
+  responseRatePct    Int      @default(100)
+  createdAt          String
+
+  @@index([city, state])
+  @@map("shelter_profiles")
+}
+
+/// An animal a shelter is offering for adoption.
+///
+/// The animal itself is an ordinary `Pet` row that the shelter owns — that is
+/// the whole design. This carries only what is true *because* it is up for
+/// adoption: the fee, the temperament answers adopters filter on, and where it
+/// physically is (which may not be the shelter's own address, if it is in
+/// foster).
+///
+/// `petId` is unique and the row is **reused** when an animal is relisted: a
+/// partial unique index over the live statuses would be the tighter constraint,
+/// but Prisma cannot express one, so it would become permanent `migrate diff`
+/// noise alongside the pgvector index. Consequence: `publishedAt` and
+/// `closedAt` describe the most recent cycle, not the first.
+model AdoptionListing {
+  id                String  @id
+  shelterId         String
+  petId             String  @unique
+  pet               Pet     @relation(fields: [petId], references: [id], onDelete: Cascade)
+  /// "draft" | "available" | "pending" | "adopted" | "withdrawn"
+  status            String  @default("draft")
+  /// Integer cents, like the store — this reaches the payment ledger, and the
+  /// ledger counts in cents. The Float USD used by bookings and vet fees would
+  /// have to be converted at the boundary, which is how $49.99 becomes 4998.
+  feeCents          Int     @default(0)
+  currency          String  @default("usd")
+  headline          String  @default("")
+  story             String  @default("")
+  /// "yes" | "no" | "unknown" — unknown is the honest default for an animal
+  /// nobody has tested around children yet, and adopters filter on it.
+  goodWithKids      String  @default("unknown")
+  goodWithDogs      String  @default("unknown")
+  goodWithCats      String  @default("unknown")
+  houseTrained      String  @default("unknown")
+  /// "low" | "moderate" | "high"
+  energyLevel       String  @default("moderate")
+  specialNeeds      Boolean @default(false)
+  specialNeedsNotes String  @default("")
+  spayedNeutered    Boolean @default(false)
+  microchipped      Boolean @default(false)
+  /// Where the animal actually is — a fostered dog is not at the shelter.
+  city              String
+  state             String
+  lat               Float
+  lng               Float
+  /// When the shelter took the animal in. "At the shelter since" for the UI.
+  intakeAt          String
+  publishedAt       String?
+  closedAt          String?
+  createdAt         String
+  updatedAt         String
+
+  @@index([status])
+  @@index([shelterId])
+  @@map("adoption_listings")
+}
+
+/// Somebody's application to adopt a particular animal.
+///
+/// `listingId`, `shelterId` and `petId` are plain indexed strings with **no
+/// foreign keys**, following the precedent `Review.bookingId` set: an adopter's
+/// record of "I adopted Rex from Austin Pets Alive on 12 September" must
+/// outlive the shelter closing its account. A cascade from ShelterProfile would
+/// erase exactly the row that matters most to the person least able to get it
+/// back. `petName` and `petPhotoUrl` are denormalised for the same reason —
+/// they only pay off if the row survives the thing they describe.
+///
+/// The household answers are flat columns rather than one `Json` blob, because
+/// a shelter reads and filters them in a queue, and `Json` is how a form
+/// becomes unqueryable.
+model AdoptionApplication {
+  id                String  @id
+  listingId         String
+  shelterId         String
+  petId             String
+  petName           String
+  petPhotoUrl       String  @default("")
+  applicantId       String
+  applicant         User    @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  /// "submitted" | "under_review" | "approved" | "completed" | "rejected" | "withdrawn"
+  status            String  @default("submitted")
+  /// Snapshotted at submission, so a later edit to the listing cannot rewrite
+  /// what this applicant was told it would cost.
+  feeCents          Int     @default(0)
+  householdAdults   Int     @default(1)
+  householdChildren Int     @default(0)
+  hasOtherPets      Boolean @default(false)
+  otherPetsNotes    String  @default("")
+  /// "house" | "apartment" | "condo" | "other"
+  homeType          String  @default("house")
+  fencedYard        Boolean @default(false)
+  ownsHome          Boolean @default(false)
+  hoursAlonePerDay  Int     @default(0)
+  experience        String  @default("")
+  message           String  @default("")
+  /// Why the shelter decided as it did. Shown to the applicant.
+  decisionNote      String  @default("")
+  decidedAt         String?
+  completedAt       String?
+  createdAt         String
+  updatedAt         String
+
+  @@index([listingId])
+  @@index([applicantId])
+  @@index([shelterId, status])
+  @@map("adoption_applications")
 }

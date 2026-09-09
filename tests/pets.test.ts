@@ -87,3 +87,38 @@ describe("pets", () => {
     expect(await updatePet("ghost", { weightLbs: 1 }, db)).toBeNull();
   });
 });
+
+describe("ownership is not something a patch can change", () => {
+  /**
+   * There used to be a transfer backdoor here: `petPatchSchema` accepted
+   * `ownerId`, `updatePet` wrote it, and the route checked only that the caller
+   * was the *outgoing* owner. So any user could hand an animal to any user id —
+   * no consent from the recipient, no audit, no notification. `PetForm` spread
+   * `ownerId` into every edit payload, so a stale prop could do it by accident.
+   */
+
+  it("refuses an ownerId in the patch, loudly", async () => {
+    const { petPatchSchema } = await import("@/lib/validation/schemas");
+    const parsed = petPatchSchema.safeParse({ name: "Rex", ownerId: "u3" });
+    // `.strict()` rather than a silent strip: a client still sending the old
+    // shape should be told, not quietly ignored.
+    expect(parsed.success).toBe(false);
+  });
+
+  it("leaves the owner alone when the rest of the patch applies", async () => {
+    const before = await getPetById("p1", db);
+    await updatePet("p1", { name: "Biscuit II" }, db);
+    const after = await getPetById("p1", db);
+    expect(after!.name).toBe("Biscuit II");
+    expect(after!.ownerId).toBe(before!.ownerId);
+  });
+
+  it("stamps ownedSince when a pet is created", async () => {
+    const created = await createPet("u1", petInput, db);
+    const row = await db.pet.findUnique({ where: { id: created.id } });
+    // Not the epoch: this owner really has had the animal since now, and a
+    // caretaker booked before it existed should get nothing.
+    expect(row!.ownedSince).not.toBe("1970-01-01T00:00:00.000Z");
+    expect(Date.parse(row!.ownedSince)).toBeGreaterThan(Date.now() - 60_000);
+  });
+});

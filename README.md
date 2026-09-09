@@ -1,9 +1,10 @@
 # Leash — pet care, vet care, and the food in between
 
 A marketplace where an owner books **caretakers** (walking, sitting, boarding,
-daycare), books **licensed vets**, and buys **food and supplies** — with one
-health record shared across all three. The vet writes into it, the caretaker
-reads it, and the store honours the prescriptions in it.
+daycare), books **licensed vets**, buys **food and supplies**, and **adopts
+from shelters** — with one health record shared across all four. The vet writes
+into it, the caretaker reads it, the store honours the prescriptions in it, and
+when an animal is adopted the whole record goes with them.
 
 Full stack: Next.js App Router, Postgres, real authentication, and a tested
 domain layer.
@@ -55,6 +56,9 @@ one-tap buttons for one account per role:
 - **Maya Chen** — owner: two pets, bookings, vet appointments, orders in flight
 - **Elena Petrova** — caretaker with incoming requests
 - **Dr. Naomi Ruiz** — vet with a schedule and patients to write records for
+- **Austin Pets Alive** (`hello@austinpetsalive.example.com`) — a shelter with
+  animals listed and applications waiting, including one approved and ready to
+  complete
 
 There are three staff accounts, and they hold different roles on purpose — one
 admin proves nothing about whether the boundaries are real:

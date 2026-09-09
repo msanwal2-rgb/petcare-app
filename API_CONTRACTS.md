@@ -36,6 +36,14 @@ of these, and pages call **only** those functions.
 | GET | `/api/pets?ids=a,b,c` | query `ids` (csv, max 50) | `Pet[]` — filtered to the ones you may see | `/booking/[id]`, caretaker request view |
 | POST | `/api/owners/:ownerId/pets` | `PetInput` (`Pet` w/o `id`) | `Pet` (201) | `/dashboard/pets/new` |
 | PATCH | `/api/pets/:id` | `Partial<PetInput>` | `Pet` | `/dashboard/pets/[id]` |
+| GET | `/api/pets/:id/appointments` | — | `ClinicalAppointment[]` — the animal's visit history, scoped by the *pet* rather than by whoever booked each visit. Visits you did not book come back without their fee | the health record panel |
+
+**Ownership is not patchable.** `ownerId` is absent from `petInputSchema`, and
+`.strict()` means a client still sending it gets a 400 rather than a silent
+strip. It used to be accepted, and `PATCH /api/pets/:id` checked only that the
+caller was the *outgoing* owner — so anyone could hand an animal to any user id
+with no consent, no audit and no notification. A pet changes hands in exactly
+one place now: completing an adoption.
 
 ## Caretakers — `/lib/api/caretakers.ts`
 
@@ -179,6 +187,97 @@ inventory for goods sitting in someone's house. Cancelling a paid order now also
 refunds it, which it previously did not.
 
 ---
+
+## Adoption — `/lib/api/adoptions.ts`, `/lib/api/shelters.ts`
+
+A shelter's animals are **ordinary `Pet` rows the shelter owns**. Completing an
+adoption transfers `Pet.ownerId`, and the health record follows the animal
+because `MedicalRecord` is keyed on `petId` — it does not move, the owner does.
+
+### Shelters
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/shelters/search` | public | `ShelterWithUser[]`, nearest first when `lat`/`lng` are given, else the ones with animals to show |
+| GET | `/api/shelters/:id` | public | `ShelterWithUser` · 404 |
+| GET | `/api/users/:id/shelter-profile` | public | `ShelterProfile` · `null` |
+| PATCH | `/api/users/:id/shelter-profile` | self only | `ShelterProfile` (upsert). `verificationStatus` and `responseRatePct` are not accepted — one is a person's decision in the admin console, the other is computed |
+
+`shelter` is a fourth `UserRole`, self-declared at onboarding and verified in
+the admin Professionals console alongside caretakers and vets.
+
+### Listings
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/adoptions/listings` | public | `AdoptionListingPage` — only `available`, **longest-waiting first**. Filters: `species`, `energyLevel`, `goodWithKids\|Dogs\|Cats`, `maxFeeCents`, `q`, `lat`/`lng`/`radiusMiles` |
+| GET | `/api/adoptions/listings/:id` | public | `AdoptionListingWithPet` · 404 |
+| POST | `/api/adoptions/listings` | a shelter | `AdoptionListingWithPet` (201) · 403 if the animal isn't theirs · 409 if already listed |
+| PATCH | `/api/adoptions/listings/:id` | that shelter | `AdoptionListingWithPet` |
+| PATCH | `/api/adoptions/listings/:id/status` | that shelter | `AdoptionListingWithPet` · 409 on an illegal move |
+
+Lifecycle: `draft → available → pending → adopted`, with `withdrawn` as a
+branch and `adopted → available` for a relist. Publishing re-asserts that the
+shelter still owns the animal, so a row cannot be edited back into circulation
+after the pet has gone.
+
+The "good with" filters match a **definite yes**. An animal nobody has tested
+is excluded rather than assumed, because the person asking usually has a
+toddler or a cat.
+
+### Applications
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| GET | `/api/adoptions/applications` | signed in | yours; `?as=shelter` returns your shelter's queue, oldest first |
+| GET | `/api/adoptions/applications/:id` | either party | `AdoptionApplication` · 404 for anyone else, so ids can't be probed |
+| POST | `/api/adoptions/applications` | signed in | `AdoptionApplication` (201). **No `applicantId`** — it is the caller. 409 if the animal is gone or you already have one open |
+| PATCH | `/api/adoptions/applications/:id/status` | either party | `AdoptionApplication` · 403 wrong actor · 409 illegal move or another applicant already approved |
+| POST | `/api/adoptions/applications/:id/payment` | **the applicant** | the fee intent · 409 unless approved |
+| POST | `/api/adoptions/applications/:id/complete` | **the shelter** | `{ application, pet }` · 409 unpaid, already moved, or a live engagement |
+
+Lifecycle: `submitted → under_review → approved → completed`, with `rejected`
+and `withdrawn` as terminal branches. The shelter decides; the applicant may
+only withdraw. **At most one application per listing may be `approved`**, and
+approving moves the listing to `pending` — which is why a co-applicant refund
+is impossible: nobody pays before approval.
+
+The two actions are split deliberately. Money moves when the **payer** acts;
+the handover is recorded by the party who **hands over**.
+
+### Completing an adoption
+
+`POST …/complete` is a command rather than a `PATCH { status: "completed" }`,
+because it is not a field edit: it moves an animal between households, ends one
+set of people's access to a health record and begins another's, and refuses
+unless the fee has settled.
+
+It runs preconditions, then one transaction whose first statement is a
+*conditional* update — `where: { id, ownerId: shelterUserId }` — so two
+concurrent completions cannot both apply. That one write moves `ownerId` and
+`ownedSince` together, which is what severs every caretaker and vet the shelter
+had engaged: there is no list of grants to walk and no half-severed state.
+
+It **refuses while the animal has a live booking or vet appointment**, naming
+them. A fostered animal is a pet under a long boarding booking, so the refusal
+would otherwise block most real adoptions — hence `{ force: true }`, which
+cancels the named engagements through their own status machines and notifies
+both parties. Never a silent sweep: cancelling a sitter's arrangement while the
+animal is in their house, from a flow they are not party to, is worse than
+refusing.
+
+Rejecting or withdrawing an application that has already paid **refunds it**.
+
+| Method | Path | Auth | Response |
+|---|---|---|---|
+| POST | `/api/admin/adoptions/:id/reverse` | `support` | Ownership back to the shelter, listing reopened, audited |
+
+Adoptions fall through. Without this route the only way to put an animal back
+would be the ownership backdoor this feature closed. It severs in the other
+direction for free — the *adopter's* caretakers and vets lose access on the same
+write — because the mechanism has never cared which way an animal moves. It
+deliberately does not refund: whether the fee comes back is a conversation, and
+auto-refunding would quietly make every returned animal free.
 
 ## Notifications — `/lib/api/notifications.ts`
 

@@ -31,8 +31,9 @@ export async function searchProfessionals(
 ): Promise<AdminProfessionalPage> {
   const limit = Math.min(params.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   const offset = params.offset ?? 0;
-  const wantCaretakers = params.kind !== "vet";
-  const wantVets = params.kind !== "caretaker";
+  const wantCaretakers = !params.kind || params.kind === "caretaker";
+  const wantVets = !params.kind || params.kind === "vet";
+  const wantShelters = !params.kind || params.kind === "shelter";
 
   const nameFilter: Prisma.UserWhereInput | undefined = params.q
     ? {
@@ -51,8 +52,19 @@ export async function searchProfessionals(
     ...(params.status ? { verificationStatus: params.status } : {}),
     ...(nameFilter ? { user: nameFilter } : {}),
   };
+  const shelterWhere: Prisma.ShelterProfileWhereInput = {
+    ...(params.status ? { verificationStatus: params.status } : {}),
+    ...(nameFilter ? { user: nameFilter } : {}),
+  };
 
-  const [caretakers, vets, pendingCaretakers, pendingVets] = await Promise.all([
+  const [
+    caretakers,
+    vets,
+    pendingCaretakers,
+    pendingVets,
+    shelters,
+    pendingShelters,
+  ] = await Promise.all([
     wantCaretakers
       ? db.caretakerProfile.findMany({
           where: caretakerWhere,
@@ -67,6 +79,13 @@ export async function searchProfessionals(
       : Promise.resolve([]),
     db.caretakerProfile.count({ where: { backgroundCheckStatus: { not: "verified" } } }),
     db.vetProfile.count({ where: { verificationStatus: { not: "verified" } } }),
+    wantShelters
+      ? db.shelterProfile.findMany({
+          where: shelterWhere,
+          include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+        })
+      : Promise.resolve([]),
+    db.shelterProfile.count({ where: { verificationStatus: { not: "verified" } } }),
   ]);
 
   const rows: AdminProfessionalRow[] = [
@@ -94,6 +113,20 @@ export async function searchProfessionals(
       reviewCount: v.reviewCount,
       detail: `${v.clinicName} · licence ${v.licenseNumber || "—"} (${v.licenseState || "—"})`,
     })),
+    ...shelters.map((sh) => ({
+      id: sh.id,
+      kind: "shelter" as const,
+      userId: sh.userId,
+      userName: sh.user.name,
+      userEmail: sh.user.email,
+      avatarUrl: sh.user.avatarUrl,
+      status: sh.verificationStatus as VerificationStatus,
+      // A shelter has no rating, deliberately — see the model. Zeroes here are
+      // the honest rendering of "we do not score these yet".
+      rating: 0,
+      reviewCount: 0,
+      detail: `${sh.name} · ${sh.kind.replace(/_/g, " ")} · reg ${sh.registrationNumber || "—"}`,
+    })),
   ];
 
   // Unverified first: this page exists to work through a queue, and sorting by
@@ -108,7 +141,7 @@ export async function searchProfessionals(
     total: rows.length,
     limit,
     offset,
-    awaitingReview: pendingCaretakers + pendingVets,
+    awaitingReview: pendingCaretakers + pendingVets + pendingShelters,
   };
 }
 
@@ -117,23 +150,20 @@ export type VerificationResult =
   | { ok: false; code: "not_found" };
 
 export async function setVerification(
-  kind: "caretaker" | "vet",
+  kind: "caretaker" | "vet" | "shelter",
   id: string,
   status: VerificationStatus,
   actor: { uid: string; ip?: string },
   note: string | undefined,
   db: PrismaClient = defaultPrisma
 ): Promise<VerificationResult> {
+  const include = { user: { select: { id: true, email: true } } } as const;
   const profile =
     kind === "caretaker"
-      ? await db.caretakerProfile.findUnique({
-          where: { id },
-          include: { user: { select: { id: true, email: true } } },
-        })
-      : await db.vetProfile.findUnique({
-          where: { id },
-          include: { user: { select: { id: true, email: true } } },
-        });
+      ? await db.caretakerProfile.findUnique({ where: { id }, include })
+      : kind === "vet"
+        ? await db.vetProfile.findUnique({ where: { id }, include })
+        : await db.shelterProfile.findUnique({ where: { id }, include });
   if (!profile) return { ok: false, code: "not_found" };
 
   if (kind === "caretaker") {
@@ -141,15 +171,25 @@ export async function setVerification(
       where: { id },
       data: { backgroundCheckStatus: status },
     });
-  } else {
+  } else if (kind === "vet") {
     await db.vetProfile.update({ where: { id }, data: { verificationStatus: status } });
+  } else {
+    await db.shelterProfile.update({
+      where: { id },
+      data: { verificationStatus: status },
+    });
   }
 
   await recordAdminAction(
     {
       actorUserId: actor.uid,
       action: "professional.background_check",
-      targetType: kind === "caretaker" ? "caretaker_profile" : "vet_profile",
+      targetType:
+        kind === "caretaker"
+          ? "caretaker_profile"
+          : kind === "vet"
+            ? "vet_profile"
+            : "shelter_profile",
       targetId: id,
       summary: `Marked ${profile.user.email}'s ${kind} profile "${status}"`,
       metadata: { status, note },
@@ -169,8 +209,15 @@ export async function setVerification(
         body:
           kind === "vet"
             ? "Your licence has been checked. Clients will see the verified badge on your profile."
-            : "Your background check has been approved. Owners will see the verified badge on your profile.",
-        href: kind === "vet" ? "/dashboard/vet-profile" : "/dashboard/caretaker-profile",
+            : kind === "shelter"
+              ? "Your registration has been checked. Adopters will see the verified badge on your listings."
+              : "Your background check has been approved. Owners will see the verified badge on your profile.",
+        href:
+          kind === "vet"
+            ? "/dashboard/vet-profile"
+            : kind === "shelter"
+              ? "/dashboard/shelter-profile"
+              : "/dashboard/caretaker-profile",
       },
       db
     );
