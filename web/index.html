@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!--
+      Fonts. next/font used to self-host these and inline the CSS variables;
+      without it they come from Google Fonts and the variable names are
+      declared directly in src/index.css under @theme.
+
+      preconnect matters here: the stylesheet request and the font-file requests
+      go to two different origins, and without it the second one pays a fresh
+      connection cost in the middle of first paint.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+
+    <title>Leash — pet care, vet care, and the food in between</title>
+    <meta
+      name="description"
+      content="Book caretakers and licensed vets, buy food and supplies, and adopt from shelters — with one health record shared across all four."
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -47,3 +47,27 @@ next-env.d.ts
 .agents/
 .claude/
 skills-lock.json
+
+# ── .NET API (API/) ──────────────────────────────────────────────────
+API/**/bin/
+API/**/obj/
+API/**/*.user
+API/**/appsettings.*.local.json
+# The Vite build is copied here for single-process deployment; it is a
+# build artifact, not source.
+API/src/Leash.Api/wwwroot/
+
+# ── Vite frontend (web/) ─────────────────────────────────────────────
+web/node_modules/
+web/dist/
+web/*.local
+
+# ── Database working files ───────────────────────────────────────────
+# Throwaway databases dumped by db/verify.sh
+db/petapp_at_last_release.sql
+
+# Visual Studio / Rider local caches
+.vs/
+API/.vs/
+.idea/
+*.suo

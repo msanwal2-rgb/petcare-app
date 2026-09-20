@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   Pet Care Marketplace — design tokens (brief §3)
+   Colors, type, radii exposed as Tailwind v4 theme tokens so
+   utilities like bg-ink / text-charcoal / font-display work.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --color-ink: #1b3b36; /* primary — headers, primary buttons, nav */
+  --color-marigold: #f2a93b; /* secondary accent — badges, highlights */
+  --color-leash: #e85c41; /* CTA accent — primary action buttons only */
+  --color-fog: #f1f3f0; /* page background (pale sage-grey) */
+  --color-charcoal: #22282a; /* body text */
+  --color-mist: #c8d6c6; /* borders, dividers, disabled states */
+
+  /* a couple of derived surfaces for depth, mixed from the palette */
+  --color-ink-hover: #163029;
+  --color-leash-hover: #d24d34;
+  --color-cloud: #ffffff;
+
+  /* fonts — loaded from Google Fonts in index.html (next/font is gone) */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius-card: 12px;
+
+  /* signature motion — mirrors lib/motion.ts so CSS and Framer agree */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-glide: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root {
+  color-scheme: light;
+  /* Anchor targets sit below the sticky header instead of under it. */
+  scroll-padding-top: 5rem;
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-fog);
+    color: var(--color-charcoal);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+
+  /* Visible keyboard focus on every interactive element (brief §3 standards) */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-leash);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-marigold) 45%, transparent);
+  }
+}
+
+/* ── Interaction utilities ────────────────────────────────────────
+   The card hover was the same six Tailwind utilities in four components and
+   had already drifted. One class, one curve — slow enough to read as weight
+   rather than a twitch. */
+@layer components {
+  .lift {
+    transition:
+      transform 0.5s var(--ease-out-soft),
+      box-shadow 0.5s var(--ease-out-soft),
+      border-color 0.3s ease;
+  }
+  .lift:hover,
+  .lift:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--color-ink) 22%, transparent);
+  }
+
+  /* Media inside a .lift card drifts in slightly as the card rises. */
+  .lift-media {
+    transition: transform 0.7s var(--ease-out-soft);
+  }
+  .lift:hover .lift-media {
+    transform: scale(1.05);
+  }
+}
+
+/* ── Keyframes ────────────────────────────────────────────────── */
+
+/* Hero Ken Burns — slow subtle zoom on load */
+@keyframes ken-burns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+.animate-ken-burns {
+  animation: ken-burns 20s var(--ease-out-soft) forwards;
+}
+
+/* Skeleton shimmer sweep */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-mist);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, #ffffff 60%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+/* subtle vertical float for empty-state art */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.animate-float {
+  animation: float-soft 4s ease-in-out infinite;
+}
+
+/* ── Reduced motion: honor user preference everywhere ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-ken-burns {
+    transform: scale(1.04); /* land on a gentle static crop instead of animating */
+  }
+  .shimmer::after {
+    display: none;
+  }
+}
+
+/* thin, on-brand scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-mist) transparent;
+}
