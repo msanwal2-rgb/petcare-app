@@ -35,23 +35,23 @@ trap cleanup EXIT
 
 echo "→ building $A from petapp.sql"
 createdb -U "$USER" -h "$HOST" "$A"
-psql -U "$USER" -h "$HOST" -d "$A" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp.sql"
+psql -U "$USER" -h "$HOST" -d "$A" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp.sql" > /dev/null
 
 echo "→ building $B from the last release + db/changes/"
 createdb -U "$USER" -h "$HOST" "$B"
 if [ -f "$DIR/petapp_at_last_release.sql" ]; then
-  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp_at_last_release.sql"
+  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp_at_last_release.sql" > /dev/null
 else
   # No release baseline yet — both sides start from the same master, so this
   # run only proves the change scripts apply cleanly on top of it.
   echo "  (no petapp_at_last_release.sql; starting from petapp.sql)"
-  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp.sql"
+  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$DIR/petapp.sql" > /dev/null
 fi
 
 shopt -s nullglob
 for f in "$DIR"/changes/*.sql; do
   echo "  applying $(basename "$f")"
-  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$f"
+  psql -U "$USER" -h "$HOST" -d "$B" -v ON_ERROR_STOP=1 -q -f "$f" > /dev/null
 done
 
 echo "→ diffing"
