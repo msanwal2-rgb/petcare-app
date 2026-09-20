@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -9,7 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Dapper" Version="2.1.86" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Respawn" Version="6.2.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
@@ -18,8 +22,16 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Both projects: the service tests exercise Leash.Core directly (the level the
+    reference project's Vitest suites work at, and the level the transition
+    tables and money rules live at), and the endpoint tests boot Leash.Api to
+    cover the pipeline — that the cookie is issued, that [Authorize] is actually
+    on the action, that a 401 carries the error envelope.
+  -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Leash.Api\Leash.Api.csproj" />
+    <ProjectReference Include="..\..\src\Leash.Core\Leash.Core.csproj" />
   </ItemGroup>
 
 </Project>

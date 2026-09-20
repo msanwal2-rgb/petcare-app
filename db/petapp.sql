@@ -26,12 +26,11 @@
 --   • Enum-like values are text, validated at the API boundary — no Postgres
 --     ENUM types, so a new value never needs a schema change.
 -- ─────────────────────────────────────────────────────────────────────────
-
 --
 -- PostgreSQL database dump
 --
 
-\restrict SQ7zCOhjb9Q0pIz7CJpwacMgwckabxvAAz0MUsBL2UZAEFuvQDdpQe9Vj9gZ6Go
+\restrict g3zUnutxJzKJvWCJEBNiba13x4YgKnR2DO0cU03Wj5buRhx12LTLakX044jomjZ
 
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
@@ -438,6 +437,22 @@ CREATE TABLE public.rate_limit_hits (
 
 
 --
+-- Name: refresh_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.refresh_tokens (
+    id text NOT NULL,
+    "userId" text NOT NULL,
+    "tokenHash" text NOT NULL,
+    "issuedAt" timestamp with time zone NOT NULL,
+    "expiresAt" timestamp with time zone NOT NULL,
+    "revokedAt" timestamp with time zone,
+    "replacedById" text,
+    "userAgent" text DEFAULT ''::text NOT NULL
+);
+
+
+--
 -- Name: refunds; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -572,7 +587,7 @@ CREATE TABLE public.users (
     "suspendedReason" text DEFAULT ''::text NOT NULL,
     "deletedAt" timestamp with time zone,
     "lastLoginAt" timestamp with time zone,
-    "sessionsValidFrom" text,
+    "sessionsValidFrom" timestamp with time zone,
     "stripeCustomerId" text
 );
 
@@ -817,6 +832,14 @@ ALTER TABLE ONLY public.products
 
 ALTER TABLE ONLY public.rate_limit_hits
     ADD CONSTRAINT rate_limit_hits_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id);
 
 
 --
@@ -1154,6 +1177,20 @@ CREATE INDEX "rate_limit_hits_bucket_key_createdAt_idx" ON public.rate_limit_hit
 
 
 --
+-- Name: refresh_tokens_tokenHash_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX "refresh_tokens_tokenHash_key" ON public.refresh_tokens USING btree ("tokenHash");
+
+
+--
+-- Name: refresh_tokens_userId_expiresAt_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "refresh_tokens_userId_expiresAt_idx" ON public.refresh_tokens USING btree ("userId", "expiresAt");
+
+
+--
 -- Name: refunds_paymentId_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1443,6 +1480,14 @@ ALTER TABLE ONLY public.pricing_entries
 
 
 --
+-- Name: refresh_tokens refresh_tokens_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.refresh_tokens
+    ADD CONSTRAINT "refresh_tokens_userId_fkey" FOREIGN KEY ("userId") REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
 -- Name: refunds refunds_paymentId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1510,14 +1555,17 @@ ALTER TABLE ONLY public.vet_profiles
 -- PostgreSQL database dump complete
 --
 
-\unrestrict SQ7zCOhjb9Q0pIz7CJpwacMgwckabxvAAz0MUsBL2UZAEFuvQDdpQe9Vj9gZ6Go
+\unrestrict g3zUnutxJzKJvWCJEBNiba13x4YgKnR2DO0cU03Wj5buRhx12LTLakX044jomjZ
+
 
 
 --
--- Bootstrap scripts already reflected in this file. A database created from
--- petapp.sql is at the same version as one built by running them in order.
+-- Scripts already reflected in this file. A database created from petapp.sql
+-- is at the same version as one built by running them in order.
 --
 INSERT INTO public.schema_version (script) VALUES
   ('001_from_prisma'),
-  ('002_cents_and_timestamps')
+  ('002_cents_and_timestamps'),
+  ('001_sessions_valid_from_timestamptz'),
+  ('002_refresh_tokens')
 ON CONFLICT (script) DO NOTHING;

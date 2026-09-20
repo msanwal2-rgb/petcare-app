@@ -1,30 +1,46 @@
-using Leash.Api.Features.Catalog;
-using Leash.Api.Infrastructure.Json;
-using Npgsql;
+using Leash.Api.Auth;
+using Leash.Api.Filters;
+using Leash.Api.Json;
+using Leash.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Database ─────────────────────────────────────────────────────────────
-// One NpgsqlDataSource for the process. It pools internally, so nothing here
-// should ever `new NpgsqlConnection`. Handlers take the data source and open a
-// connection per request.
-var connectionString =
-    builder.Configuration.GetConnectionString("Default")
-    ?? throw new InvalidOperationException(
-        "ConnectionStrings:Default is not set. Locally: " +
-        "dotnet user-secrets set \"ConnectionStrings:Default\" \"Host=localhost;...\"");
+// ── Leash.Core ───────────────────────────────────────────────────────────
+// Models, repositories and services, with their interfaces, registered in one
+// call. The data source, the Dapper type handlers and the unit of work come
+// with it. See Leash.Core/DependencyInjection.cs.
+builder.Services.AddLeashCore(builder.Configuration);
 
-builder.Services.AddNpgsqlDataSource(connectionString, b => b.EnableDynamicJson());
+// ── Authentication ───────────────────────────────────────────────────────
+// Cookie for the browser, rotating JWT pair for native clients, one policy
+// scheme choosing between them per request. See Auth/AuthSetup.cs.
+builder.Services.AddLeashAuth(builder.Configuration);
 
-// ── JSON ─────────────────────────────────────────────────────────────────
-// camelCase to match the TypeScript contract, and timestamps formatted exactly
-// as JavaScript's toISOString() produces them. See IsoDateTimeConverter for why
-// that second one is load-bearing rather than cosmetic.
-builder.Services.ConfigureHttpJsonOptions(o =>
+// ── Controllers ──────────────────────────────────────────────────────────
+builder.Services.AddControllers(options =>
 {
-    o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-    o.SerializerOptions.Converters.Add(new IsoDateTimeConverter());
-    o.SerializerOptions.Converters.Add(new NullableIsoDateTimeConverter());
+    // Validation runs before every action body, globally rather than per
+    // attribute — see Filters/ValidationActionFilter.cs for why.
+    options.Filters.Add<ValidationActionFilter>();
+})
+.AddJsonOptions(options =>
+{
+    // camelCase to match the TypeScript contract, and timestamps formatted
+    // exactly as JavaScript's toISOString() produces them. See
+    // IsoDateTimeConverter for why that second one is load-bearing rather than
+    // cosmetic.
+    options.JsonSerializerOptions.PropertyNamingPolicy =
+        System.Text.Json.JsonNamingPolicy.CamelCase;
+    options.JsonSerializerOptions.Converters.Add(new IsoDateTimeConverter());
+    options.JsonSerializerOptions.Converters.Add(new NullableIsoDateTimeConverter());
+})
+.ConfigureApiBehaviorOptions(options =>
+{
+    // Off, because the default writes a ProblemDetails body on a binding
+    // failure — a different shape from the error envelope every other failure
+    // in this API uses, and one the frontend's fetch layer does not parse.
+    // ValidationActionFilter answers those instead.
+    options.SuppressModelStateInvalidFilter = true;
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -45,13 +61,13 @@ if (app.Environment.IsDevelopment())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// ── API ──────────────────────────────────────────────────────────────────
-// Everything is versioned from the first endpoint. An app-store binary cannot
-// be force-updated, so v1 will still be serving old mobile clients long after
-// the web app has moved on. Costs nothing now; impossible to add cheaply later.
-var api = app.MapGroup("/api/v1");
+app.UseAuthentication();
+app.UseAuthorization();
 
-api.MapCatalog();
+// Every route is versioned from the first endpoint, via [Route("api/v1/...")]
+// on the controllers. An app-store binary cannot be force-updated, so v1 will
+// still be serving old mobile clients long after the web app has moved on.
+app.MapControllers();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

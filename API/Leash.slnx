@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Leash.Api/Leash.Api.csproj" />
+    <Project Path="src/Leash.Core/Leash.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Leash.Api.Tests/Leash.Api.Tests.csproj" />

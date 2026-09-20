@@ -13,8 +13,8 @@ parity with the existing application minus the AI assistant.
 
 | | |
 |---|---|
-| Backend | ASP.NET Core **`net10.0`**, Minimal APIs, feature folders, one project |
-| Data access | **Dapper** + Npgsql. No EF Core. |
+| Backend | ASP.NET Core **`net10.0`**, **MVC controllers**, layered: API + class library |
+| Data access | **Dapper** + Npgsql, inside repositories behind interfaces. No EF Core. |
 | Database | **PostgreSQL 18.6**, local ✅ installed. Plain `.sql` run in pgAdmin — no migration tool. |
 | Frontend | **React + Vite** SPA, React Router, TypeScript, Tailwind v4 |
 | Deployment | Vite builds to static files **served by ASP.NET** — one process, no Node in production |
@@ -37,8 +37,67 @@ parity with the existing application minus the AI assistant.
 | API docs | Swashbuckle → OpenAPI → TypeScript client |
 
 **Deliberately not used:** Dapper.Contrib (hand-write SQL), AutoMapper (mapping
-is trivial; explicit is clearer), MediatR (no pipeline needs it), a 5-project
-Clean Architecture layout (ceremony for a single-team API).
+is trivial; explicit is clearer), MediatR (no pipeline needs it), a generic
+`IRepository<T>` (a CRUD surface buys nothing over Dapper — there is no change
+tracker to abstract over — and it would flatten projections that are
+deliberately different, like "the user row" versus "the user row plus its
+password hash").
+
+### Architecture — controller / service / repository
+
+Three projects. **Revised from the original single-project, Minimal-API,
+feature-folder plan**, which is what M0 was scaffolded as; M1 was restructured
+into this and the layout below is what exists.
+
+| Project | Holds | References |
+|---|---|---|
+| `Leash.Api` | MVC controllers, the error envelope, the JSON contract, the auth schemes | `Leash.Core` |
+| `Leash.Core` | models (entities, DTOs, enums), repository interfaces + Dapper implementations, service interfaces + implementations, validators | — |
+| `Leash.Api.Tests` | xUnit: services against `Leash.Core`, endpoints against a booted `Leash.Api` | both |
+
+The dependency arrow points one way. `Leash.Core` references the
+`Microsoft.Extensions.*` **abstractions** and never ASP.NET Core, so anything
+needing an `HttpRequest` or an `IActionResult` cannot drift into it — that is
+what the compiler enforces rather than a convention.
+
+- **Controllers are thin:** guard → service call → map the result to a status.
+  They read the request (a client IP for a rate-limit key, a header to choose a
+  credential) because that needs the request; they decide nothing.
+- **Services hold the rules** and own transactions.
+- **Repositories hold the SQL**, one interface per aggregate, and nothing else
+  in the codebase opens a connection.
+- **DI everywhere:** `AddLeashCore(config)` in `Leash.Core/DependencyInjection.cs`
+  is the composition root, so a second host (a worker, a test) gets the same
+  graph without duplicating the wiring.
+
+### Transactions — complex operations commit or roll back as one
+
+**Rule: a write that touches more than one row or more than one table runs
+inside a transaction.** PostgreSQL transactions are cheap and its DDL is
+transactional, so this costs nothing and removes a class of "how did the data
+get like that?".
+
+Every repository method takes an optional `ITransactionScope`. Passed one it
+enlists in the caller's transaction; passed nothing it runs on its own
+connection — so a single-statement call site stays a single line, and a service
+that needs several writes to be atomic opens one scope and passes it down
+(`IUnitOfWork.BeginAsync()`). Disposing without committing rolls back, so an
+exception on the way out of a `using` leaves nothing behind.
+
+Where a partial write would be actively wrong, not merely untidy:
+
+| Operation | Why both halves or neither |
+|---|---|
+| Password reset | New hash + session watermark + refresh-token revocation. Hash without watermark leaves the attacker's session valid — the reset accomplishes nothing it was for. |
+| Refresh-token rotation | Issue replacement + revoke predecessor, under `SELECT … FOR UPDATE`. Either half alone breaks single-use: revoke-only locks the user out, issue-only leaves two live tokens. |
+| Issuing a verification token | Delete the previous one, insert the new one. Otherwise a resend leaves two live links, or none. |
+| Registration | Duplicate check + insert. Without it two simultaneous signups both read "no such user" and the second dies on the unique index — a 500 where a 409 was meant. |
+| Rate-limit consume | Count + record. Otherwise a burst all reads the same low count and all passes, which is precisely the case the limit exists for. |
+| Stock decrement (M6) | Guarded `WHERE "stockQty" >= @qty` inside the order transaction, so the sold-out race still returns 409. |
+
+Expensive work stays **outside** the transaction — bcrypt at cost 10 is ~100ms
+of CPU, and holding a row lock across it would serialise unrelated resets
+behind each other.
 
 ---
 
@@ -47,25 +106,46 @@ Clean Architecture layout (ceremony for a single-team API).
 ```
 petcare-app/
 ├── API/
-│   ├── Leash.sln
-│   ├── src/Leash.Api/
+│   ├── Leash.slnx
+│   ├── src/Leash.Api/                    HTTP only — no SQL, no rules
 │   │   ├── Program.cs
-│   │   ├── Features/<Domain>/
-│   │   │   ├── <Domain>Endpoints.cs      route mapping
-│   │   │   ├── <Domain>Service.cs        business rules
-│   │   │   ├── <Domain>Queries.cs        the SQL
-│   │   │   ├── <Domain>Dtos.cs           mirrors web/src/types
-│   │   │   └── <Domain>Validators.cs     FluentValidation
+│   │   ├── Controllers/
+│   │   │   └── <Domain>Controller.cs     [ApiController], "api/v1/…"
 │   │   ├── Auth/
-│   │   │   ├── CookieAuthSetup.cs
-│   │   │   ├── JwtSetup.cs               mobile
-│   │   │   └── AccessPredicates.cs       ★ security core
-│   │   ├── Infrastructure/
-│   │   │   ├── Db/ConnectionFactory.cs
-│   │   │   ├── Http/Results.cs           ★ the error envelope
-│   │   │   └── Json/IsoDateTimeConverter.cs
+│   │   │   ├── AuthSetup.cs              cookie + JWT + Google, scheme selector
+│   │   │   ├── SessionCookie.cs          issues the ticket, sets IssuedUtc
+│   │   │   ├── CurrentUser.cs            RequireUserId(), the 401 envelope
+│   │   │   └── AuthConstants.cs
+│   │   ├── Filters/ValidationActionFilter.cs   global, FluentValidation
+│   │   ├── Http/ApiResults.cs            ★ the error envelope
+│   │   ├── Json/IsoDateTimeConverter.cs
 │   │   └── wwwroot/                      Vite build output
+│   │
+│   ├── src/Leash.Core/                   models · repositories · services
+│   │   ├── DependencyInjection.cs        AddLeashCore() — composition root
+│   │   ├── Models/
+│   │   │   ├── Entities/                 rows, mutable for Dapper
+│   │   │   ├── Dtos/                     mirrors web/src/types
+│   │   │   └── Enums/                    role/status string constants
+│   │   ├── Repositories/
+│   │   │   ├── Interfaces/I<Aggregate>Repository.cs
+│   │   │   └── <Aggregate>Repository.cs  ★ the only place SQL lives
+│   │   ├── Services/
+│   │   │   ├── Interfaces/I<Domain>Service.cs
+│   │   │   └── <Domain>Service.cs        business rules, owns transactions
+│   │   ├── Persistence/
+│   │   │   ├── UnitOfWork.cs             ★ ITransactionScope, DbSession
+│   │   │   ├── DapperSetup.cs            timestamptz ↔ DateTimeOffset
+│   │   │   └── Ids.cs                    id prefixes, the one clock read
+│   │   ├── Security/                     Passwords (bcrypt), EmailAddress
+│   │   ├── Email/                        IMailer + Resend / log
+│   │   ├── Validation/                   FluentValidation
+│   │   └── Configuration/AppOrigin.cs    ★ emailed links, never the Host header
+│   │
 │   └── tests/Leash.Api.Tests/
+│       ├── Infrastructure/DatabaseFixture.cs   petapp.sql + Respawn
+│       ├── Infrastructure/CoreHost.cs          Leash.Core via real DI
+│       └── Infrastructure/LeashApp.cs          WebApplicationFactory
 ├── web/
 │   ├── src/
 │   │   ├── routes/      React Router config
@@ -338,7 +418,7 @@ follow-on.
 |---|---|
 | 1 | Node 20 installed (PostgreSQL 18.6 ✅ already in). `db/petapp.sql` generated and edited (assistant tables out, cents, `timestamptz`, `schema_version`). Databases created in pgAdmin. Seeded locally, dumped, split. |
 | 1 | **Proof slice:** `GET /api/v1/brands` rendering in the Vite app. Validates DB, Dapper, error envelope, SPA fallback and dev proxy before any real feature. |
-| 2 | `API/` scaffold: `Program.cs`, `NpgsqlDataSource`, `Results.cs`, FluentValidation filter, `/api/v1/` routing, `IsoDateTimeConverter`. |
+| 2 | `API/` scaffold: `Leash.Api` + `Leash.Core`, `Program.cs`, `AddLeashCore`, `ApiResults.cs`, the validation filter, `/api/v1/` routing, `IsoDateTimeConverter`. |
 | 2 | `web/` scaffold: Vite + React + TS + Tailwind v4, router skeleton, `src/api`, Zustand, design tokens. |
 | 3–5 | **M1:** cookie auth, `OnValidatePrincipal` revocation, bcrypt, signup, verify-email, login, logout, password reset, rate limiting, `/me`, `/config`. **Dual auth (JWT pair) for mobile.** |
 | 3–5 | **web:** `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email`, `/onboarding`, auth guard, session store. |
@@ -433,22 +513,59 @@ pet · the server-owns-money rule in M6 · the xUnit ports for M2, M3, M6, M7.
 
 ## 8. Patterns
 
-### Endpoint shape
+### Controller shape
 
 ```csharp
-group.MapPost("/orders", async (CreateOrderRequest req, ClaimsPrincipal user,
-                                OrderService svc) =>
+[ApiController]
+[Route("api/v1")]
+public sealed class OrdersController(IOrderService orders) : ControllerBase
 {
-    var uid = user.RequireUserId();
-    var result = await svc.CreateAsync(uid, req);
-    return result.Match(
-        order => Results.Created($"/api/v1/orders/{order.Id}", order),
-        err   => ApiResults.From(err));          // the shared error envelope
-}).RequireAuthorization();
+    [HttpPost("orders")]
+    [Authorize]
+    public async Task<IActionResult> Create(CreateOrderRequest request, CancellationToken ct)
+    {
+        var order = await orders.CreateAsync(User.RequireUserId(), request, ct);
+
+        return order is null
+            ? ApiResults.Conflict("That cart can no longer be fulfilled")
+            : Created($"/api/v1/orders/{order.Id}", order);
+    }
+}
 ```
 
-Endpoints stay thin: auth → validate → service call → map result. Anything else
-belongs in the service.
+Controllers stay thin: `[Authorize]` → (validation already ran) → service call
+→ map the result to a status. Anything that decides something belongs in the
+service, where the test suite reaches it without going through HTTP.
+
+Note what is *not* there: no `BadRequest(...)`, no `NotFound()`. The framework
+helpers produce `ProblemDetails` — a different shape from the error envelope,
+with `title`, `status` and `traceId` — and the frontend's fetch layer does not
+parse it. Failures go through `ApiResults`. `SuppressModelStateInvalidFilter`
+is on for the same reason.
+
+### Service shape — the rules, and the transaction
+
+```csharp
+public async Task<bool> ResetPasswordAsync(string token, string password, CancellationToken ct)
+{
+    // Expensive work first, outside the lock: bcrypt is ~100ms of CPU.
+    var hash = Passwords.Hash(password);
+    var now = Ids.Now();
+
+    await using var scope = await unitOfWork.BeginAsync(ct);   // rolls back on dispose
+
+    var userId = await ConsumeTokenAsync(token, TokenTypes.ResetPassword, scope, ct);
+    if (userId is null) return false;
+
+    if (!await users.SetPasswordAndRevokeSessionsAsync(userId, hash, now, scope, ct))
+        return false;
+
+    await refreshTokens.RevokeAllForUserAsync(userId, now, scope, ct);
+
+    await scope.CommitAsync(ct);
+    return true;
+}
+```
 
 ### Nested shapes — `json_agg`, not multi-mapping
 
