@@ -1,6 +1,6 @@
 
 import type { UserRole } from "@/types";
-import { useSession } from "@/lib/store/session";
+import { useSession } from "@/store/session";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ROLE_LABELS } from "@/lib/utils";
 

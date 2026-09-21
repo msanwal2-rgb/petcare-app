@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Leash.Api.Http;
@@ -23,7 +24,20 @@ public static class ApiResults
     /// <summary>One validation failure, flattened to a path the client can map to a field.</summary>
     public sealed record Issue(string Path, string Message);
 
-    private sealed record ErrorBody(string Error, IEnumerable<Issue>? Issues = null);
+    /// <summary>
+    /// <c>Issues</c> is omitted when there are none, rather than serialised as
+    /// <c>null</c>.
+    ///
+    /// The contract in REQUIREMENTS section 2.1 lists it as an extra field that
+    /// 400 carries, so a 401 answering <c>{"error":"…","issues":null}</c> is
+    /// noise on every failure in the app. The attribute is local to this type on
+    /// purpose — setting `DefaultIgnoreCondition` globally would also drop
+    /// <c>tokens: null</c> and <c>devLink: null</c>, which the client reads.
+    /// </summary>
+    private sealed record ErrorBody(
+        string Error,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IEnumerable<Issue>? Issues = null);
 
     /// <summary>400 — the request was understood but is not valid.</summary>
     public static ObjectResult BadRequest(string message, IEnumerable<Issue>? issues = null)

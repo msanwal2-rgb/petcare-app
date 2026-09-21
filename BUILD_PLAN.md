@@ -675,7 +675,8 @@ in weeks 7–8; journey 6 is M10.
 | Risk | Mitigation |
 |---|---|
 | **Access predicates subtly wrong** — an authorization hole, not a crash | M2 fully ported and tested first, with human review. `Pet.ownedSince` has non-obvious semantics — read the docstrings in `access.ts` and `schema.prisma`. |
-| **Error-envelope drift** — breaks forms and the cart app-wide, presenting as unrelated bugs | Settle `Results.cs` in M0 |
+| **Error-envelope drift** — breaks forms and the cart app-wide, presenting as unrelated bugs | Settled in `Http/ApiResults.cs`. Controllers never use `BadRequest(...)`/`NotFound()`, which emit `ProblemDetails` instead, and `SuppressModelStateInvalidFilter` is on for the same reason |
+| **A cookie copied before sign-out keeps working** — sign-out is client-side; there is no session table to invalidate a stolen copy | Accepted, and pinned by a test that says so (`A_cookie_copied_before_logout_still_works_afterwards`). The cookie is HttpOnly and Secure, and the `sessionsValidFrom` watermark kills it instantly on password reset, suspension or an admin force-out (A14). Mobile has no equivalent gap — sign-out revokes the refresh token server-side. **Do not "fix" it by bumping the watermark on logout** — that signs every other device out too; the real fix is a server-side session table |
 | **Timestamp format drift** — breaks string comparisons quietly | The converter above |
 | **Stripe webhook concurrency** — double-processing real money | Port the webhook tests before the implementation |
 | **Frontend long tail** — 44 pages of small breakages found late | Vertical slices; deploy in weeks 4 and 6 |

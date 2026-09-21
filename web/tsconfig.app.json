@@ -8,6 +8,23 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
+    /* Strictness. `strict` is off by default in this template, and every file
+       ported from the reference project was written under it — without it,
+       `catch (e)` params and inferred props silently become `any` and the type
+       safety the port was supposed to carry over is quietly absent. */
+    "strict": true,
+
+    /* Mirrors the `@/*` alias in vite.config.ts. Both are needed: Vite resolves
+       it at build time, TypeScript needs it to typecheck, and `tsc -b` runs
+       first in `npm run build`.
+
+       No `baseUrl`: it is deprecated in TypeScript 6 and stops working in 7.
+       Without it these patterns resolve relative to this file, which is what
+       the `./src/*` is. */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,

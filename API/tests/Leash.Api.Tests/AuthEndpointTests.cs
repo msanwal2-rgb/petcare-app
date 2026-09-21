@@ -98,15 +98,99 @@ public sealed class AuthEndpointTests(DatabaseFixture db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Logout_clears_the_session()
+    public async Task Logout_clears_the_cookie_so_the_client_cannot_reuse_it()
     {
         var client = await SignedInAsync();
 
         var logout = await client.PostAsync("/api/v1/auth/logout", null);
         Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
 
+        // The response carried a deletion for the session cookie, so the
+        // client's jar no longer has one to send.
+        Assert.Contains("leash.session", string.Join(' ', logout.Headers.GetValues("Set-Cookie")));
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/me")).StatusCode);
     }
+
+    [Fact]
+    public async Task A_cookie_copied_before_logout_still_works_afterwards()
+    {
+        // ⚠ This documents a deliberate property, not a bug — but it is the one
+        // people assume is not true, so it is pinned here rather than left to be
+        // discovered.
+        //
+        // Cookie sign-out is client-side: the response deletes the cookie, and
+        // there is no server-side session table to invalidate a copy that was
+        // taken beforehand. REQUIREMENTS.md A14 is explicit about which events
+        // bump the `sessionsValidFrom` watermark — password reset, suspension,
+        // and an administrator forcing sign-out — and ordinary sign-out is
+        // deliberately not one of them, because it would sign every other
+        // device out too.
+        //
+        // So a leaked cookie survives its owner clicking "log out", for up to
+        // the 30-day cookie lifetime. The mitigations that do exist: it is
+        // HttpOnly (script cannot read it), Secure in production, and any of the
+        // three watermark events kills it immediately. The mobile path has no
+        // equivalent gap — sign-out revokes the refresh token server-side, so
+        // the exposure there is the 15-minute access token.
+        //
+        // If this is ever prioritised, the fix is a server-side session table
+        // keyed by a ticket id, which is a schema change and one lookup per
+        // request. Do not "fix" it by bumping the watermark on logout.
+        // Sign in and take a copy of the cookie value, the way anyone who had
+        // stolen it would hold it.
+        var login = await _app.CreateSessionClient().PostAsJsonAsync(
+            "/api/v1/auth/login", new { email = MayaEmail, password = DemoPassword });
+
+        var cookie = SessionCookieFrom(login);
+        Assert.NotNull(cookie);
+
+        // The legitimate client signs out.
+        var signedOut = _app.CreateClient();
+        signedOut.DefaultRequestHeaders.Add("Cookie", cookie);
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await signedOut.PostAsync("/api/v1/auth/logout", null)).StatusCode);
+
+        // The copy still works, because nothing server-side changed.
+        var replay = _app.CreateClient();
+        replay.DefaultRequestHeaders.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.OK, (await replay.GetAsync("/api/v1/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task But_a_password_reset_kills_a_copied_cookie_immediately()
+    {
+        // The counterpart to the test above: the watermark is the mechanism that
+        // does invalidate a copy, and it is what somebody whose account was
+        // compromised actually reaches for.
+        var login = await _app.CreateSessionClient().PostAsJsonAsync(
+            "/api/v1/auth/login", new { email = MayaEmail, password = DemoPassword });
+
+        var cookie = SessionCookieFrom(login);
+
+        var forgot = await _app.CreateSessionClient().PostAsJsonAsync(
+            "/api/v1/auth/forgot-password", new { email = MayaEmail });
+
+        var devLink = (await JsonOf(forgot)).GetProperty("devLink").GetString();
+        var token = System.Web.HttpUtility.ParseQueryString(new Uri(devLink!).Query)["token"];
+
+        Assert.Equal(HttpStatusCode.OK, (await _app.CreateSessionClient().PostAsJsonAsync(
+            "/api/v1/auth/reset-password",
+            new { token, password = "brandnew1" })).StatusCode);
+
+        var replay = _app.CreateClient();
+        replay.DefaultRequestHeaders.Add("Cookie", cookie);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await replay.GetAsync("/api/v1/me")).StatusCode);
+    }
+
+    /// <summary>The session cookie as a request-header value, from a login response.</summary>
+    private static string? SessionCookieFrom(HttpResponseMessage response)
+        => response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values
+                .Select(v => v.Split(';')[0])
+                .FirstOrDefault(v => v.StartsWith("leash.session=", StringComparison.Ordinal))
+            : null;
 
     [Fact]
     public async Task Logout_is_idempotent_for_a_caller_with_no_session()

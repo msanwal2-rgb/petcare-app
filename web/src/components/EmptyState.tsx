@@ -36,7 +36,7 @@ export function EmptyState({
       <h3 className="text-lg text-ink">{title}</h3>
       <p className="mt-1.5 max-w-sm text-sm text-charcoal/70">{description}</p>
       {actionLabel && actionHref && (
-        <ButtonLink href={actionHref} variant="cta" className="mt-5">
+        <ButtonLink to={actionHref} variant="cta" className="mt-5">
           {actionLabel}
         </ButtonLink>
       )}
