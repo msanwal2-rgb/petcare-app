@@ -60,3 +60,25 @@ public static class TokenTypes
     public const string VerifyEmail = "verify_email";
     public const string ResetPassword = "reset_password";
 }
+
+/// <summary>
+/// The status values shared by <c>bookings</c> and <c>vet_appointments</c> that
+/// the authorization core cares about.
+///
+/// Only the two that <b>void</b> an engagement are named here, because those are
+/// the only two M2 has an opinion about: a declined booking was never accepted,
+/// a cancelled one was called off, and neither is a reason to be reading an
+/// animal's file. Every other status grants — see
+/// <see cref="Services.AccessService.DisqualifyingStatuses"/>.
+///
+/// The full vocabularies (<c>requested</c>, <c>accepted</c>/<c>confirmed</c>,
+/// <c>in_progress</c>, <c>completed</c>) and the transition tables that govern
+/// them belong to M4 and M5. When those land, they add their own constants; they
+/// do not move these, because a predicate reading a booking constant and an
+/// appointment constant that must stay equal is worse than one shared pair.
+/// </summary>
+public static class EngagementStatus
+{
+    public const string Declined = "declined";
+    public const string Cancelled = "cancelled";
+}

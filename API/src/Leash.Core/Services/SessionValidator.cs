@@ -62,32 +62,3 @@ public sealed class SessionValidator(IUserRepository users) : ISessionValidator
         return null;
     }
 }
-
-/// <summary>
-/// The authorization core. M1 holds only the staff check; the engagement-based
-/// predicates are M2.
-/// </summary>
-public sealed class AccessService(IUserRepository users) : IAccessService
-{
-    /// <summary>
-    /// Whether the caller holds a staff role.
-    ///
-    /// <c>admin</c> satisfies every staff check (REQUIREMENTS.md A12), so a
-    /// caller with <c>admin</c> passes a test for <c>finance</c>. That is the
-    /// rule rather than an accident: there is no privilege an administrator is
-    /// meant to lack, and the alternative — granting an admin every role
-    /// explicitly — makes the seed data the source of truth for something that
-    /// should be a rule.
-    ///
-    /// A suspended administrator is not an administrator, so status is part of
-    /// the check rather than assumed to have been handled upstream.
-    /// </summary>
-    public async Task<bool> HasStaffRoleAsync(
-        string userId, string role, CancellationToken ct = default)
-    {
-        var user = await users.GetByIdAsync(userId, ct: ct);
-        if (user is null || user.Status != AccountStatus.Active) return false;
-
-        return user.StaffRoles.Contains(role) || user.StaffRoles.Contains(StaffRoles.Admin);
-    }
-}

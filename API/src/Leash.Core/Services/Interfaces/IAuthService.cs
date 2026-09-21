@@ -139,22 +139,6 @@ public interface ISettingsService
 }
 
 /// <summary>
-/// The authorization core. <b>M1 holds only the staff check</b> — the
-/// engagement-based predicates (OwnsPet, CanViewPet, CanAccessPetRecords,
-/// IsBookingParticipant, IsAppointmentParticipant and the profile-ownership
-/// trio) are M2, and REQUIREMENTS section 4 requires them ported in full, with
-/// tests and human review, before anything depends on them.
-/// </summary>
-public interface IAccessService
-{
-    /// <summary>
-    /// Whether the caller holds a staff role. <c>admin</c> satisfies every staff
-    /// check (REQUIREMENTS.md A12).
-    /// </summary>
-    Task<bool> HasStaffRoleAsync(string userId, string role, CancellationToken ct = default);
-}
-
-/// <summary>
 /// The counting half of rate limiting. Deriving a key from a request is the API
 /// project's job, because it needs the request; deciding whether that key has
 /// had enough attempts is this one's.

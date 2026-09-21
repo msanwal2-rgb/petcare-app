@@ -54,6 +54,11 @@ public static class DependencyInjection
         services.AddSingleton<ISettingsRepository, SettingsRepository>();
         services.AddSingleton<ICatalogRepository, CatalogRepository>();
 
+        // Its own repository rather than borrowing M3–M5's, so that widening a
+        // feature projection can never widen an authorization query. See
+        // IAccessRepository.
+        services.AddSingleton<IAccessRepository, AccessRepository>();
+
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
         // source and its collaborators. Nothing here caches per-request state,

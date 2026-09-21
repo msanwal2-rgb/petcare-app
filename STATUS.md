@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-09-21**, end of M1.
+Last updated: **2026-09-21**, end of M2.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -17,8 +17,8 @@ Last updated: **2026-09-21**, end of M1.
 |---|---|---|
 | **M0** | Foundation | ✅ Done |
 | **M1** | Identity & authentication | ✅ Done |
-| **M2** | Authorization core ★ | ⬜ **Next** — only `HasStaffRole` exists |
-| M3 | Pets & health records | ⬜ |
+| **M2** | Authorization core ★ | ✅ Done — all nine predicates, 35 tests |
+| **M3** | Pets & health records | ⬜ **Next** |
 | M4 | Caretakers & bookings | ⬜ |
 | M5 | Vets & appointments | ⬜ |
 | M6 | Store & orders | ⬜ |
@@ -50,7 +50,7 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, proxies /api
 
 # check it
-cd API && dotnet test        # 69 passing, ~25s
+cd API && dotnet test        # 104 passing, ~32s
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -99,8 +99,8 @@ in `AddLeashCore`:
 | `IEmailFlowService` | `IRefreshTokenRepository` |
 | `ITokenService` | `IRateLimitRepository` |
 | `ISessionValidator` | `ISettingsRepository` |
-| `IAccessService` ← *M2 fills this in* | `ICatalogRepository` |
-| `IRateLimitService`, `ISettingsService`, `ICatalogService` | |
+| `IAccessService` ★ | `ICatalogRepository` |
+| `IRateLimitService`, `ISettingsService`, `ICatalogService` | `IAccessRepository` ★ |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -126,10 +126,11 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 69 passing
+### Tests — 104 passing
 
 | File | Covers |
 |---|---|
+| `AccessServiceTests` | Port of `tests/access.test.ts` — the nine predicates, and what a transfer of ownership ends |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
@@ -138,32 +139,36 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 
 ---
 
-## 3. M2 — the next module
+## 3. M2 — what landed, and what M3 inherits
 
-**No endpoints. Pure predicates, used by every other module.**
-`REQUIREMENTS.md` §4 is the spec. It requires the predicates ported **in full,
-with tests, and reviewed by a human — not just green tests** — before anything
-depends on them.
+**No endpoints. Pure predicates, used by every other module.** All nine are in
+`IAccessService` / `AccessService`, backed by a dedicated `IAccessRepository`,
+with `tests/access.test.ts` ported in full (`AccessServiceTests`, 35 cases).
 
-### The work
+| Predicate | Rule |
+|---|---|
+| `OwnsPetAsync` | The pet's `ownerId` is the caller |
+| `CanViewPetAsync` | Owner, **or** a caretaker/vet with a qualifying engagement |
+| `CanAccessPetRecordsAsync` | Owner, **or** a vet with a qualifying appointment. Returns `RecordAccess(Allowed, AsVetId)` |
+| `IsBookingParticipantAsync` | The booking's owner, or the user behind its caretaker profile |
+| `IsAppointmentParticipantAsync` | The appointment's owner, or the user behind its vet profile |
+| `OwnsCaretakerProfileAsync` / `OwnsVetProfileAsync` / `OwnsShelterProfileAsync` | The profile's `userId` is the caller |
+| `HasStaffRoleAsync` | `staffRoles` contains it, or `admin`. Also requires `status = 'active'` |
 
-1. Read `lib/server/access.ts` in the reference project **in full**, including
-   the docstrings. They explain the non-obvious decisions.
-2. Add to `IAccessService` / `AccessService` in `Leash.Core`:
+Three things about the shape that M3 onward depends on:
 
-   | Predicate | Rule |
-   |---|---|
-   | `OwnsPet(uid, petId)` | The pet's `ownerId` is the caller |
-   | `CanViewPet(uid, petId)` | Owner, **or** a caretaker/vet with a qualifying engagement |
-   | `CanAccessPetRecords(uid, petId)` | Owner, **or** a vet with a qualifying appointment |
-   | `IsBookingParticipant(uid, bookingId)` | The booking's owner or its caretaker |
-   | `IsAppointmentParticipant(uid, apptId)` | The appointment's owner or its vet |
-   | `OwnsCaretakerProfile` / `OwnsVetProfile` / `OwnsShelterProfile` | The profile's `userId` is the caller |
-   | `HasStaffRole(uid, role)` | ✅ already done — `staffRoles` contains it, or `admin` |
-
-3. Port `tests/access.test.ts` to xUnit in full.
-4. **Then** review by hand. This is an authorization hole if it is subtly wrong,
-   and a subtly wrong predicate does not crash.
+- **Every predicate takes an optional `ITransactionScope`**, like a repository
+  method. It is there for the re-check on a write: a service that opens a
+  transaction, verifies the caller may act and then writes must run the
+  verification *inside* that transaction, or it approves a row the write can no
+  longer rely on. Pinned by a test.
+- **`IAccessRepository` is its own repository**, deliberately not M3–M5's. Its
+  projections are one or two columns each, and nothing a feature team does to
+  `IPetRepository` can widen an authorization query. Do not consolidate them.
+- **A refusal is indistinguishable from an absence.** Every predicate answers
+  false for a row that does not exist. Ids are sequential (`p1`, `p2`, …), so a
+  caller able to tell "no such pet" from "not your pet" can enumerate the table.
+  Controllers turn both into 404.
 
 ### `Pet.ownedSince` — read this twice
 
@@ -184,12 +189,22 @@ owner, a vet who saw a pet once years ago retains record access, which includes
 writing prescriptions that unlock Rx-only products. A trailing window on
 `CanAccessPetRecords` is the fix if it is ever prioritised.
 
+**M3 owns the other half of this.** The predicates read `ownedSince`; nothing
+writes it yet. Whatever M3 (or M10's adoption transfer) does to move a pet must
+set `ownerId` and `ownedSince` **in the same statement**. Setting the owner
+without the timestamp leaves every derived grant from the old household alive,
+and no test outside this suite would notice.
+
 ### Where predicates get called
 
-M2 adds no endpoints, so nothing changes visibly. From M3 onward, every
+M2 added no endpoints, so nothing changed visibly. From M3 onward, every
 controller action touching a pet, booking, appointment or profile calls one
 first. The `OwnsPet` check on anything touching a pet is on the
 **never cut** list in `BUILD_PLAN.md` §7.
+
+Two predicates have no caller until later milestones — `OwnsShelterProfile`
+waits for M10, `IsBookingParticipant` for M4. They are here rather than there
+because §4 requires the set ported in full, together, and reviewed once.
 
 ---
 
@@ -197,9 +212,10 @@ first. The `OwnsPet` check on anything touching a pet is on the
 
 | | Item |
 |---|---|
-| ⚠ | **`origin/main_newDev` still has the pre-rewrite commit hashes.** All 7 local commits were re-authored to `rehman427 <abdulrehmanlatif65@gmail.com>` with the Claude co-author trailers removed. Pushing needs `git push --force-with-lease`. Backup refs: `backup/main_newDev-pre-rewrite`, `backup/main_newDev-pre-name-rewrite` |
+| | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 2 are ported. They are the specification — port each module's as you build it |
+| | `tests/` in the reference project has 28 Vitest suites. 3 are ported. They are the specification — port each module's as you build it |
+| | `AccessServiceTests` inlines the reference's `activePrescriptions` rule as SQL, because `lib/server/medical-records.ts` is M3. When M3 ports that module, replace the helper with a call to it — the assertions should not need to change |
 | | Google OAuth is implemented but unconfigured, so untested against the real provider. Set `Auth:Google:ClientId`/`:ClientSecret` and add `http://localhost:5173/api/v1/auth/google/callback` as an authorised redirect URI |
 | | `db/petapp_at_last_release.sql` is gitignored and local-only. Recreate it from `petapp.sql` before adding the next change script |
 | | No CI yet. `BUILD_PLAN.md` §9 wants: throwaway database from `petapp.sql`, run the suite, run `verify.sh` |
