@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-09-22**, end of M3.
+Last updated: **2026-09-22**, end of M4.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -19,8 +19,8 @@ Last updated: **2026-09-22**, end of M3.
 | **M1** | Identity & authentication | ✅ Done |
 | **M2** | Authorization core ★ | ✅ Done — all nine predicates, 35 tests |
 | **M3** | Pets & health records | ✅ Done — 8 endpoints, 94 tests |
-| **M4** | Caretakers & bookings | ⬜ **Next** |
-| M5 | Vets & appointments | ⬜ |
+| **M4** | Caretakers & bookings | ✅ Done — 13 endpoints, 114 tests |
+| **M5** | Vets & appointments | ⬜ **Next** |
 | M6 | Store & orders | ⬜ |
 | M7 | Payments | ⬜ |
 | M8 | Notifications | ⬜ |
@@ -50,7 +50,7 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, proxies /api
 
 # check it
-cd API && dotnet test        # 198 passing, ~60s
+cd API && dotnet test        # 312 passing, ~95s
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -94,6 +94,16 @@ GET    /pets/{id}/appointments   GET  /pets/{id}/recommendations
 GET    /pets/{id}/medical-records
 POST   /pets/{id}/medical-records
 DELETE /medical-records/{id}
+
+GET    /caretakers/search        GET  /caretakers/{id}
+GET    /caretakers/{id}/bookings
+GET    /users/{id}/caretaker-profile    PATCH /users/{id}/caretaker-profile
+GET    /users/{id}/reviews
+GET    /bookings                 POST /bookings           GET /bookings/{id}
+PATCH  /bookings/{id}/status
+GET    /bookings/{id}/messages   POST /bookings/{id}/messages
+POST   /bookings/{id}/messages/read
+GET    /bookings/{id}/reviews    POST /bookings/{id}/reviews
 ```
 
 Services and repositories in `Leash.Core`, all behind interfaces, all registered
@@ -110,6 +120,9 @@ in `AddLeashCore`:
 | `IRateLimitService`, `ISettingsService`, `ICatalogService` | `IAccessRepository` ★ |
 | `IPetService` | `IPetRepository` |
 | `IMedicalRecordService` | `IMedicalRecordRepository`, `IAppointmentRepository` |
+| `ICaretakerService` | `ICaretakerRepository` |
+| `IBookingService` | `IBookingRepository` |
+| `IMessageService`, `IReviewService`, `IReputationService` | `IMessageRepository`, `IReviewRepository` |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -131,14 +144,20 @@ Cross-cutting, settled and inherited by every later module:
 /dashboard/pets      the owner's pets          [guarded]
 /dashboard/pets/new  add a pet                 [guarded]
 /dashboard/pets/:id  profile, health timeline, recommendations  [guarded]
-/search /vets /store /adopt                    named placeholders
+/search              caretaker search, cursor-paginated
+/caretaker/:id       profile, rates, availability, reviews
+/booking/new         request a booking         [guarded]
+/booking/:id         status, messages, reviews [guarded]
+/dashboard/bookings  the owner's bookings      [guarded]
+/dashboard/caretaker-profile   listing, rate card, request queue  [guarded]
+/vets /store /adopt                            named placeholders
 ```
 
 Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 198 passing
+### Tests — 312 passing
 
 | File | Covers |
 |---|---|
@@ -146,6 +165,10 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `PetServiceTests` | Port of `tests/pets.test.ts` — CRUD, the closed transfer backdoor, delete, recommendations, life stage and allergen matching |
 | `MedicalRecordServiceTests` | Port of `tests/medical-records.test.ts` — the timeline, who may author what, and the one active-prescription rule |
 | `PetEndpointTests` | Every pet route over HTTP: `[Authorize]` on each action, the envelope, the wire shape, the fee omission |
+| `BookingServiceTests` | Port of `tests/bookings.test.ts` plus the response-rate half of `reputation.test.ts` — the two tables, pagination, integer pricing |
+| `CaretakerServiceTests` | Port of `tests/caretakers.test.ts`, rewritten around SQL search: filters, distance, cursor paging |
+| `MessageReviewServiceTests` | Ports of `tests/messages.test.ts` and `tests/reviews.test.ts`, plus the ratings half of `reputation.test.ts` |
+| `BookingEndpointTests` | What is guarded and what is deliberately public, 409-vs-403, and the §6.4 acceptance walk |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
@@ -154,7 +177,78 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 
 ---
 
-## 3. M3 — what landed, and what M4 inherits
+## 3. M4 — what landed, and what M5 inherits
+
+Caretakers and bookings, end to end: 13 endpoints, six screens, and
+`bookings`, `caretakers`, `messages`, `reviews` and `reputation` ported from the
+reference suite.
+
+`IsBookingParticipantAsync` has been waiting since M2 and now has its callers —
+every booking read, every status move, every message and every review goes
+through it.
+
+### The rules M4 settled
+
+| | |
+|---|---|
+| **Legality vs authority** | Two separate tables. An illegal move is **409** (a rule about the booking); a legal move by the wrong party is **403** (a rule about the person). Legality is checked first — more useful to say, and it does not leak the status to someone probing with the wrong verb |
+| **Who drives what** | `accepted`/`declined`/`in_progress`/`completed` → caretaker only. `cancelled` → either. **An owner cannot accept their own booking** (C8) |
+| **The price** | Computed server-side from the caretaker's rate card. The request has no price field, so there is nothing to tamper with. All integer cents — hours to the nearest, days rounded up, both floored at one unit |
+| **The pets** | Every id on a request is checked against the caller. A booking is *how* a caretaker earns `CanViewPet`, so an unchecked `petIds` would hand any animal's file to any caretaker |
+| **Reading messages** | An explicit `POST …/messages/read` (C10). The `GET` marks nothing |
+| **Reputation** | `rating`, `reviewCount` and `responseRatePct` are derived, and `ReputationService` is their only writer. The patch type has no such fields, so a caretaker cannot award themselves one |
+| **A booking that is not yours** | 404, not 403. Ids are sequential, so the distinction would let a caller count the marketplace's volume |
+
+### Search runs in PostgreSQL now
+
+REQUIREMENTS C4 and the standing rule in §5. The reference read every caretaker
+with their pricing and availability and filtered the array in Node — a table
+scan plus a full materialisation, and unpaginable, because the page boundary is
+decided after the work is done.
+
+`CaretakerRepository.SearchAsync` does the filtering, the haversine distance,
+the price range and the ordering in one statement, and returns a page plus a
+cursor. The cursor is **keyset, not offset**: it compares against the last row's
+sort key, so it neither repeats nor skips when reputations move between pages.
+`OFFSET 200` does both. Two tests walk the whole result set one page at a time
+and assert it equals the unpaginated list, in both sort orders.
+
+### Two requirements are deliberately part-done
+
+1. **C13 — priority booking.** The lead-time rule is enforced: a booking needs
+   24 hours' notice. The Leash Plus arm that shortens it to 2 is not wired,
+   because entitlements are M7. `BookingService.LeadTimeHoursFor` is the one
+   place M7 changes, and it currently answers "non-member" for everyone — which
+   is the safe direction, refusing bookings a member should be allowed rather
+   than allowing ones nobody should.
+2. **C14 — the cancellation window. Settled: there isn't one, for now.**
+   §11.1 (the normative table) lets either party cancel from any non-terminal
+   state with no time bound, and that is what ships. C14's "published window"
+   is **deferred to M7 by the owner's decision**, to be designed together with
+   cancellation *penalties* and refunds — a cutoff with no money behind it is a
+   rule with no consequence, and picking the hour before knowing the penalty
+   would be guessing twice. Do not add one before then.
+
+### Where M5 picks up
+
+`IAppointmentRepository` still has the one read method M3 added — grow it rather
+than starting a second interface. `AppointmentTimelineDto` is one record whose
+`Fee` is written conditionally, replacing the reference's two TypeScript types;
+extend it rather than adding a parallel DTO.
+
+`ReputationService` is built to take the vet arm: the answered-status list is the
+only thing that differs (`confirmed` where a booking says `accepted`), and the
+shelter arm in M10 needs `responseRatePct` only — shelters have no rating or
+review count until `Review.kind` grows an adoption arm.
+
+`ReviewService` already writes `kind`, and `ReviewKinds.VetAppointment` exists
+and is exercised by the read tests against seeded rows. M5 adds the write path:
+**one direction only** — the owner reviews the vet. A clinician rating the client
+is a different and much worse product.
+
+---
+
+## 3a. M3 — pets and the health record (reference)
 
 Pets and the health record, end to end: 8 endpoints, the three owner screens,
 and `tests/pets.test.ts` + `tests/medical-records.test.ts` ported in full.
@@ -222,7 +316,7 @@ add a parallel appointment DTO.
 
 ---
 
-## 3a. M2 — the authorization core (reference)
+## 3b. M2 — the authorization core (reference)
 
 **No endpoints. Pure predicates, used by every other module.** All nine are in
 `IAccessService` / `AccessService`, backed by a dedicated `IAccessRepository`,
@@ -297,7 +391,9 @@ because §4 requires the set ported in full, together, and reviewed once.
 |---|---|
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 5 are ported. They are the specification — port each module's as you build it |
+| | `tests/` in the reference project has 28 Vitest suites. 10 are ported. They are the specification — port each module's as you build it |
+| | ~~REQUIREMENTS C14 — the booking cancellation window.~~ **Settled 2026-09-22: §11.1 as written, no cutoff.** Revisit alongside cancellation *penalties* when M7 brings payments and refunds — a cutoff with no money behind it is a rule with no consequence. See §5 |
+| | **C13 is half-wired.** Bookings need 24 hours' notice; the Leash Plus arm that shortens it to 2 waits on M7's entitlements. `BookingService.LeadTimeHoursFor` is the single place to change |
 | ⚠ | **M6 must decrement `refillsLeft` when an Rx line is bought**, in the same transaction as the stock decrement. M3 decided the read side (0 = exhausted, null = no limit) and closed it behind one SQL predicate; until M6 writes to it, one prescription still authorises unlimited purchases until it expires. That is REQUIREMENTS P9 half-done, deliberately |
 | ⚠ | **A pet that has died cannot be removed.** Deleting is blocked once the animal has vet visits or health records, because all three FKs onto `pets` cascade and an owner must not delete records their vet authored. Needs a soft delete (`deletedAt`) and a decision about what a bereaved owner still sees — `STATUS.md` §3 has the reasoning |
 | | `AccessServiceTests` still inlines the active-prescription rule as SQL. `IMedicalRecordRepository.ListAuthorizedProductSlugsAsync` now exists — swap the helper for a call to it so there is one definition in the tests too |
@@ -320,6 +416,9 @@ because §4 requires the set ported in full, together, and reviewed once.
 | Integer cents in storage | USD decimals only where the existing DTO contract already does |
 | Enum-like values as `text`/`text[]` | No PostgreSQL `ENUM` types |
 | Plain `.sql` change scripts, no migration tool | Master + `changes/`, reconciled by `verify.sh` |
+| `refillsLeft`: 0 = exhausted, null = no limit. **M6 decrements it inside the checkout/order transaction, alongside stock** | Owner's call, 2026-09-22. REQUIREMENTS P9 settled; M3 closed the read side |
+| Deleting a pet with clinical history stays a **409** | Owner's call, 2026-09-22. Soft delete / archival is a later pass, not a regression to fix |
+| **No booking cancellation cutoff.** §11.1 as written: either party cancels from any non-terminal state | Owner's call, 2026-09-22. REQUIREMENTS C14 deferred to M7, where cutoffs and penalties get designed together |
 | Cursor pagination on every list endpoint | From M4. No endpoint loads an unbounded set |
 | Dual auth from M1 | Cheap now, a rewrite later |
 | AI assistant, pgvector, Redis, Docker | Out of scope |

@@ -12,6 +12,12 @@ import DashboardPage from "./pages/DashboardPage";
 import PetsPage from "./pages/PetsPage";
 import PetNewPage from "./pages/PetNewPage";
 import PetDetailPage from "./pages/PetDetailPage";
+import SearchPage from "./pages/SearchPage";
+import CaretakerDetailPage from "./pages/CaretakerDetailPage";
+import BookingNewPage from "./pages/BookingNewPage";
+import BookingDetailPage from "./pages/BookingDetailPage";
+import BookingsPage from "./pages/BookingsPage";
+import CaretakerProfilePage from "./pages/CaretakerProfilePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -103,19 +109,50 @@ export const router = createBrowserRouter([
         ),
       },
 
+      // ── M4: caretakers and bookings ──
+      //
+      // Search and the caretaker profile are unguarded: browsing the
+      // marketplace is what brings people to it, and both serve only public
+      // projections. Booking is where an account becomes necessary.
+      { path: "search", element: <SearchPage /> },
+      { path: "caretaker/:id", element: <CaretakerDetailPage /> },
+      {
+        // Before `booking/:id`, so "new" is not matched as a booking id.
+        path: "booking/new",
+        element: (
+          <RequireAuth>
+            <BookingNewPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "booking/:id",
+        element: (
+          <RequireAuth>
+            <BookingDetailPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/bookings",
+        element: (
+          <RequireAuth>
+            <BookingsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/caretaker-profile",
+        element: (
+          <RequireAuth>
+            <CaretakerProfilePage />
+          </RequireAuth>
+        ),
+      },
+
       // ── Later milestones ──
       // Registered as named placeholders so the header's nav does not 404 on
       // its own links, and so the information architecture is visible now.
-      {
-        path: "search",
-        element: (
-          <ComingSoonPage
-            milestone="M4 · caretakers"
-            title="Caretaker search is on the way"
-            description="Search, filtering and booking for walking, sitting, boarding and daycare arrive with M4."
-          />
-        ),
-      },
       {
         path: "vets",
         element: (

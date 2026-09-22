@@ -62,6 +62,10 @@ public static class DependencyInjection
         services.AddSingleton<IPetRepository, PetRepository>();
         services.AddSingleton<IMedicalRecordRepository, MedicalRecordRepository>();
         services.AddSingleton<IAppointmentRepository, AppointmentRepository>();
+        services.AddSingleton<ICaretakerRepository, CaretakerRepository>();
+        services.AddSingleton<IBookingRepository, BookingRepository>();
+        services.AddSingleton<IMessageRepository, MessageRepository>();
+        services.AddSingleton<IReviewRepository, ReviewRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -78,6 +82,11 @@ public static class DependencyInjection
         services.AddSingleton<ICatalogService, CatalogService>();
         services.AddSingleton<IPetService, PetService>();
         services.AddSingleton<IMedicalRecordService, MedicalRecordService>();
+        services.AddSingleton<ICaretakerService, CaretakerService>();
+        services.AddSingleton<IBookingService, BookingService>();
+        services.AddSingleton<IMessageService, MessageService>();
+        services.AddSingleton<IReviewService, ReviewService>();
+        services.AddSingleton<IReputationService, ReputationService>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

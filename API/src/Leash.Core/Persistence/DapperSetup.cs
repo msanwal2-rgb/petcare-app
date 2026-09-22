@@ -38,6 +38,55 @@ public static class DapperSetup
         // because the property is DateTimeOffset and the reader hands back a
         // DateTime.
         SqlMapper.AddTypeHandler(new DateTimeOffsetHandler());
+
+        // jsonb → a typed array. Npgsql's EnableDynamicJson can do this when it
+        // is told the target type, but Dapper reads columns through
+        // IDataReader.GetValue, which hands back the raw string before Npgsql
+        // ever sees a destination — so the conversion has to happen here.
+        SqlMapper.AddTypeHandler(new JsonHandler<Models.Dtos.SlotDto[]>());
+    }
+
+    /// <summary>
+    /// Shared options for every <c>jsonb</c> column.
+    ///
+    /// camelCase on the way out and case-insensitive on the way in, because the
+    /// seeded JSON was written by the old TypeScript stack
+    /// (<c>{"start": "09:00"}</c>) and the C# properties are PascalCase. Matching
+    /// only exactly would deserialise every seeded slot to nulls — silently,
+    /// since a JSON object with no recognised members is not an error.
+    /// </summary>
+    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
+    /// <summary>
+    /// <c>jsonb</c> ↔ <typeparamref name="T"/>.
+    ///
+    /// The parameter is typed as <c>jsonb</c> explicitly rather than left to
+    /// inference: a string parameter against a <c>jsonb</c> column is a
+    /// "column is of type jsonb but expression is of type text" error, and it
+    /// only shows up on the write path.
+    /// </summary>
+    private sealed class JsonHandler<T> : SqlMapper.TypeHandler<T>
+    {
+        public override T? Parse(object value) => value switch
+        {
+            string json => System.Text.Json.JsonSerializer.Deserialize<T>(json, JsonOptions),
+            T already => already,
+            null => default,
+            _ => throw new DataException(
+                $"Cannot read {value.GetType().Name} as {typeof(T).Name}."),
+        };
+
+        public override void SetValue(IDbDataParameter parameter, T? value)
+        {
+            parameter.Value = System.Text.Json.JsonSerializer.Serialize(value, JsonOptions);
+
+            if (parameter is Npgsql.NpgsqlParameter npgsql)
+                npgsql.NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+        }
     }
 
     /// <summary>

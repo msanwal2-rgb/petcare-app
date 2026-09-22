@@ -52,22 +52,52 @@ export default function DashboardPage() {
         )}
       </dl>
 
-      <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-mist bg-white p-5">
-        <div>
-          <h2 className="font-medium text-ink">Your pets</h2>
-          <p className="mt-0.5 text-sm text-charcoal/60">
-            Profiles, health records and what the store suggests for each animal.
-          </p>
-        </div>
-        <ButtonLink to="/dashboard/pets" variant="outline" size="sm">
-          Open
-        </ButtonLink>
+      <div className="mt-10 space-y-3">
+        <Panel
+          title="Your pets"
+          description="Profiles, health records and what the store suggests for each animal."
+          to="/dashboard/pets"
+        />
+        <Panel
+          title="Your bookings"
+          description="Requests, confirmed visits and everything already done."
+          to="/dashboard/bookings"
+        />
+        {/* Shown to everyone rather than gated on the caretaker role: the page
+            creates a listing for someone who has none, which is how a customer
+            becomes a caretaker in the first place. */}
+        <Panel
+          title="Your caretaker listing"
+          description="What owners see in search, and the rate card that prices your bookings."
+          to="/dashboard/caretaker-profile"
+        />
       </div>
 
       <p className="mt-4 rounded-xl border border-dashed border-mist bg-white/60 p-5 text-sm text-charcoal/65">
-        Bookings, appointments and orders arrive with M4–M6. The role-aware
-        dashboard proper needs them.
+        Vet appointments and orders arrive with M5–M6.
       </p>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  description,
+  to,
+}: {
+  title: string;
+  description: string;
+  to: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-mist bg-white p-5">
+      <div className="min-w-0">
+        <h2 className="font-medium text-ink">{title}</h2>
+        <p className="mt-0.5 text-sm text-charcoal/60">{description}</p>
+      </div>
+      <ButtonLink to={to} variant="outline" size="sm">
+        Open
+      </ButtonLink>
     </div>
   );
 }

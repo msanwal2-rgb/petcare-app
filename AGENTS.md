@@ -12,6 +12,7 @@ Two codebases live in this repository. Know which one you are in.
 | | |
 |---|---|
 | `STATUS.md` | What is done, what is next, and the open items. **Start here.** |
+| `HANDOFF.md` | Picking up mid-build: uncommitted work, the next module, and the traps that cost time. Written at each milestone boundary. |
 | `ARCHITECTURE.md` | How the code is organised and how to add a feature. **Read before writing code.** |
 | `REQUIREMENTS.md` | What the system must do. The durable spec. |
 | `BUILD_PLAN.md` | Decisions, order of work, and the risks. |

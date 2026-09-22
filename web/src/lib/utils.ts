@@ -117,6 +117,23 @@ export const STATUS_LABELS: Record<BookingStatus, string> = {
   cancelled: "Cancelled",
 };
 
+/**
+ * Booking status → badge tone.
+ *
+ * Mapped to a tone rather than a colour so "waiting on someone" looks the same
+ * whether it is a booking request or an unpaid order. `declined` is a failure
+ * and `cancelled` is inert: one is an answer, the other is a withdrawal, and
+ * showing them the same way loses that.
+ */
+export const BOOKING_STATUS_TONE: Record<BookingStatus, StatusTone> = {
+  requested: "pending",
+  accepted: "active",
+  in_progress: "progress",
+  completed: "done",
+  declined: "failed",
+  cancelled: "muted",
+};
+
 export const SPECIES_LABELS: Record<Pet["species"], string> = {
   dog: "Dog",
   cat: "Cat",
