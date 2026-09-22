@@ -59,6 +59,10 @@ public static class DependencyInjection
         // IAccessRepository.
         services.AddSingleton<IAccessRepository, AccessRepository>();
 
+        services.AddSingleton<IPetRepository, PetRepository>();
+        services.AddSingleton<IMedicalRecordRepository, MedicalRecordRepository>();
+        services.AddSingleton<IAppointmentRepository, AppointmentRepository>();
+
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
         // source and its collaborators. Nothing here caches per-request state,
@@ -72,6 +76,8 @@ public static class DependencyInjection
         services.AddSingleton<IRateLimitService, RateLimitService>();
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<ICatalogService, CatalogService>();
+        services.AddSingleton<IPetService, PetService>();
+        services.AddSingleton<IMedicalRecordService, MedicalRecordService>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

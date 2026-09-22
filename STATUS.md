@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-09-21**, end of M2.
+Last updated: **2026-09-22**, end of M3.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -18,8 +18,8 @@ Last updated: **2026-09-21**, end of M2.
 | **M0** | Foundation | ✅ Done |
 | **M1** | Identity & authentication | ✅ Done |
 | **M2** | Authorization core ★ | ✅ Done — all nine predicates, 35 tests |
-| **M3** | Pets & health records | ⬜ **Next** |
-| M4 | Caretakers & bookings | ⬜ |
+| **M3** | Pets & health records | ✅ Done — 8 endpoints, 94 tests |
+| **M4** | Caretakers & bookings | ⬜ **Next** |
 | M5 | Vets & appointments | ⬜ |
 | M6 | Store & orders | ⬜ |
 | M7 | Payments | ⬜ |
@@ -50,7 +50,7 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, proxies /api
 
 # check it
-cd API && dotnet test        # 104 passing, ~32s
+cd API && dotnet test        # 198 passing, ~60s
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -87,6 +87,13 @@ POST   /auth/refresh             GET  /auth/google         GET /auth/google/comp
 GET    /me                       GET  /config
 GET    /users   /users/{id}      PATCH /users/{id}
 GET    /brands
+
+GET    /pets                     GET  /pets?ids=a,b,c      POST /pets
+GET    /pets/{id}                PATCH /pets/{id}          DELETE /pets/{id}
+GET    /pets/{id}/appointments   GET  /pets/{id}/recommendations
+GET    /pets/{id}/medical-records
+POST   /pets/{id}/medical-records
+DELETE /medical-records/{id}
 ```
 
 Services and repositories in `Leash.Core`, all behind interfaces, all registered
@@ -101,6 +108,8 @@ in `AddLeashCore`:
 | `ISessionValidator` | `ISettingsRepository` |
 | `IAccessService` ★ | `ICatalogRepository` |
 | `IRateLimitService`, `ISettingsService`, `ICatalogService` | `IAccessRepository` ★ |
+| `IPetService` | `IPetRepository` |
+| `IMedicalRecordService` | `IMedicalRecordRepository`, `IAppointmentRepository` |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -119,6 +128,9 @@ Cross-cutting, settled and inherited by every later module:
 /login  /signup  /forgot-password  /reset-password  /verify-email
 /onboarding          role selection            [guarded]
 /dashboard           the M1 landing place      [guarded]
+/dashboard/pets      the owner's pets          [guarded]
+/dashboard/pets/new  add a pet                 [guarded]
+/dashboard/pets/:id  profile, health timeline, recommendations  [guarded]
 /search /vets /store /adopt                    named placeholders
 ```
 
@@ -126,11 +138,14 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 104 passing
+### Tests — 198 passing
 
 | File | Covers |
 |---|---|
 | `AccessServiceTests` | Port of `tests/access.test.ts` — the nine predicates, and what a transfer of ownership ends |
+| `PetServiceTests` | Port of `tests/pets.test.ts` — CRUD, the closed transfer backdoor, delete, recommendations, life stage and allergen matching |
+| `MedicalRecordServiceTests` | Port of `tests/medical-records.test.ts` — the timeline, who may author what, and the one active-prescription rule |
+| `PetEndpointTests` | Every pet route over HTTP: `[Authorize]` on each action, the envelope, the wire shape, the fee omission |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
@@ -139,7 +154,75 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 
 ---
 
-## 3. M2 — what landed, and what M3 inherits
+## 3. M3 — what landed, and what M4 inherits
+
+Pets and the health record, end to end: 8 endpoints, the three owner screens,
+and `tests/pets.test.ts` + `tests/medical-records.test.ts` ported in full.
+
+`IAccessService` is now called from every action that touches a pet — which is
+the half of M2 that nothing could verify until this milestone existed.
+`PetEndpointTests` walks each route anonymously to prove `[Authorize]` is on it,
+because that gap is where an authorization hole lives.
+
+### The rules M3 settled
+
+| | |
+|---|---|
+| **Who sees a pet** | Owner, a sitter with a qualifying booking, a treating vet. A stranger gets 404, never 403 |
+| **Who sees the health record** | Owner and treating vet only. **A booking is not clinical access** — the sitter's panel says so rather than rendering empty |
+| **Who writes a record** | A treating vet writes any type, stamped with the vet profile the access check returned. An owner writes `allergy` and `weight` only |
+| **Who deletes a record** | The author. An owner reads their animal's whole history and cannot remove what a vet wrote |
+| **Who sees recommendations** | The owner only — the shelf is a readout of the animal's allergy list |
+| **The fee on a visit** | Present for the booker, **absent from the JSON** for everyone else. Not null — absent |
+
+### `refillsLeft` — REQUIREMENTS P9, decided
+
+The spec required a decision and forbade shipping the inconsistency. **Zero
+means exhausted and stops authorising products; null means the vet set no
+limit and it never runs out.** That is expressed once, in
+`MedicalRecordRepository.ActivePrescription`, and it is the only definition of
+"is this prescription active?" in the codebase — P8 exists because the old
+system had four and only the SQL one gated money.
+
+**What this hands M4/M6:** nothing decrements it yet. **M6 must decrement
+`refillsLeft` when an Rx line is bought**, in the same transaction as the stock
+decrement, or the column goes back to being decorative and a single
+prescription authorises unlimited purchases until it expires. That is the
+inconsistency P9 named; M3 closed the read side of it and M6 owns the write
+side.
+
+### Two things that need a human decision
+
+1. **Deleting a pet is blocked once it has any clinical history** (409). All
+   three foreign keys onto `pets` are `ON DELETE CASCADE`, so a raw delete
+   takes the animal's records, its appointments and any adoption listing with
+   it — an owner deleting forty records they did not author by deleting the
+   patient, which is the wholesale version of what "only the author may delete
+   a record" exists to prevent. **The gap: there is now no way to retire a pet
+   that has died.** That wants a soft delete (`deletedAt`, filtered from lists,
+   records kept hanging from it) — a schema change plus a decision about what a
+   bereaved owner should still be able to see. Not guessed at here.
+2. **`Species` is three values** (`dog`, `cat`, `other`), because
+   `web/src/types/index.ts` says so and the same three constrain a product's
+   `species` and a professional's `acceptedSpecies`. Widening it is a contract
+   change: `PetEnums.cs`, `types/index.ts`, and every label map keyed on it, in
+   one commit.
+
+### Where M4 picks up
+
+`IsBookingParticipantAsync` has been waiting since M2 and finally gets its
+caller. `IAppointmentRepository` exists with one read method — M5 grows it
+rather than starting a second interface. `ICatalogRepository` has products for
+the recommendation query only; M6 adds search, filtering, sorting and cursor
+pagination.
+
+`AppointmentTimelineDto` is one record whose `Fee` is written conditionally,
+replacing the reference's two TypeScript types. M5 should extend it rather than
+add a parallel appointment DTO.
+
+---
+
+## 3a. M2 — the authorization core (reference)
 
 **No endpoints. Pure predicates, used by every other module.** All nine are in
 `IAccessService` / `AccessService`, backed by a dedicated `IAccessRepository`,
@@ -214,8 +297,10 @@ because §4 requires the set ported in full, together, and reviewed once.
 |---|---|
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 3 are ported. They are the specification — port each module's as you build it |
-| | `AccessServiceTests` inlines the reference's `activePrescriptions` rule as SQL, because `lib/server/medical-records.ts` is M3. When M3 ports that module, replace the helper with a call to it — the assertions should not need to change |
+| | `tests/` in the reference project has 28 Vitest suites. 5 are ported. They are the specification — port each module's as you build it |
+| ⚠ | **M6 must decrement `refillsLeft` when an Rx line is bought**, in the same transaction as the stock decrement. M3 decided the read side (0 = exhausted, null = no limit) and closed it behind one SQL predicate; until M6 writes to it, one prescription still authorises unlimited purchases until it expires. That is REQUIREMENTS P9 half-done, deliberately |
+| ⚠ | **A pet that has died cannot be removed.** Deleting is blocked once the animal has vet visits or health records, because all three FKs onto `pets` cascade and an owner must not delete records their vet authored. Needs a soft delete (`deletedAt`) and a decision about what a bereaved owner still sees — `STATUS.md` §3 has the reasoning |
+| | `AccessServiceTests` still inlines the active-prescription rule as SQL. `IMedicalRecordRepository.ListAuthorizedProductSlugsAsync` now exists — swap the helper for a call to it so there is one definition in the tests too |
 | | Google OAuth is implemented but unconfigured, so untested against the real provider. Set `Auth:Google:ClientId`/`:ClientSecret` and add `http://localhost:5173/api/v1/auth/google/callback` as an authorised redirect URI |
 | | `db/petapp_at_last_release.sql` is gitignored and local-only. Recreate it from `petapp.sql` before adding the next change script |
 | | No CI yet. `BUILD_PLAN.md` §9 wants: throwaway database from `petapp.sql`, run the suite, run `verify.sh` |

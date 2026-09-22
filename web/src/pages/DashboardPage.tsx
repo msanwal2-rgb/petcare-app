@@ -3,6 +3,7 @@ import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
 import { RoleToggle } from "@/components/RoleToggle";
 import { ROLE_LABELS, STAFF_ROLE_LABELS, formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
+import { ButtonLink } from "@/components/ui/Button";
 
 /**
  * The dashboard, in its M1 form.
@@ -51,9 +52,21 @@ export default function DashboardPage() {
         )}
       </dl>
 
-      <p className="mt-10 rounded-xl border border-dashed border-mist bg-white/60 p-5 text-sm text-charcoal/65">
-        Pets, bookings, appointments and orders arrive with M3–M6. This screen is
-        the M1 landing place for the auth flows.
+      <div className="mt-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-mist bg-white p-5">
+        <div>
+          <h2 className="font-medium text-ink">Your pets</h2>
+          <p className="mt-0.5 text-sm text-charcoal/60">
+            Profiles, health records and what the store suggests for each animal.
+          </p>
+        </div>
+        <ButtonLink to="/dashboard/pets" variant="outline" size="sm">
+          Open
+        </ButtonLink>
+      </div>
+
+      <p className="mt-4 rounded-xl border border-dashed border-mist bg-white/60 p-5 text-sm text-charcoal/65">
+        Bookings, appointments and orders arrive with M4–M6. The role-aware
+        dashboard proper needs them.
       </p>
     </div>
   );

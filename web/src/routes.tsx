@@ -9,6 +9,9 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import DashboardPage from "./pages/DashboardPage";
+import PetsPage from "./pages/PetsPage";
+import PetNewPage from "./pages/PetNewPage";
+import PetDetailPage from "./pages/PetDetailPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -65,6 +68,37 @@ export const router = createBrowserRouter([
         element: (
           <RequireAuth>
             <DashboardPage />
+          </RequireAuth>
+        ),
+      },
+
+      // ── M3: pets and the health record ──
+      // Guarded individually rather than under a `/dashboard` layout route,
+      // because `RequireAuth` wraps the element and each of these renders its
+      // own page. The server re-checks every one of them regardless — the guard
+      // is UX, not security.
+      {
+        path: "dashboard/pets",
+        element: (
+          <RequireAuth>
+            <PetsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Before `dashboard/pets/:id`, so "new" is not matched as an id.
+        path: "dashboard/pets/new",
+        element: (
+          <RequireAuth>
+            <PetNewPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/pets/:id",
+        element: (
+          <RequireAuth>
+            <PetDetailPage />
           </RequireAuth>
         ),
       },
