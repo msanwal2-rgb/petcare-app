@@ -6,7 +6,7 @@ namespace Leash.Core.Services.Interfaces;
 /// <summary>
 /// The only writer of the three derived reputation columns.
 ///
-/// M4 carries the caretaker arm. M5 adds the vet one, and M10 a shelter
+/// M4 built the caretaker arm and M5 added the vet one. M10 brings a shelter
 /// response rate — shelters have no rating or review count deliberately, until
 /// <c>Review.kind</c> grows an adoption arm.
 /// </summary>
@@ -20,10 +20,26 @@ public interface IReputationService
         string caretakerId, ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The vet arm of the above. An appointment says <c>confirmed</c> where a
+    /// booking says <c>accepted</c>; nothing else about the rule differs.
+    /// </summary>
+    Task RefreshVetResponseRateAsync(
+        string vetId, ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Fold a new rating into the caretaker behind <paramref name="userId"/>.
     /// A no-op for a user with no caretaker profile.
     /// </summary>
     Task ApplyCaretakerRatingAsync(
+        string userId, double rating,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fold a new rating into the vet behind <paramref name="userId"/>. A no-op
+    /// for a user with no vet profile — which is every owner, and is how this
+    /// stays safe to call with whatever recipient a review names.
+    /// </summary>
+    Task ApplyVetRatingAsync(
         string userId, double rating,
         ITransactionScope? scope = null, CancellationToken ct = default);
 }

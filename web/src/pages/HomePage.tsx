@@ -1,91 +1,271 @@
-import { useEffect, useState } from "react";
-import { ApiError } from "@/api/_client";
-import { listBrands } from "@/api/catalog";
+import { Link } from "react-router";
+import { HeroSection } from "@/components/HeroSection";
+import { FeaturedCaretakers } from "@/components/FeaturedCaretakers";
+import { Reveal, RevealGroup } from "@/components/ui/Reveal";
 import { ButtonLink } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/Skeleton";
+import {
+  BagIcon,
+  CalendarIcon,
+  ChevronRightIcon,
+  HeartIcon,
+  SearchIcon,
+  ShieldCheckIcon,
+  StethoscopeIcon,
+} from "@/components/ui/icons";
+import { BLUR_DATA_URL, CTA_PHOTO, unsplash } from "@/lib/photos";
 
 /**
- * The landing page, in its M1 form.
+ * The landing page.
  *
- * The reference project's `app/page.tsx` is a photography-led hero with
- * featured caretakers and a how-it-works section, and it depends on caretaker
- * search (M4) and the store (M6). It is ported when those exist; until then
- * this is an honest front door rather than a shell full of empty sections.
+ * Ported from the reference project's `app/page.tsx`, which was left until the
+ * three things it advertises existed: caretaker search (M4), vets (M5) and the
+ * store (M6). All three pillars link to working pages.
  *
- * The brands panel is M0's proof slice, kept because it is still the cheapest
- * check that every layer is connected: relative /api path → dev proxy →
- * controller → service → repository → Dapper → PostgreSQL, and the design
- * tokens on the way back.
+ * What was here before was the M1 proof slice: a heading, two auth buttons and
+ * a panel rendering `GET /api/v1/brands` to prove every layer was connected.
+ * That check has done its job — the brands endpoint is exercised by the catalog
+ * tests now, and `HomePage` was the only place in the product still labelled
+ * with a milestone number.
  */
+const STEPS = [
+  {
+    icon: SearchIcon,
+    title: "Search nearby",
+    body: "Filter local caretakers by service, dates, price, and the kind of pet you have.",
+  },
+  {
+    icon: CalendarIcon,
+    title: "Request a booking",
+    body: "Pick your caretaker, attach your pet's full profile, and send a request in a couple of taps.",
+  },
+  {
+    icon: HeartIcon,
+    title: "Relax — they've got it",
+    body: "Your caretaker confirms, cares for your pet, and you both leave a review afterward.",
+  },
+];
+
+/**
+ * The three sides of the marketplace.
+ *
+ * The copy is deliberately about what connects them rather than about each in
+ * isolation — the vet writing into the record that the caretaker reads and the
+ * store honours is the actual product, and it is the thing a list of three
+ * services fails to say.
+ */
+const PILLARS = [
+  {
+    icon: HeartIcon,
+    title: "Day-to-day care",
+    body: "Vetted local caretakers for walking, sitting, boarding and daycare — who can see your pet's feeding, medical and behaviour notes before day one.",
+    cta: "Find a caretaker",
+    href: "/search",
+  },
+  {
+    icon: StethoscopeIcon,
+    title: "Licensed vets",
+    body: "Book in-clinic, video or home visits. Notes, vaccinations and prescriptions land in your pet's health record instead of a paper folder.",
+    cta: "Find a vet",
+    href: "/vets",
+  },
+  {
+    icon: BagIcon,
+    title: "Food & supplies",
+    body: "Filtered to your pet's species and age, with their allergens flagged and their prescribed diets unlocked. Tracked to your door.",
+    cta: "Visit the store",
+    href: "/store",
+  },
+];
+
+const TRUST = [
+  [
+    "Background-checked",
+    "Identity and background verification through trusted third parties.",
+  ],
+  [
+    "Full pet profiles",
+    "Caretakers see medical, feeding, and behaviour notes before every booking.",
+  ],
+  [
+    "Reviewed both ways",
+    "Owners and caretakers rate each other — reputation is earned, never typed in.",
+  ],
+];
+
 export default function HomePage() {
-  const [brands, setBrands] = useState<string[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listBrands()
-      .then(setBrands)
-      .catch((e: unknown) =>
-        setError(e instanceof ApiError ? `${e.message} (${e.status})` : String(e)),
-      );
-  }, []);
-
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6">
-      <p className="font-mono text-xs uppercase tracking-widest text-leash">
-        M1 · identity &amp; authentication
-      </p>
-      <h1 className="mt-2 text-4xl font-semibold tracking-tight">
-        Trusted pet care, booked in minutes
-      </h1>
-      <p className="mt-3 max-w-xl text-charcoal/70">
-        Caretakers, licensed vets, and the food they recommend — in one place, so
-        your pet&apos;s history follows them.
-      </p>
+    <div className="flex flex-col">
+      <HeroSection />
 
-      <div className="mt-8 flex flex-wrap gap-3">
-        <ButtonLink to="/signup" variant="cta" size="lg">
-          Create an account
-        </ButtonLink>
-        <ButtonLink to="/login" variant="outline" size="lg">
-          Log in
-        </ButtonLink>
-      </div>
+      {/* How it works */}
+      <section
+        id="how"
+        className="mx-auto w-full max-w-[1200px] scroll-mt-20 px-4 py-20 sm:px-6"
+      >
+        <Reveal>
+          <p className="font-mono text-xs uppercase tracking-widest text-leash">
+            How it works
+          </p>
+          <h2 className="mt-2 max-w-xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+            Three steps from “who'll watch my dog?” to booked.
+          </h2>
+        </Reveal>
 
-      <section className="mt-12 rounded-[var(--radius-card)] border border-mist bg-cloud p-6">
-        <h2 className="text-lg font-semibold">Brands</h2>
-        <p className="mt-1 text-sm text-charcoal/60">
-          <code className="font-mono text-xs">GET /api/v1/brands</code> — live from
-          the database, through the controller and repository layers.
-        </p>
+        <RevealGroup className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+          {STEPS.map((step, i) => (
+            <Reveal key={step.title} delay={i * 0.08}>
+              <div className="h-full rounded-2xl border border-mist bg-white p-7">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-white">
+                  <step.icon width={22} height={22} />
+                </div>
+                <div className="mt-5 flex items-baseline gap-2">
+                  <span className="font-mono text-sm text-leash">0{i + 1}</span>
+                  <h3 className="text-lg font-semibold text-ink">{step.title}</h3>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-charcoal/70">
+                  {step.body}
+                </p>
+              </div>
+            </Reveal>
+          ))}
+        </RevealGroup>
+      </section>
 
-        {error && (
-          <p className="mt-4 rounded-md bg-leash/10 p-3 text-sm text-leash">{error}</p>
-        )}
+      {/* One record, three services */}
+      <section className="border-y border-mist bg-white">
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-20 sm:px-6">
+          <Reveal>
+            <p className="font-mono text-xs uppercase tracking-widest text-leash">
+              One record, three services
+            </p>
+            <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+              Care, health and food that actually know about each other.
+            </h2>
+            <p className="mt-3 max-w-2xl text-charcoal/70">
+              Your vet writes into your pet&apos;s health record. Your caretaker
+              reads it. The store honours the prescriptions in it. Nothing has to
+              be explained twice.
+            </p>
+          </Reveal>
 
-        {!error && brands === null && (
-          <div className="mt-4 space-y-2" aria-busy="true">
-            <Skeleton className="h-6 w-40" />
-            <Skeleton className="h-6 w-56" />
-          </div>
-        )}
-
-        {brands && (
-          <>
-            <ul className="mt-4 flex flex-wrap gap-2">
-              {brands.map((b) => (
-                <li
-                  key={b}
-                  className="rounded-full bg-fog px-3 py-1 text-sm text-ink ring-1 ring-mist"
+          <RevealGroup className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {PILLARS.map((pillar, i) => (
+              <Reveal key={pillar.title} delay={i * 0.08}>
+                <Link
+                  to={pillar.href}
+                  className="lift group flex h-full flex-col rounded-2xl border border-mist bg-fog/60 p-7 hover:border-ink/25"
                 >
-                  {b}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-white">
+                    <pillar.icon width={22} height={22} />
+                  </div>
+                  <h3 className="mt-5 text-lg font-semibold text-ink">
+                    {pillar.title}
+                  </h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-charcoal/70">
+                    {pillar.body}
+                  </p>
+                  <span className="mt-4 flex items-center gap-1 text-sm font-medium text-leash">
+                    {pillar.cta}
+                    <ChevronRightIcon
+                      width={15}
+                      height={15}
+                      className="transition-transform group-hover:translate-x-0.5"
+                    />
+                  </span>
+                </Link>
+              </Reveal>
+            ))}
+          </RevealGroup>
+        </div>
+      </section>
+
+      {/* Featured caretakers */}
+      <section className="mx-auto w-full max-w-[1200px] px-4 py-20 sm:px-6">
+        <Reveal className="mb-8 flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-leash">
+              Top rated
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+              Caretakers pet owners love
+            </h2>
+          </div>
+          <ButtonLink to="/search" variant="outline" size="sm" className="shrink-0">
+            See all
+          </ButtonLink>
+        </Reveal>
+
+        <FeaturedCaretakers />
+      </section>
+
+      {/* Trust & safety */}
+      <section id="trust" className="scroll-mt-20 bg-ink text-white">
+        <div className="mx-auto grid max-w-[1200px] grid-cols-1 items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2">
+          <Reveal>
+            <p className="font-mono text-xs uppercase tracking-widest text-marigold">
+              Trust &amp; safety
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Every caretaker is vetted before they meet your pet.
+            </h2>
+            <ul className="mt-8 space-y-5">
+              {TRUST.map(([title, body]) => (
+                <li key={title} className="flex gap-4">
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-marigold">
+                    <ShieldCheckIcon width={18} height={18} />
+                  </span>
+                  <div>
+                    <p className="font-semibold text-white">{title}</p>
+                    <p className="mt-0.5 text-sm text-white/70">{body}</p>
+                  </div>
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-sm text-charcoal/60">
-              {brands.length} brands · every layer verified.
-            </p>
-          </>
-        )}
+          </Reveal>
+
+          <Reveal delay={0.1}>
+            <div
+              className="relative aspect-[4/3] overflow-hidden rounded-2xl"
+              style={{
+                backgroundImage: `url("${BLUR_DATA_URL}")`,
+                backgroundSize: "cover",
+              }}
+            >
+              <img
+                src={unsplash(CTA_PHOTO, 1000, 750)}
+                alt="A caretaker hugging a happy dog"
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="mx-auto w-full max-w-[1200px] px-4 py-20 sm:px-6">
+        <Reveal className="overflow-hidden rounded-3xl border border-mist bg-white px-8 py-14 text-center sm:px-14">
+          <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+            Your pet deserves someone who shows up.
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-charcoal/70">
+            Join as an owner to book care and vet visits, as a caretaker to earn
+            doing what you love, or as a vet to see patients here. It takes about
+            a minute.
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <ButtonLink to="/search" variant="cta" size="lg">
+              Find a caretaker
+            </ButtonLink>
+            <ButtonLink to="/vets" variant="outline" size="lg">
+              Find a vet
+            </ButtonLink>
+            <ButtonLink to="/signup" variant="outline" size="lg">
+              Join Leash
+            </ButtonLink>
+          </div>
+        </Reveal>
       </section>
     </div>
   );

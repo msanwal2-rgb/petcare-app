@@ -733,16 +733,21 @@ export interface ProductSearchParams {
   maxPriceCents?: number;
   sort?: ProductSort;
   limit?: number;
-  offset?: number;
+  /** Opaque — from the previous page's `nextCursor`. Encodes the sort it was minted under. */
+  cursor?: string;
 }
 
 export type ProductSort = "featured" | "price_asc" | "price_desc" | "rating" | "newest";
 
+/**
+ * One page of the catalogue. Keyset-paginated like every list in this API
+ * (STATUS.md §5) — the reference returned `{ total, limit, offset }`, which
+ * repeats or skips rows when stock and ratings move between pages.
+ */
 export interface ProductPage {
   items: Product[];
-  total: number;
-  limit: number;
-  offset: number;
+  /** null at the end of the results. */
+  nextCursor: string | null;
 }
 
 /**
@@ -889,6 +894,15 @@ export interface CartQuote {
   shippingWaivedByMembership: boolean;
   /** What a non-member would have paid extra on this basket. */
   membershipSavingsCents: number;
+  /**
+   * Products containing something the selected pet reacts to (REQUIREMENTS.md
+   * S8). Matched server-side by the one allergen matcher in the codebase — the
+   * reference matched in three places, this client being one of them. A
+   * warning, not a refusal: the line is still priced.
+   */
+  allergenWarnings: { productId: string; allergens: string[] }[];
+  /** How much more for free shipping; 0 when already there, or a member (S6). */
+  amountToFreeShippingCents: number;
 }
 
 /* ── Notifications ─────────────────────────────────────────────────── */

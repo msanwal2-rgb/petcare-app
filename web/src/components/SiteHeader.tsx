@@ -7,6 +7,7 @@ import { useScrolled } from "@/hooks/useScrolled";
 import { ButtonLink } from "./ui/Button";
 import { RoleToggle } from "./RoleToggle";
 import { Avatar } from "./Avatar";
+import { CartButton } from "./store/CartButton";
 import { MenuIcon, XIcon } from "./ui/icons";
 import { DURATION, EASE_GLIDE, EASE_OUT, layoutGlide } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -140,6 +141,9 @@ export function SiteHeader() {
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
+          {/* Outside the session branch: the cart is client-side and works
+              signed out, so it should not wait on — or flicker with — auth. */}
+          <CartButton />
           {!hasHydrated ? (
             // Reserved width, so the bar does not jump when the session resolves.
             <div className="h-9 w-40" />
@@ -183,6 +187,7 @@ export function SiteHeader() {
         </div>
 
         <div className="flex items-center gap-1 md:hidden">
+          <CartButton />
           <button
             onClick={() => setMobileOpen((v) => !v)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}

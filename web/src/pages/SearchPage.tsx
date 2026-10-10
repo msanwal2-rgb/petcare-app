@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import type { ServiceType, Species } from "@/types";
 import {
   searchCaretakers,
   type CaretakerSearchParams,
   type CaretakerWithUser,
 } from "@/api/caretakers";
+import { CaretakerCard, CaretakerCardSkeleton } from "@/components/CaretakerCard";
 import { Button } from "@/components/ui/Button";
-import { Field, Select } from "@/components/ui/Field";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { SERVICE_LABELS, SPECIES_LABELS, formatCurrency } from "@/lib/utils";
+import { Field, Input, Select } from "@/components/ui/Field";
+import { CITIES, CITY_RADIUS_MILES, cityById } from "@/lib/cities";
+import { SERVICE_LABELS, SPECIES_LABELS } from "@/lib/utils";
 
 /**
  * Caretaker search.
@@ -23,8 +24,16 @@ import { SERVICE_LABELS, SPECIES_LABELS, formatCurrency } from "@/lib/utils";
  * scan rather than navigate.
  *
  * The filters live in the URL so a search can be shared, bookmarked and
- * reloaded. The cursor deliberately does **not**: it is a position in a result
- * set that shifts as reputations move, and a bookmarked page 3 would be a lie.
+ * reloaded, and so the landing page's search bar can hand off to this one. The
+ * cursor deliberately does **not**: it is a position in a result set that shifts
+ * as reputations move, and a bookmarked page 3 would be a lie.
+ *
+ * ── The city is the only way in to distance search ──
+ *
+ * `?city=austin` resolves to coordinates through `lib/cities.ts` and is sent as
+ * `lat`/`lng`/`radiusMiles`. That switches the server's ordering from
+ * best-rated to nearest-first and puts a distance on every card — the haversine
+ * search M4 built in SQL, reachable from the UI for the first time.
  */
 export default function SearchPage() {
   const [params, setParams] = useSearchParams();
@@ -34,13 +43,23 @@ export default function SearchPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cityId = params.get("city") ?? "";
   const serviceType = (params.get("serviceType") ?? "") as ServiceType | "";
   const species = (params.get("species") ?? "") as Species | "";
+  const startDate = params.get("startDate") ?? "";
   const maxPrice = params.get("maxPrice") ?? "";
 
+  // An unknown `?city=` is ignored rather than refused — a stale link should
+  // still show results, just not narrowed to a place that no longer exists.
+  const city = cityById(cityId);
+
   const query: CaretakerSearchParams = {
+    lat: city?.lat,
+    lng: city?.lng,
+    radiusMiles: city ? CITY_RADIUS_MILES : undefined,
     serviceType: serviceType || undefined,
     species: species || undefined,
+    startDate: startDate || undefined,
     maxPrice: maxPrice ? Number(maxPrice) : undefined,
     limit: 12,
   };
@@ -58,7 +77,7 @@ export default function SearchPage() {
       })
       .catch((e: Error) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceType, species, maxPrice]);
+  }, [cityId, serviceType, species, startDate, maxPrice]);
 
   useEffect(runSearch, [runSearch]);
 
@@ -84,13 +103,30 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
+    <div className="mx-auto w-full max-w-[1200px] px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-semibold text-ink">Find a caretaker</h1>
       <p className="mt-1 text-sm text-charcoal/60">
-        Walking, sitting, boarding and daycare, from people near you.
+        {city
+          ? `Walking, sitting, boarding and daycare within ${CITY_RADIUS_MILES} miles of ${city.label}, nearest first.`
+          : "Walking, sitting, boarding and daycare, best rated first."}
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Field label="City" htmlFor="city">
+          <Select
+            id="city"
+            value={city ? cityId : ""}
+            onChange={(e) => setFilter("city", e.target.value)}
+          >
+            <option value="">Anywhere</option>
+            {CITIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
         <Field label="Service" htmlFor="serviceType">
           <Select
             id="serviceType"
@@ -121,6 +157,15 @@ export default function SearchPage() {
           </Select>
         </Field>
 
+        <Field label="Available from" htmlFor="startDate">
+          <Input
+            id="startDate"
+            type="date"
+            value={startDate}
+            onChange={(e) => setFilter("startDate", e.target.value)}
+          />
+        </Field>
+
         <Field label="Budget" hint="per hour or day" htmlFor="maxPrice">
           <Select
             id="maxPrice"
@@ -145,9 +190,10 @@ export default function SearchPage() {
       )}
 
       {items === null && !error && (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
-          <Skeleton className="h-36 rounded-2xl" />
-          <Skeleton className="h-36 rounded-2xl" />
+        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <CaretakerCardSkeleton />
+          <CaretakerCardSkeleton />
+          <CaretakerCardSkeleton />
         </div>
       )}
 
@@ -159,7 +205,7 @@ export default function SearchPage() {
 
       {items && items.length > 0 && (
         <>
-          <ul className="mt-8 grid gap-4 sm:grid-cols-2">
+          <ul className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((caretaker) => (
               <li key={caretaker.profile.id}>
                 <CaretakerCard caretaker={caretaker} />
@@ -177,47 +223,5 @@ export default function SearchPage() {
         </>
       )}
     </div>
-  );
-}
-
-function CaretakerCard({ caretaker }: { caretaker: CaretakerWithUser }) {
-  const { profile, user, priceRange, distanceMiles } = caretaker;
-
-  return (
-    <Link
-      to={`/caretaker/${profile.id}`}
-      className="flex h-full gap-4 rounded-2xl border border-mist bg-white p-4 transition-colors hover:border-ink"
-    >
-      <img
-        src={user.avatarUrl}
-        alt=""
-        width={64}
-        height={64}
-        className="size-16 shrink-0 rounded-full bg-mist object-cover"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="truncate font-medium text-ink">{user.name}</p>
-          <span className="shrink-0 text-sm text-charcoal/70">
-            {profile.rating.toFixed(1)} ★
-          </span>
-        </div>
-
-        <p className="mt-0.5 truncate text-sm text-charcoal/60">
-          {user.address.city}, {user.address.state}
-          {distanceMiles !== null && ` · ${distanceMiles.toFixed(1)} mi`}
-        </p>
-
-        <p className="mt-1.5 truncate text-sm text-charcoal/70">
-          {profile.servicesOffered.map((s) => SERVICE_LABELS[s]).join(" · ")}
-        </p>
-
-        <p className="mt-1.5 text-sm font-medium text-ink">
-          {priceRange.min === priceRange.max
-            ? formatCurrency(priceRange.min)
-            : `${formatCurrency(priceRange.min)}–${formatCurrency(priceRange.max)}`}
-        </p>
-      </div>
-    </Link>
   );
 }

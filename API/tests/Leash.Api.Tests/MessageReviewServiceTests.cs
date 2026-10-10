@@ -147,7 +147,7 @@ public sealed class MessageReviewServiceTests(DatabaseFixture db) : IAsyncLifeti
     [Fact]
     public async Task Returns_both_reviews_attached_to_a_booking()
     {
-        Assert.Equal(2, (await _reviews.ListForSubjectAsync("b9")).Count);
+        Assert.Equal(2, (await _reviews.ListForSubjectAsync("b9", ReviewKinds.Booking)).Count);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class MessageReviewServiceTests(DatabaseFixture db) : IAsyncLifeti
     [Fact]
     public async Task Reports_the_subject_a_review_belongs_to()
     {
-        var review = (await _reviews.ListForSubjectAsync("a1"))[0];
+        var review = (await _reviews.ListForSubjectAsync("a1", ReviewKinds.VetAppointment))[0];
 
         // `subjectId` on the wire, `bookingId` in the column — and here it holds
         // an appointment id, which is exactly why the DTO renames it.

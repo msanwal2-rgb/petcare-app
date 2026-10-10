@@ -59,19 +59,6 @@ public sealed class BookingService(
         [BookingStatuses.Cancelled] = [BookingActor.Owner, BookingActor.Caretaker],
     };
 
-    /// <summary>
-    /// The minimum notice before a booking may start, in hours
-    /// (REQUIREMENTS.md C13).
-    ///
-    /// Same-day and next-morning slots are a Leash Plus benefit: a member may
-    /// book two hours out, everybody else a day. <b>The member arm is not wired
-    /// up yet</b> — entitlements arrive with M7 — so every caller currently gets
-    /// the standard window. <see cref="LeadTimeHoursFor"/> is the one place M7
-    /// has to change.
-    /// </summary>
-    public const int StandardLeadTimeHours = 24;
-    public const int MemberLeadTimeHours = 2;
-
     public async Task<(BookingDto? Booking, BookingFailure? Failure)> GetAsync(
         string callerId, string bookingId, CancellationToken ct = default)
     {
@@ -129,8 +116,9 @@ public sealed class BookingService(
         if (input.EndDateTime <= input.StartDateTime)
             return (null, BookingFailure.BadDates);
 
-        var leadTime = LeadTimeHoursFor(member: false);
-        if (input.StartDateTime < Ids.Now().AddHours(leadTime))
+        // REQUIREMENTS.md C13, and see LeadTime for why the member arm is
+        // hard-coded false until M7 brings entitlements.
+        if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member: false))
             return (null, BookingFailure.LeadTime);
 
         await using var scope = await unitOfWork.BeginAsync(ct);
@@ -234,18 +222,6 @@ public sealed class BookingService(
             ? BookingActor.Caretaker
             : null;
     }
-
-    /// <summary>
-    /// The minimum notice this customer must give.
-    ///
-    /// <b>M7 wires the membership check here</b> and nowhere else: when
-    /// entitlements exist, this takes the caller's id and asks whether they hold
-    /// <c>priority_booking</c>. Until then every caller is a non-member, which
-    /// is the safe direction — it refuses bookings a member would be allowed to
-    /// make rather than allowing ones nobody should.
-    /// </summary>
-    public static int LeadTimeHoursFor(bool member)
-        => member ? MemberLeadTimeHours : StandardLeadTimeHours;
 
     /// <summary>
     /// What a booking costs, in integer cents, from the rate card and the

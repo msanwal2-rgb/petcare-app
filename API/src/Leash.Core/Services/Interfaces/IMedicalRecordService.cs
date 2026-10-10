@@ -20,6 +20,13 @@ public enum RecordFailure
 
     /// <summary>The caller did not write this record, so may not remove it. 403.</summary>
     NotAuthor,
+
+    /// <summary>
+    /// The record cites an <c>appointmentId</c> that is not this pet's, or not
+    /// the author's (REQUIREMENTS.md V8). 400 — the request is understood and
+    /// the caller may well have access; the two ids simply do not go together.
+    /// </summary>
+    AppointmentMismatch,
 }
 
 /// <summary>

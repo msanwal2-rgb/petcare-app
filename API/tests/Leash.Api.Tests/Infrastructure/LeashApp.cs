@@ -56,6 +56,12 @@ public sealed class LeashApp : WebApplicationFactory<Program>
         // No provider key, so the mailer logs instead of sending. The email
         // templates are asserted on at the service level, through CoreHost.
         Environment.SetEnvironmentVariable("Email__ResendApiKey", null);
+
+        // The fulfilment job would otherwise start advancing the seeded orders
+        // thirty seconds into any test run long enough — moving o3 to delivered
+        // underneath a test asserting it is processing. Tests drive it directly
+        // through IFulfilmentService with an injected clock instead.
+        Environment.SetEnvironmentVariable("Fulfilment__Enabled", "false");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

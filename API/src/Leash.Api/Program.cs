@@ -43,6 +43,13 @@ builder.Services.AddControllers(options =>
     options.SuppressModelStateInvalidFilter = true;
 });
 
+// ── Background jobs ──────────────────────────────────────────────────────
+// Advances paid orders through fulfilment on an interval and closes out
+// abandoned checkouts. Idempotent at any cadence; off under the integration
+// tests. See Jobs/FulfilmentWorker.cs, including the note about running it on
+// one instance.
+builder.Services.AddHostedService<Leash.Api.Jobs.FulfilmentWorker>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

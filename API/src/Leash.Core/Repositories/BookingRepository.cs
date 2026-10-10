@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Dapper;
 using Leash.Core.Models.Entities;
@@ -55,7 +54,7 @@ public sealed class BookingRepository(NpgsqlDataSource db) : IBookingRepository
     {
         limit = Math.Clamp(limit, 1, 100);
 
-        var (cursorCreatedAt, cursorId) = DecodeCursor(cursor);
+        var (cursorCreatedAt, cursorId) = Cursor.DecodeTimestamp(cursor);
 
         var where = new StringBuilder($"WHERE {column} = @value");
         if (cursorId is not null)
@@ -77,7 +76,7 @@ public sealed class BookingRepository(NpgsqlDataSource db) : IBookingRepository
         if (rows.Count > limit)
         {
             rows.RemoveAt(rows.Count - 1);
-            nextCursor = EncodeCursor(rows[^1].CreatedAt, rows[^1].Id);
+            nextCursor = Cursor.Encode(rows[^1].CreatedAt, rows[^1].Id);
         }
 
         return (rows, nextCursor);
@@ -132,39 +131,5 @@ public sealed class BookingRepository(NpgsqlDataSource db) : IBookingRepository
                 """,
                 new { caretakerId, answered = answered.ToArray(), waiting },
                 session.Transaction, cancellationToken: ct));
-    }
-
-    private static string EncodeCursor(DateTimeOffset createdAt, string id)
-    {
-        var raw = $"{createdAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture)}|{id}";
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    }
-
-    /// <summary>Anything unparseable means "start from the beginning".</summary>
-    private static (DateTimeOffset? CreatedAt, string? Id) DecodeCursor(string? cursor)
-    {
-        if (string.IsNullOrWhiteSpace(cursor)) return (null, null);
-
-        try
-        {
-            var padded = cursor.Replace('-', '+').Replace('_', '/')
-                .PadRight((cursor.Length + 3) / 4 * 4, '=');
-            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-
-            var split = raw.IndexOf('|');
-            if (split <= 0) return (null, null);
-
-            return DateTimeOffset.TryParse(
-                raw[..split], CultureInfo.InvariantCulture,
-                DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
-                out var createdAt)
-                ? (createdAt, raw[(split + 1)..])
-                : (null, null);
-        }
-        catch (FormatException)
-        {
-            return (null, null);
-        }
     }
 }

@@ -63,9 +63,12 @@ public static class DependencyInjection
         services.AddSingleton<IMedicalRecordRepository, MedicalRecordRepository>();
         services.AddSingleton<IAppointmentRepository, AppointmentRepository>();
         services.AddSingleton<ICaretakerRepository, CaretakerRepository>();
+        services.AddSingleton<IVetRepository, VetRepository>();
         services.AddSingleton<IBookingRepository, BookingRepository>();
         services.AddSingleton<IMessageRepository, MessageRepository>();
         services.AddSingleton<IReviewRepository, ReviewRepository>();
+        services.AddSingleton<IOrderRepository, OrderRepository>();
+        services.AddSingleton<IPaymentRepository, PaymentRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -83,10 +86,22 @@ public static class DependencyInjection
         services.AddSingleton<IPetService, PetService>();
         services.AddSingleton<IMedicalRecordService, MedicalRecordService>();
         services.AddSingleton<ICaretakerService, CaretakerService>();
+        services.AddSingleton<IVetService, VetService>();
+        services.AddSingleton<IAppointmentService, AppointmentService>();
         services.AddSingleton<IBookingService, BookingService>();
         services.AddSingleton<IMessageService, MessageService>();
         services.AddSingleton<IReviewService, ReviewService>();
         services.AddSingleton<IReputationService, ReputationService>();
+        services.AddSingleton<IOrderLifecycle, OrderLifecycle>();
+        services.AddSingleton<IOrderService, OrderService>();
+        services.AddSingleton<IFulfilmentService, FulfilmentService>();
+
+        // ── Payments ─────────────────────────────────────────────────────
+        // The demo provider settles synchronously and is what the seeded
+        // ledger already uses. M7 replaces this one line with the Stripe
+        // provider when its keys are configured, and the order code does not
+        // change shape — it already creates the order before the intent.
+        services.AddSingleton<Payments.IPaymentProvider, Payments.DemoPaymentProvider>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

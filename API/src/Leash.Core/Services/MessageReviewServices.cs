@@ -82,13 +82,15 @@ public sealed class ReviewService(
     IReviewRepository reviews,
     IBookingRepository bookings,
     ICaretakerRepository caretakers,
+    IAppointmentRepository appointments,
+    IVetRepository vets,
     IReputationService reputation,
     IUnitOfWork unitOfWork) : IReviewService
 {
     public async Task<IReadOnlyList<ReviewDto>> ListForSubjectAsync(
-        string subjectId, CancellationToken ct = default)
+        string subjectId, string kind, CancellationToken ct = default)
     {
-        var rows = await reviews.ListForSubjectAsync(subjectId, ct: ct);
+        var rows = await reviews.ListForSubjectAsync(subjectId, kind, ct: ct);
         return [.. rows.Select(r => r.ToDto())];
     }
 
@@ -144,7 +146,9 @@ public sealed class ReviewService(
         if (!asAuthor.Any(p => p.To == input.ToUserId))
             return (null, ReviewFailure.WrongRecipient);
 
-        var existing = await reviews.FindByAuthorAsync(bookingId, callerId, scope, ct);
+        var existing = await reviews.FindByAuthorAsync(
+            bookingId, ReviewKinds.Booking, callerId, scope, ct);
+
         if (existing is not null) return (null, ReviewFailure.AlreadyReviewed);
 
         var created = await reviews.CreateAsync(new ReviewEntity
@@ -162,6 +166,81 @@ public sealed class ReviewService(
         // A no-op when the recipient is the owner — they have no caretaker
         // profile to score, which is correct rather than an error.
         await reputation.ApplyCaretakerRatingAsync(input.ToUserId, input.Rating, scope, ct);
+
+        await scope.CommitAsync(ct);
+        return (created.ToDto(), null);
+    }
+
+    /// <summary>
+    /// Post a review of a vet appointment.
+    ///
+    /// Everything is re-derived from the appointment rather than trusted from
+    /// the request, exactly as above — and then one thing is different.
+    ///
+    /// ── One direction, and it is a product decision ──
+    ///
+    /// The owner reviews the vet. The vet has no counterpart to post, and a
+    /// clinician who tries gets <see cref="ReviewFailure.OneDirectionOnly"/>
+    /// rather than a missing feature. A booking is reviewed both ways because
+    /// two strangers each took a risk on the other; a consultation is not,
+    /// because a rating of the client attached to their animal's record is a
+    /// different and much worse product — and once it exists it is read by
+    /// whoever treats the animal next.
+    ///
+    /// This is the whole reason <c>Review.kind</c> exists. One table serves
+    /// both, the column that holds the subject is named <c>"bookingId"</c> for
+    /// historical reasons, and <c>kind</c> is what keeps a clinic's reviews and
+    /// a sitter's from ever being mistaken for each other — including when one
+    /// person is both.
+    /// </summary>
+    public async Task<(ReviewDto? Review, ReviewFailure? Failure)> CreateForAppointmentAsync(
+        string callerId, string appointmentId, CreateReviewRequest input,
+        CancellationToken ct = default)
+    {
+        await using var scope = await unitOfWork.BeginAsync(ct);
+
+        var appointment = await appointments.GetByIdAsync(appointmentId, scope, ct);
+        if (appointment is null) return (null, ReviewFailure.NotFound);
+
+        // Only a visit that actually happened. `completed` is set by the vet
+        // alone, which is what stops an owner manufacturing a reviewable history.
+        if (appointment.Status != AppointmentStatuses.Completed)
+            return (null, ReviewFailure.NotCompleted);
+
+        var vet = await vets.GetByIdAsync(appointment.VetId, scope, ct);
+        if (vet is null) return (null, ReviewFailure.NotFound);
+
+        // The vet is told "one direction only" rather than "not a participant",
+        // because they *are* one — they are simply not the one who may write.
+        if (callerId == vet.UserId) return (null, ReviewFailure.OneDirectionOnly);
+
+        if (callerId != appointment.OwnerId) return (null, ReviewFailure.NotParticipant);
+
+        // The owner may review the vet, and nobody else. There is no second
+        // permitted pair to search, which is what "one-directional" means here.
+        if (input.ToUserId != vet.UserId) return (null, ReviewFailure.WrongRecipient);
+
+        var existing = await reviews.FindByAuthorAsync(
+            appointmentId, ReviewKinds.VetAppointment, callerId, scope, ct);
+
+        if (existing is not null) return (null, ReviewFailure.AlreadyReviewed);
+
+        var created = await reviews.CreateAsync(new ReviewEntity
+        {
+            Id = Ids.New("r"),
+
+            // The column is named for bookings and holds either subject. The
+            // DTO calls it `subjectId`, which is what it actually means.
+            BookingId = appointmentId,
+            Kind = ReviewKinds.VetAppointment,
+            FromUserId = callerId,
+            ToUserId = input.ToUserId,
+            Rating = input.Rating,
+            Comment = input.Comment ?? "",
+            CreatedAt = Ids.Now(),
+        }, scope, ct);
+
+        await reputation.ApplyVetRatingAsync(input.ToUserId, input.Rating, scope, ct);
 
         await scope.CommitAsync(ct);
         return (created.ToDto(), null);

@@ -377,7 +377,7 @@ web/src/
 ## 7. Testing
 
 ```bash
-cd API && dotnet test          # 69 tests, ~25s
+cd API && dotnet test          # 531 tests, ~3–4m
 cd web && npm run build        # tsc -b && vite build
 cd web && npx oxlint src
 ./db/verify.sh                 # must print ✓ IDENTICAL
@@ -442,3 +442,20 @@ Anything damaging if published goes in an environment variable, not in a file.
 7. **A read-then-write without a transaction** → a race that only shows up in
    production.
 8. **Bumping `sessionsValidFrom` on logout** → signs every device out. Don't.
+9. **A Dapper multi-map segment whose every column is NULL materialises as
+   `null`**, not as an empty object — so the mapper lambda must construct its
+   result rather than mutate the argument. `VetRepository.SearchAsync` splits on
+   a `DistanceMiles` that is `NULL::float8` when no origin was given, and got
+   thirteen `NullReferenceException`s before this was understood.
+10. **Positional-record equality is memberwise and arrays compare by
+    reference** → two structurally identical DTOs are never `Assert.Equal`.
+    Compare serialised JSON in tests.
+11. **Ids are random, so they are not an order.** `Ids.New` makes UUIDs. Rows
+    written in one batch with one timestamp sort randomly by id — an order
+    timeline read "shipped, delivered, out for delivery" before
+    `OrderLifecycle.Timeline` added a lifecycle tie-break. The reference used
+    time-ordered cuids and never saw it; anything ported that sorts by id as a
+    stand-in for creation order has the same latent bug.
+12. **FluentValidation runs every rule in a chain even after one fails.** A
+    `.Must(x => x.Length …)` after `.NotNull()` gets the null. Use
+    `.Cascade(CascadeMode.Stop)`.

@@ -36,8 +36,17 @@ public interface IMessageRepository
 /// </summary>
 public interface IReviewRepository
 {
+    /// <summary>
+    /// The reviews of one subject. <paramref name="kind"/> is <b>not</b>
+    /// optional: <c>"bookingId"</c> holds either sort of id, so a lookup
+    /// without it is the defect REQUIREMENTS.md §12 records. Booking ids and
+    /// appointment ids happen to be drawn from disjoint prefixes today, which
+    /// makes this belt-and-braces — and is exactly the kind of accident that
+    /// stops being true when somebody changes an id scheme.
+    /// </summary>
     Task<IReadOnlyList<ReviewEntity>> ListForSubjectAsync(
-        string subjectId, ITransactionScope? scope = null, CancellationToken ct = default);
+        string subjectId, string kind,
+        ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>Reviews <b>about</b> a user, optionally narrowed to one kind.</summary>
     Task<IReadOnlyList<ReviewEntity>> ListForUserAsync(
@@ -50,7 +59,7 @@ public interface IReviewRepository
     /// is a negotiating position, not a review.
     /// </summary>
     Task<ReviewEntity?> FindByAuthorAsync(
-        string subjectId, string fromUserId,
+        string subjectId, string kind, string fromUserId,
         ITransactionScope? scope = null, CancellationToken ct = default);
 
     Task<ReviewEntity> CreateAsync(

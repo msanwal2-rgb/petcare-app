@@ -201,6 +201,24 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
   cancelled: "Cancelled",
 };
 
+/**
+ * Appointment status → badge tone.
+ *
+ * The same six tones a booking uses, for the same reasons — but keyed on
+ * `AppointmentStatus`, which says `confirmed` where a booking says `accepted`
+ * (REQUIREMENTS.md §11.2, not §11.1). Two maps rather than one because the two
+ * unions are genuinely different, and a shared one would have to accept either
+ * word from either domain.
+ */
+export const APPOINTMENT_STATUS_TONE: Record<AppointmentStatus, StatusTone> = {
+  requested: "pending",
+  confirmed: "active",
+  in_progress: "progress",
+  completed: "done",
+  declined: "failed",
+  cancelled: "muted",
+};
+
 export const RECORD_TYPE_LABELS: Record<MedicalRecordType, string> = {
   visit_note: "Visit note",
   vaccination: "Vaccination",

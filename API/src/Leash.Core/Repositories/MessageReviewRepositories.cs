@@ -75,17 +75,18 @@ public sealed class ReviewRepository(NpgsqlDataSource db) : IReviewRepository
         """;
 
     public async Task<IReadOnlyList<ReviewEntity>> ListForSubjectAsync(
-        string subjectId, ITransactionScope? scope = null, CancellationToken ct = default)
+        string subjectId, string kind,
+        ITransactionScope? scope = null, CancellationToken ct = default)
     {
         await using var session = await DbSession.OpenAsync(db, scope, ct);
         var rows = await session.Connection.QueryAsync<ReviewEntity>(
             new CommandDefinition(
                 $"""
                  SELECT {Columns} FROM reviews
-                 WHERE "bookingId" = @subjectId
+                 WHERE "bookingId" = @subjectId AND kind = @kind
                  ORDER BY "createdAt" DESC, id DESC
                  """,
-                new { subjectId }, session.Transaction, cancellationToken: ct));
+                new { subjectId, kind }, session.Transaction, cancellationToken: ct));
 
         return rows.ToList();
     }
@@ -112,7 +113,7 @@ public sealed class ReviewRepository(NpgsqlDataSource db) : IReviewRepository
     }
 
     public async Task<ReviewEntity?> FindByAuthorAsync(
-        string subjectId, string fromUserId,
+        string subjectId, string kind, string fromUserId,
         ITransactionScope? scope = null, CancellationToken ct = default)
     {
         await using var session = await DbSession.OpenAsync(db, scope, ct);
@@ -120,10 +121,11 @@ public sealed class ReviewRepository(NpgsqlDataSource db) : IReviewRepository
             new CommandDefinition(
                 $"""
                  SELECT {Columns} FROM reviews
-                 WHERE "bookingId" = @subjectId AND "fromUserId" = @fromUserId
+                 WHERE "bookingId" = @subjectId AND kind = @kind
+                   AND "fromUserId" = @fromUserId
                  LIMIT 1
                  """,
-                new { subjectId, fromUserId },
+                new { subjectId, kind, fromUserId },
                 session.Transaction, cancellationToken: ct));
     }
 

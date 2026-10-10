@@ -9,6 +9,121 @@ parity with the existing application minus the AI assistant.
 
 ---
 
+## 0. Where the plan stands — revised 2026-10-10
+
+The calendar in §6 is the original. This section records what actually
+happened against it, and the revisions the owner made. **`STATUS.md` is the
+detailed source; this is the plan-level view.**
+
+| Plan days | Work | State |
+|---|---|---|
+| 1–5 | M0 Foundation · M1 Auth | ✅ Done |
+| 6–10 | M2 Authorization · M3 Pets & records | ✅ Done |
+| 11–15 | M4 Caretakers & bookings | ✅ Done |
+| 16–18 | M5 Vets & appointments | ✅ Done |
+| 19–20 | Week-4 checkpoint + first deploy | ⏭ **Skipped** — owner's decision, 2026-10-09 |
+| — | Landing page (`app/page.tsx`) | ✅ Done — **was never scheduled**; added 2026-10-09 |
+| 21–30 | M6 Store & orders | ✅ Done |
+| **31–34** | **UI parity pass** — see below | ⬜ **Next.** Added 2026-10-10 |
+| 35–36 | M8 Notifications | ⬜ |
+| 37–39 | M7 Payments & membership | ⬜ |
+| 40–42 | M9 Admin console | ⬜ |
+| 43–44 | Release hardening + **first deploy** | ⬜ |
+| stretch | M10 Adoption | ⬜ |
+
+**28 plan-days of scope done; 2 skipped; 14 remain, plus the stretch.** The
+parity pass moves the end of the plan from day 40 to day 44 — the top of the
+original "~40–44 working days".
+531 xUnit tests passing; 15 of the reference's 28 Vitest suites ported (one in
+half — `orders.test.ts` lines 434–868 belong to M7).
+
+### The revisions, and what they cost
+
+1. **The week-4 checkpoint and first deploy were skipped.** The owner's call,
+   recorded in `STATUS.md` §5, and it stands. The consequence is the one §7
+   warns about: **the first deploy now happens in days 43–44, and every
+   deployment problem lands there.** Six are already known (STATUS §4, ⚠ rows):
+   nothing builds the SPA into `wwwroot`; no CI; `verify.sh` cannot run in CI
+   because its baseline is gitignored; vulnerable transitive packages in the
+   test project; the fulfilment job must run on one instance; host
+   configuration never exercised. None is hard; all are cheaper before week 8.
+   The week-6 deploy in §7 did not happen either, for the same reason.
+2. **The landing page was added.** No day in §6 owned it — it was not a module,
+   so the original plan had none. It took about half a day and is done.
+3. **A UI parity pass was added before M8/M7** (owner's decision, 2026-10-10).
+   §4 says the 44 reference pages are *ported mechanically*. In practice most
+   M1–M6 screens were written fresh against the new API instead, so the app
+   works but looks like a different product — the dashboard most of all. See
+   the next section.
+
+### The UI parity pass — days 31–34
+
+**Goal: every screen built so far looks and is structured like the reference
+app.** The reference's screens are the design; `web/` currently has its own.
+
+**Measured 2026-10-10:** 27 of the reference's 69 components exist in `web/`.
+34 of the 42 missing belong to modules already marked done. The other 8 —
+`PaymentForm` (M7), `NotificationBell` (M8), `AdminShell` (M9), the adoption and
+shelter screens (M10) — arrive with their modules and are **out of scope** here.
+
+#### The rules
+
+1. **Port, don't redesign.** Copy the reference component and apply the
+   ARCHITECTURE.md §6 table (`next/link` → `Link to`, `next/image` → `<img>` with
+   the `BLUR_DATA_URL` background, `useRouter` → `useNavigate`, delete
+   `"use client"`). If it looks different afterwards, the port is not finished.
+2. **Change only the data access.** Reference components call `lib/api/*` with
+   the old shapes. Swap each call for the `web/src/api/*` one, which differs in
+   known ways: list endpoints are cursor pages (`{ items, nextCursor }`) instead
+   of arrays; `CaretakerWithUser` and `VetWithUser` are nested
+   (`{ profile, user, … }`) not flat; self-only lists read the session rather
+   than taking a user id (`listMyBookings()`, not `getBookingsByOwner(id)`).
+   `web/src/hooks/useAsync.ts` and `getUsersByIds` already exist.
+3. **Keep the deliberate fixes.** These differ from the reference on purpose:
+   the hero search bar's city picker (the reference's location box filtered
+   nothing); the visit summary offering `allergy` (V9); no "complete" button on
+   an appointment (the summary completes it); the server-side quote with
+   allergen warnings in the cart; per-unit refills. Where a reference component
+   reproduces a defect from REQUIREMENTS.md §12, the fix wins.
+4. **No API changes.** Everything the reference screens need already exists. If
+   that turns out to be wrong, stop and say so rather than widening an endpoint.
+
+#### The inventory, in order
+
+| # | Area | Reference → port | What changes in `web/` |
+|---|---|---|---|
+| 1 | **Dashboard** — the biggest gap | `app/dashboard/page.tsx` + `components/dashboard/{OwnerDashboard,CaretakerDashboard,VetDashboard,BookingListRow}.tsx`, `AuthRequired.tsx` | One page that switches by role ("Owner dashboard / Welcome back, Maya", "Viewing as" toggle, a "finish setting up" empty state when there are no roles). **Owner:** pet cards → vet appointments and "on its way" orders side by side → recommended products for the first pet → upcoming bookings → past bookings. **Caretaker:** incoming requests with inline Accept/Decline → active bookings → availability calendar → history. **Vet:** requests → schedule → "your clinic" → past appointments. `ShelterDashboard` waits for M10 |
+| 2 | **Routes and URLs** | the reference route list | `/vet/:id` → **`/vets/:id`**; `/appointment/new` → **`/vets/book`**; `/appointment/:id` → **`/appointments/:id`**. The standalone `/dashboard/pets`, `/dashboard/bookings` and `/dashboard/appointments` pages **do not exist in the reference** — their content is the owner dashboard. Remove them and redirect the old URLs to `/dashboard` (and the renamed ones to their new paths) so no bookmark 404s |
+| 3 | **Shared UI kit** | `components/ui/{Panel,ProfileHero,ResultsGrid,SelectFilter,ToggleChips}.tsx`, `PetCard` + `PetCardSkeleton`, `ReviewCard`, `BookingStatusBadge`, `vet/AppointmentStatusBadge` | Port first; most screens below depend on them |
+| 4 | **Find care** | `search/SearchResults.tsx`, `AvailabilityCalendar.tsx`, `booking/BookingNewClient.tsx`, `booking/MessageThread.tsx`, `reviews/LeaveReview.tsx`, `CaretakerProfileForm.tsx` | Search results, caretaker profile (`ProfileHero`), booking request, booking detail's thread and review, the caretaker's own profile editor |
+| 5 | **Find a vet** | `vet/{VetSearchResults,VetCard,VetProfileForm,AppointmentBookingClient,VisitSummaryForm}.tsx` | Vet search, vet profile, booking a visit, the visit summary form (keeping `allergy`), the vet's profile editor |
+| 6 | **Health record** | `vet/{HealthRecordSection,MedicalRecordCard}.tsx` | The pet detail page's timeline |
+| 7 | **Store** | `store/{StoreCatalog,PetShoppingBar,RecommendedForPet,FeedingGuide}.tsx` | The shop grid and filters, the "shopping for <pet>" bar, recommendations, the feeding guide on a product page. Keep the server quote and allergen warnings |
+| 8 | **Login / signup** | `app/login/page.tsx`, `app/signup/page.tsx` | Mostly ported already; the reference has a photo panel (`Image` + `BLUR_DATA_URL`) the web version lacks. Line-by-line visual diff |
+| 9 | **Content pages** | `app/pet-health/page.tsx`, `app/support/page.tsx`, `lib/content/{pet-health,support-policies}.ts` | Missing entirely. `lib/content` is "copy as-is" per §4 |
+| 10 | **Dev account switcher** | `DevAccountSwitcher.tsx` | One-click switching between demo accounts in Development. Must stay off outside Development, as `demoLoginVisible` already is |
+
+#### Done means
+
+- Every screen in rows 1–10 compared side by side with the reference, and the
+  differences that remain are only the deliberate ones in rule 3.
+- `npm run build` + `npx oxlint src` clean; `dotnet test` still green (no API
+  changes expected, so it should be untouched).
+- **From M8 on, every module ports the reference screens first and adapts them
+  to the API second.** That is the rule that stops this recurring.
+
+### Debt carried into weeks 7–8
+
+| | Item | Why it matters |
+|---|---|---|
+| ⚠ | **Endpoint suites for M5 and M6** (`VetEndpointTests`, `StoreEndpointTests`) | Every other module has one. S9 and price-tampering are HTTP-shaped and currently checked only by hand-run curl walks |
+| ⚠ | **Port `orders.test.ts` 434–868, `webhooks.test.ts`, `stripe-signature.test.ts` before writing M7** | §7 and §11 already require this; M7 is the highest-risk week |
+| ❓ | **Owner to confirm "one refill per unit"** | M6 implemented P9 that way; one constant if the intent was per line |
+| | Refills are not restored when an order is cancelled | Needs `order_items."prescriptionId"` — a schema change |
+| | Route-level code splitting | Bundle is 749 kB in one chunk, growing ~70 kB a module |
+
+---
+
 ## 1. Decisions
 
 | | |
@@ -412,7 +527,7 @@ M3 before M4/M5/M6 — the health record is shared by all three.
 the most self-contained feature, so slipping it costs least and it can ship as a
 follow-on.
 
-### Week 1 — Foundation & Auth (M0 + M1)
+### Week 1 — Foundation & Auth (M0 + M1) ✅
 
 | Day | Work |
 |---|---|
@@ -423,7 +538,7 @@ follow-on.
 | 3–5 | **M1:** cookie auth, `OnValidatePrincipal` revocation, bcrypt, signup, verify-email, login, logout, password reset, rate limiting, `/me`, `/config`. **Dual auth (JWT pair) for mobile.** |
 | 3–5 | **web:** `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/verify-email`, `/onboarding`, auth guard, session store. |
 
-### Week 2 — Authorization & Health Record (M2 + M3)
+### Week 2 — Authorization & Health Record (M2 + M3) ✅
 
 | Day | Work |
 |---|---|
@@ -431,7 +546,7 @@ follow-on.
 | 8–10 | **M3:** pet CRUD, medical records, prescriptions, `ownedSince`, recommendations. Decide `refillsLeft` semantics. |
 | 8–10 | **web:** `/dashboard`, `/dashboard/pets`, `/dashboard/pets/new`, `/dashboard/pets/[id]`, health record section. |
 
-### Week 3 — Caretakers & Bookings (M4)
+### Week 3 — Caretakers & Bookings (M4) ✅
 
 | Day | Work |
 |---|---|
@@ -439,7 +554,7 @@ follow-on.
 | 13–15 | Booking + status machine + actor rules (409 on illegal), messages (explicit `POST` to mark read), bidirectional reviews, reputation. |
 | 11–15 | **web:** `/search`, `/caretaker/[id]`, `/booking/new`, `/booking/[id]`, `/dashboard/caretaker-profile`, owner + caretaker dashboards. |
 
-### Week 4 — Vets & halfway checkpoint (M5)
+### Week 4 — Vets & halfway checkpoint (M5) ✅ — checkpoint skipped, see §0
 
 | Day | Work |
 |---|---|
@@ -450,7 +565,7 @@ follow-on.
 **Deploy in week 4 even though it is incomplete.** A deployment done once in
 week 4 is routine by week 8 instead of a crisis.
 
-### Weeks 5–6 — Store & Orders (M6)
+### Weeks 5–6 — Store & Orders (M6) ✅ — see §0 for the deploy that did not happen
 
 | Day | Work |
 |---|---|
@@ -462,22 +577,36 @@ week 4 is routine by week 8 instead of a crisis.
 **End of week 6:** the prescription written in week 4 unlocks an Rx-only product
 and a customer can buy it. That seam justifies the whole architecture.
 
-### Week 7 — Notifications & Payments (M8 + M7)
+### Week 7 — Notifications & Payments (M8 + M7) ⬜ — after the UI parity pass (§0)
 
 | Day | Work |
 |---|---|
-| 31–32 | **M8 first** — orders generate notifications, so it slots in here. `Notify()` gate with the channel abstraction, in-app records, email (escaped HTML, outbox-backed). |
-| 33–35 | **M7:** provider seam (fails closed), ledger, intents, webhook + claim protocol, refunds, Leash Plus, entitlements. **web:** `/plus`, `/account/membership`, Stripe element. |
+| 35–36 | **M8 first** — orders generate notifications, so it slots in here. `Notify()` gate with the channel abstraction, in-app records, email (escaped HTML, outbox-backed). |
+| 37–39 | **M7:** provider seam (fails closed), ledger, intents, webhook + claim protocol, refunds, Leash Plus, entitlements. **web:** `/plus`, `/account/membership`, Stripe element. |
 
 **Highest-risk days of the project.** Port `tests/webhooks.test.ts` and
-`tests/stripe-signature.test.ts` **before** writing the implementation.
+`tests/stripe-signature.test.ts` **before** writing the implementation — and,
+since M6 (§0), the second half of `tests/orders.test.ts` too.
+
+**M6 built the seams M7 plugs into** (detail in `HANDOFF.md` §3): register the
+Stripe provider in place of `DemoPaymentProvider`; make refunds retryable by
+writing the ledger row before the provider call; switch on the three
+membership benefits M5 and M6 left at "not a member" — free shipping in the
+quote, the vet consult discount, the priority-booking lead time. M8's one hook
+into orders is `OrderLifecycle.MoveAsync`.
 
 ### Week 8 — Admin & release (M9)
 
 | Day | Work |
 |---|---|
-| 36–38 | **M9:** stats, users, professionals, payments + refunds, subscriptions, settings, audit. 7 screens, all behind `RequireStaff`. |
-| 39–40 | Journeys 1–8, accessibility pass, error states, search performance, production deploy. |
+| 40–42 | **M9:** stats, users, professionals, payments + refunds, subscriptions, settings, audit. 7 screens, all behind `RequireStaff`. |
+| 43–44 | Journeys 1–8, accessibility pass, error states, search performance — **and the first production deploy ever** (§0). |
+
+**Revised 2026-10-10:** with the week-4 and week-6 deploys skipped, days 43–44
+carry the whole of deployment risk. Strongly prefer clearing the six known
+blockers (§0) during weeks 7–8 as they are touched — the SPA build into
+`wwwroot` and a minimal CI workflow are each well under a day — so that day 43
+is a deploy rather than a debugging session.
 
 ### Stretch — M10 Adoption (5–7 days)
 
@@ -497,7 +626,8 @@ Fully specified in `REQUIREMENTS.md` §10.3.
 - **Read the reference implementation constantly.** When behaviour is unclear,
   `lib/server/<domain>.ts` is the answer — do not guess.
 - **Deploy in weeks 4 and 6.** Deployment problems found in week 8 are the
-  classic way a two-month project becomes ten weeks.
+  classic way a two-month project becomes ten weeks. *(Revised: both were
+  skipped by the owner's decision — see §0 for what that moves into week 8.)*
 
 ### If it slips, cut in this order
 
@@ -668,6 +798,12 @@ so `web/src/types` cannot drift from the server.
 1–3 are the week-4 checkpoint; journey 4 is the week-6 marker; 5, 7 and 8 land
 in weeks 7–8; journey 6 is M10.
 
+*Revised 2026-10-10:* journeys 1–4 are **buildable** now (4 with the demo
+payment provider) but have **never been walked end to end as a checkpoint** —
+the week-4 one was skipped. The service suites assert each of their steps, and
+the key HTTP steps were checked with curl (HANDOFF.md §7). They get their first
+real walk in days 43–44 with the rest.
+
 ---
 
 ## 11. Risks
@@ -680,6 +816,8 @@ in weeks 7–8; journey 6 is M10.
 | **Timestamp format drift** — breaks string comparisons quietly | The converter above |
 | **Stripe webhook concurrency** — double-processing real money | Port the webhook tests before the implementation |
 | **Frontend long tail** — 44 pages of small breakages found late | Vertical slices; deploy in weeks 4 and 6 |
+| **First deploy in week 8** — the interim deploys were skipped (§0) | Accepted by the owner. Six blockers already known and listed in §0; clear them during weeks 7–8 rather than on day 43 |
+| **No HTTP-level tests for M5/M6** | `VetEndpointTests` and `StoreEndpointTests` before release; S9 and price tampering are the store's two security properties and both are HTTP-shaped |
 | **Money rounding** on the cents conversion | `round(x * 100)` once in `petapp.sql`; reconcile totals before and after |
 | **Test-porting cut to save time** | It is the specification. Do not cut it. |
 

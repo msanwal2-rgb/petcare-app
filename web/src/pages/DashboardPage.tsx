@@ -6,12 +6,12 @@ import { Avatar } from "@/components/Avatar";
 import { ButtonLink } from "@/components/ui/Button";
 
 /**
- * The dashboard, in its M1 form.
+ * The dashboard: who you are, and a way into every area built so far.
  *
- * The role-aware dashboard proper — owner bookings, caretaker requests, the vet
- * schedule — needs M3 through M5. What it shows now is exactly what M1 knows:
- * who you are, what the session says about you, and the verification nudge. It
- * exists so the auth flows have somewhere real to land.
+ * Still the simple version. The reference project's dashboard is role-aware —
+ * `components/dashboard/{Owner,Caretaker,Vet}Dashboard.tsx`, with upcoming
+ * bookings, requests waiting on you and the day's schedule inline — and that is
+ * part of the UI alignment pass (BUILD_PLAN.md §0), not yet ported.
  *
  * Rendered inside RequireAuth, so `currentUser` is non-null here.
  */
@@ -67,15 +67,37 @@ export default function DashboardPage() {
             creates a listing for someone who has none, which is how a customer
             becomes a caretaker in the first place. */}
         <Panel
+          title="Your vet visits"
+          description="Appointments you've booked, and the visit summaries they produced."
+          to="/dashboard/appointments"
+        />
+        <Panel
+          title="Your orders"
+          description="Track a parcel, or cancel before it ships."
+          to="/store/orders"
+        />
+        <Panel
           title="Your caretaker listing"
           description="What owners see in search, and the rate card that prices your bookings."
           to="/dashboard/caretaker-profile"
         />
+        {/* Shown to everyone, for the same reason as the caretaker listing:
+            filling it in is how somebody becomes a vet on Leash. */}
+        <Panel
+          title="Your clinic listing"
+          description="Your profile, consultation fee, and the schedule of visits waiting on you."
+          to="/dashboard/vet-profile"
+        />
+        {/* Only offered to staff who can use it. The API refuses everyone else
+            regardless — this just keeps a dead end off customers' dashboards. */}
+        {user.staffRoles.some((r) => r === "ops" || r === "admin") && (
+          <Panel
+            title="Fulfilment queue"
+            description="Paid orders on their way out, oldest first."
+            to="/dashboard/orders"
+          />
+        )}
       </div>
-
-      <p className="mt-4 rounded-xl border border-dashed border-mist bg-white/60 p-5 text-sm text-charcoal/65">
-        Vet appointments and orders arrive with M5–M6.
-      </p>
     </div>
   );
 }

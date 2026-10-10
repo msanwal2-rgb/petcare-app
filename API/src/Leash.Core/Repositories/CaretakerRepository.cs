@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Dapper;
 using Leash.Core.Models.Entities;
@@ -128,7 +127,7 @@ public sealed class CaretakerRepository(NpgsqlDataSource db) : ICaretakerReposit
         if (hasOrigin && filter.RadiusMiles is not null)
             where.Append($"  AND {DistanceMiles} <= @radiusMiles ");
 
-        var (cursorSort, cursorId) = DecodeCursor(filter.Cursor);
+        var (cursorSort, cursorId) = Cursor.DecodeNumber(filter.Cursor);
         if (cursorId is not null)
         {
             // Strictly after the last row in the previous page, in the same
@@ -203,7 +202,7 @@ public sealed class CaretakerRepository(NpgsqlDataSource db) : ICaretakerReposit
             rows.RemoveAt(rows.Count - 1);
             var last = rows[^1];
             var sortValue = hasOrigin ? last.DistanceMiles ?? 0 : last.Profile.Rating;
-            nextCursor = EncodeCursor(sortValue, last.Profile.Id);
+            nextCursor = Cursor.Encode(sortValue, last.Profile.Id);
         }
 
         return (rows, nextCursor);
@@ -397,49 +396,4 @@ public sealed class CaretakerRepository(NpgsqlDataSource db) : ICaretakerReposit
 
     private static int? ToCents(decimal? usd)
         => usd is null ? null : (int)Math.Round(usd.Value * 100m, MidpointRounding.AwayFromZero);
-
-    /// <summary>
-    /// The cursor: the last row's sort value and its id, base64url-encoded.
-    ///
-    /// Encoded rather than sent as two query parameters so that it reads as one
-    /// opaque token. A client that took it apart would be coupled to the sort
-    /// order, and the sort order changes with the filter.
-    /// </summary>
-    private static string EncodeCursor(double sortValue, string id)
-    {
-        var raw = $"{sortValue.ToString("R", CultureInfo.InvariantCulture)}|{id}";
-        return Convert.ToBase64String(Encoding.UTF8.GetBytes(raw))
-            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
-    }
-
-    /// <summary>
-    /// Decode, treating anything malformed as "start from the beginning".
-    ///
-    /// A cursor is not a credential — it names a position in a public result
-    /// set. Rejecting a garbled one with a 400 gives a caller a way to probe,
-    /// and gives an honest client a dead end when a bookmark ages out.
-    /// </summary>
-    private static (double? Sort, string? Id) DecodeCursor(string? cursor)
-    {
-        if (string.IsNullOrWhiteSpace(cursor)) return (null, null);
-
-        try
-        {
-            var padded = cursor.Replace('-', '+').Replace('_', '/')
-                .PadRight((cursor.Length + 3) / 4 * 4, '=');
-            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-
-            var split = raw.IndexOf('|');
-            if (split <= 0) return (null, null);
-
-            return double.TryParse(
-                raw[..split], NumberStyles.Float, CultureInfo.InvariantCulture, out var sort)
-                ? (sort, raw[(split + 1)..])
-                : (null, null);
-        }
-        catch (FormatException)
-        {
-            return (null, null);
-        }
-    }
 }

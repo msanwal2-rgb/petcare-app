@@ -13,6 +13,7 @@ namespace Leash.Core.Services;
 /// </summary>
 public sealed class MedicalRecordService(
     IMedicalRecordRepository records,
+    IAppointmentRepository appointments,
     IAccessService access,
     IUnitOfWork unitOfWork) : IMedicalRecordService
 {
@@ -45,6 +46,9 @@ public sealed class MedicalRecordService(
     ///     the store. Owners get the two self-reported types; everything
     ///     clinical needs a vet.
     ///
+    ///  3. <b>Does the cited appointment belong here?</b> REQUIREMENTS.md V8.
+    ///     See <see cref="AppointmentBelongsAsync"/>.
+    ///
     /// The whole thing runs in one transaction so the access decision and the
     /// INSERT see the same world: an appointment cancelled between them must not
     /// leave a record written on the strength of it.
@@ -61,6 +65,10 @@ public sealed class MedicalRecordService(
         var authoringAsVet = clinical.AsVetId is not null;
         if (!authoringAsVet && !MedicalRecordTypes.OwnerMayAuthor(input.Type))
             return (null, RecordFailure.TypeNotAuthorable);
+
+        if (!await AppointmentBelongsAsync(
+                input.AppointmentId, petId, callerId, clinical.AsVetId, scope, ct))
+            return (null, RecordFailure.AppointmentMismatch);
 
         var entity = new MedicalRecordEntity
         {
@@ -86,6 +94,43 @@ public sealed class MedicalRecordService(
         await scope.CommitAsync(ct);
 
         return (created.ToDto(), null);
+    }
+
+    /// <summary>
+    /// Whether a cited <c>appointmentId</c> is one this record may hang from
+    /// (REQUIREMENTS.md V8).
+    ///
+    /// The reference implementation accepted whatever id the body carried and
+    /// wrote it, so a record could be filed against an unrelated visit — of a
+    /// different animal, at a different clinic. The id is a foreign key onto
+    /// <c>vet_appointments</c>, so the database only ever checked that
+    /// <i>something</i> was there.
+    ///
+    /// Two rules, depending on who is writing:
+    ///
+    ///  - <b>a vet</b> may cite an appointment for this pet that is
+    ///    <i>theirs</i>. Citing another clinic's visit would attach their
+    ///    findings to somebody else's consultation;
+    ///  - <b>an owner</b> may cite an appointment for this pet that they
+    ///    booked — which is how "my weight reading from Tuesday's visit" files
+    ///    itself under Tuesday's visit.
+    ///
+    /// Both require the appointment to be for <i>this pet</i>, which is the half
+    /// the defect was really about. Null cites nothing and is always fine: most
+    /// records are not attached to a visit at all.
+    /// </summary>
+    private async Task<bool> AppointmentBelongsAsync(
+        string? appointmentId, string petId, string callerId, string? asVetId,
+        ITransactionScope scope, CancellationToken ct)
+    {
+        if (appointmentId is null) return true;
+
+        var appointment = await appointments.GetByIdAsync(appointmentId, scope, ct);
+        if (appointment is null || appointment.PetId != petId) return false;
+
+        return asVetId is not null
+            ? appointment.VetId == asVetId
+            : appointment.OwnerId == callerId;
     }
 
     public async Task<RecordFailure?> DeleteAsync(

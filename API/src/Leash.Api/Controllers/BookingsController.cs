@@ -105,7 +105,7 @@ public sealed class BookingsController(
         var (_, failure) = await bookings.GetAsync(User.RequireUserId(), id, ct);
         if (failure is not null) return BookingError(failure.Value, id);
 
-        return Ok(await reviews.ListForSubjectAsync(id, ct));
+        return Ok(await reviews.ListForSubjectAsync(id, Core.Models.Enums.ReviewKinds.Booking, ct));
     }
 
     [HttpPost("bookings/{id}/reviews")]
@@ -149,9 +149,9 @@ public sealed class BookingsController(
             ApiResults.BadRequest("The end time must be after the start time"),
 
         BookingFailure.LeadTime => ApiResults.Conflict(
-            $"Bookings need at least {Core.Services.BookingService.StandardLeadTimeHours} "
+            $"Bookings need at least {Core.Services.LeadTime.StandardHours} "
             + "hours' notice.",
-            new { leadTimeHours = Core.Services.BookingService.StandardLeadTimeHours }),
+            new { leadTimeHours = Core.Services.LeadTime.StandardHours }),
 
         BookingFailure.NotYourPet =>
             ApiResults.Forbidden("You can only book your own pets"),

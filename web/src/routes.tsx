@@ -18,6 +18,19 @@ import BookingNewPage from "./pages/BookingNewPage";
 import BookingDetailPage from "./pages/BookingDetailPage";
 import BookingsPage from "./pages/BookingsPage";
 import CaretakerProfilePage from "./pages/CaretakerProfilePage";
+import VetSearchPage from "./pages/VetSearchPage";
+import VetDetailPage from "./pages/VetDetailPage";
+import AppointmentNewPage from "./pages/AppointmentNewPage";
+import AppointmentDetailPage from "./pages/AppointmentDetailPage";
+import AppointmentsPage from "./pages/AppointmentsPage";
+import VetProfilePage from "./pages/VetProfilePage";
+import StorePage from "./pages/StorePage";
+import ProductPage from "./pages/ProductPage";
+import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
+import OrdersPage from "./pages/OrdersPage";
+import OrderDetailPage from "./pages/OrderDetailPage";
+import OpsOrdersPage from "./pages/OpsOrdersPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
@@ -150,29 +163,100 @@ export const router = createBrowserRouter([
         ),
       },
 
+      // ── M5: vets and appointments ──
+      //
+      // Search and the clinic profile are unguarded, for the same reason the
+      // caretaker equivalents are: an owner looking for a vet at eleven at
+      // night should not have to sign up first, and both serve only public
+      // projections. Booking is where an account becomes necessary.
+      { path: "vets", element: <VetSearchPage /> },
+      { path: "vet/:id", element: <VetDetailPage /> },
+      {
+        // Before `appointment/:id`, so "new" is not matched as an id.
+        path: "appointment/new",
+        element: (
+          <RequireAuth>
+            <AppointmentNewPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "appointment/:id",
+        element: (
+          <RequireAuth>
+            <AppointmentDetailPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/appointments",
+        element: (
+          <RequireAuth>
+            <AppointmentsPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/vet-profile",
+        element: (
+          <RequireAuth>
+            <VetProfilePage />
+          </RequireAuth>
+        ),
+      },
+
+      // ── M6: the store ──
+      //
+      // The shelves, a product and the cart are unguarded: browsing and
+      // filling a basket need no account, and the cart lives in localStorage.
+      // Checkout is where an account becomes necessary, because the server's
+      // quote — the only price that counts — is signed-in only.
+      //
+      // The static `/store/*` paths are listed before `/store/:slug`. React
+      // Router ranks static segments above dynamic ones regardless, but reading
+      // them in this order makes it obvious a product slugged "cart" could
+      // never shadow the cart.
+      { path: "store", element: <StorePage /> },
+      { path: "store/cart", element: <CartPage /> },
+      {
+        path: "store/checkout",
+        element: (
+          <RequireAuth>
+            <CheckoutPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "store/orders",
+        element: (
+          <RequireAuth>
+            <OrdersPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "store/orders/:id",
+        element: (
+          <RequireAuth>
+            <OrderDetailPage />
+          </RequireAuth>
+        ),
+      },
+      { path: "store/:slug", element: <ProductPage /> },
+      {
+        // Store operations. The page asks the API and renders "operations
+        // only" on a 403 — the guard here is only that you are signed in.
+        path: "dashboard/orders",
+        element: (
+          <RequireAuth>
+            <OpsOrdersPage />
+          </RequireAuth>
+        ),
+      },
+
       // ── Later milestones ──
       // Registered as named placeholders so the header's nav does not 404 on
       // its own links, and so the information architecture is visible now.
-      {
-        path: "vets",
-        element: (
-          <ComingSoonPage
-            milestone="M5 · vets"
-            title="Vet care is on the way"
-            description="Licensed vets, appointments and visit summaries that write into the health record arrive with M5."
-          />
-        ),
-      },
-      {
-        path: "store",
-        element: (
-          <ComingSoonPage
-            milestone="M6 · store"
-            title="The store is on the way"
-            description="Food, supplies and the prescription gate that unlocks Rx-only products arrive with M6."
-          />
-        ),
-      },
       {
         path: "adopt",
         element: (

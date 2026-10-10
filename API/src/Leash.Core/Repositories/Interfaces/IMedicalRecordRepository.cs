@@ -53,6 +53,26 @@ public interface IMedicalRecordRepository
         ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="ListActivePrescriptionsAsync"/>, <b>locked</b> for the rest of
+    /// the caller's transaction. Checkout uses it to decrement refills: two
+    /// purchases drawing on the last refill of one prescription must not both
+    /// see it as available. Same predicate, so still one definition (P8).
+    /// </summary>
+    Task<IReadOnlyList<MedicalRecordEntity>> LockActivePrescriptionsAsync(
+        string petId, DateTimeOffset asOf,
+        ITransactionScope scope, CancellationToken ct = default);
+
+    /// <summary>
+    /// Use <paramref name="count"/> refills of a prescription — <b>only if it
+    /// has that many</b>. False, having changed nothing, when it does not.
+    /// Never called for a prescription with no limit (<c>refillsLeft</c> null):
+    /// there is nothing to use up.
+    /// </summary>
+    Task<bool> TryUseRefillsAsync(
+        string recordId, int count,
+        ITransactionScope scope, CancellationToken ct = default);
+
+    /// <summary>
     /// The distinct product slugs this pet's active prescriptions authorise.
     /// Derived from the same predicate as
     /// <see cref="ListActivePrescriptionsAsync"/>.

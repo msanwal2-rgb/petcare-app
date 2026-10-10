@@ -17,6 +17,16 @@ public sealed class CatalogService(
     public async Task<IReadOnlyList<string>> ListBrandsAsync(CancellationToken ct = default)
         => await catalog.ListBrandsAsync(ct: ct);
 
+    public async Task<ProductPage> SearchAsync(
+        ProductSearchFilter filter, CancellationToken ct = default)
+    {
+        var (rows, next) = await catalog.SearchAsync(filter, ct: ct);
+        return new ProductPage([.. rows.Select(p => p.ToDto())], next);
+    }
+
+    public async Task<ProductDto?> GetBySlugAsync(string slug, CancellationToken ct = default)
+        => (await catalog.GetBySlugAsync(slug, ct: ct))?.ToDto();
+
     /// <summary>
     /// Products worth putting in front of one particular animal: right species,
     /// right life stage for its age, in stock, not prescription-only, and
@@ -82,7 +92,25 @@ public sealed class CatalogService(
     public static bool HasAllergen(
         IReadOnlyCollection<string> productAllergens,
         IReadOnlyCollection<string> petAllergensLower)
+        => MatchingAllergens(productAllergens, petAllergensLower).Count > 0;
+
+    /// <summary>
+    /// <b>The</b> allergen match (REQUIREMENTS.md S18). The product's allergens,
+    /// in the product's own wording, that match something the pet reacts to —
+    /// so a warning can say "contains chicken by-product meal" rather than only
+    /// that something matched.
+    ///
+    /// <see cref="HasAllergen"/> is this, asking whether the answer is empty.
+    /// The recommendations shelf and the checkout warning both reach here; the
+    /// reference implementation had three of these and they disagreed about
+    /// case.
+    /// </summary>
+    public static IReadOnlyList<string> MatchingAllergens(
+        IReadOnlyCollection<string> productAllergens,
+        IReadOnlyCollection<string> petAllergensLower)
     {
+        var matches = new List<string>();
+
         foreach (var raw in productAllergens)
         {
             var allergen = raw.ToLowerInvariant();
@@ -95,12 +123,13 @@ public sealed class CatalogService(
                 if (allergen.Contains(petAllergen, StringComparison.Ordinal)
                     || petAllergen.Contains(allergen, StringComparison.Ordinal))
                 {
-                    return true;
+                    matches.Add(raw);
+                    break;
                 }
             }
         }
 
-        return false;
+        return matches;
     }
 
     /// <summary>

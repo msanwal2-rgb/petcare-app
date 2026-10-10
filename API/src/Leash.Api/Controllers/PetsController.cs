@@ -151,6 +151,11 @@ public sealed class PetsController(
             + "You can add allergies and weights yourself."),
         RecordFailure.NotAuthor => ApiResults.Forbidden(
             "Only the author can remove this record"),
+        // REQUIREMENTS.md V8. 400, not 403: the caller may well have clinical
+        // access — the appointment they cited simply is not this pet's, or is
+        // not theirs.
+        RecordFailure.AppointmentMismatch => ApiResults.BadRequest(
+            "That appointment isn't this pet's visit"),
         _ => ApiResults.Forbidden("Not permitted"),
     };
 }

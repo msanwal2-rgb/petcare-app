@@ -123,6 +123,44 @@ public sealed class MedicalRecordRepository(NpgsqlDataSource db) : IMedicalRecor
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<MedicalRecordEntity>> LockActivePrescriptionsAsync(
+        string petId, DateTimeOffset asOf,
+        ITransactionScope scope, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+
+        // The same predicate as ListActivePrescriptionsAsync — P8 allows one —
+        // plus FOR UPDATE, so two checkouts drawing on one prescription
+        // serialise here rather than both reading "one refill left".
+        var rows = await session.Connection.QueryAsync<MedicalRecordEntity>(
+            new CommandDefinition(
+                $"""
+                 SELECT {Columns} FROM medical_records
+                 WHERE "petId" = @petId
+                   AND {ActivePrescription}
+                 ORDER BY id
+                 FOR UPDATE
+                 """,
+                new { petId, asOf }, session.Transaction, cancellationToken: ct));
+
+        return rows.ToList();
+    }
+
+    public async Task<bool> TryUseRefillsAsync(
+        string recordId, int count,
+        ITransactionScope scope, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        var changed = await session.Connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE medical_records SET "refillsLeft" = "refillsLeft" - @count
+            WHERE id = @recordId AND "refillsLeft" >= @count
+            """,
+            new { recordId, count }, session.Transaction, cancellationToken: ct));
+
+        return changed == 1;
+    }
+
     public async Task<IReadOnlyList<string>> ListAuthorizedProductSlugsAsync(
         string petId, DateTimeOffset asOf,
         ITransactionScope? scope = null, CancellationToken ct = default)

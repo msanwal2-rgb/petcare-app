@@ -36,36 +36,3 @@ public class ProductEntity
         Ingredients, Allergens, RequiresPrescription, StockQty, Active,
         Rating, ReviewCount, CreatedAt);
 }
-
-/// <summary>
-/// The <c>vet_appointments</c> row, read-only in M3 for a pet's visit history.
-/// M5 owns creation, the status machine and the actor rules.
-/// </summary>
-public class VetAppointmentEntity
-{
-    public string Id { get; set; } = "";
-    public string OwnerId { get; set; } = "";
-    public string VetId { get; set; } = "";
-    public string PetId { get; set; } = "";
-    public string Mode { get; set; } = "";
-    public string Reason { get; set; } = "";
-    public string[] Symptoms { get; set; } = [];
-    public DateTimeOffset StartDateTime { get; set; }
-    public DateTimeOffset EndDateTime { get; set; }
-    public string Status { get; set; } = "";
-    public string Notes { get; set; } = "";
-    public DateTimeOffset CreatedAt { get; set; }
-    public int FeeCents { get; set; }
-
-    /// <summary>
-    /// The visit as <paramref name="viewerId"/> is entitled to see it: with the
-    /// fee if they booked it, without it otherwise. The single division by 100
-    /// for this DTO lives here.
-    /// </summary>
-    public AppointmentTimelineDto ToDto(string viewerId) => new(
-        Id, OwnerId, VetId, PetId, Mode, Reason, Symptoms,
-        StartDateTime, EndDateTime, Status, Notes, CreatedAt)
-    {
-        Fee = OwnerId == viewerId ? FeeCents / 100m : null,
-    };
-}
