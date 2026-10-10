@@ -33,8 +33,19 @@ public sealed class UsersController(
         return user is null ? ApiResults.NotFound("Account not found") : Ok(user);
     }
 
+    /// <summary>
+    /// <c>?ids=a,b,c</c> — the batch form of <see cref="GetUser"/>, and public for
+    /// the same reason: it returns the public projection only (name, avatar,
+    /// roles, city), which is what a review byline on a public profile needs.
+    /// The reference required a session here, so signed-out visitors saw every
+    /// review as "Verified customer"; the owner chose to show the names
+    /// (2026-10-10). Capped at <see cref="MaxIds"/>.
+    ///
+    /// Without <c>ids</c> it is the development account switcher's full listing,
+    /// which carries email addresses — that still needs a session <b>and</b> a
+    /// Development host.
+    /// </summary>
     [HttpGet("users")]
-    [Authorize]
     public async Task<IActionResult> ListUsers([FromQuery] string? ids, CancellationToken ct)
     {
         if (ids is not null)
@@ -50,6 +61,9 @@ public sealed class UsersController(
         // The unfiltered listing exists only for the development account
         // switcher. It returns every account's email address, so it is refused
         // elsewhere rather than left as a directory of the entire user base.
+        if (User.Identity?.IsAuthenticated != true)
+            return ApiResults.Unauthorized();
+
         if (!env.IsDevelopment())
             return ApiResults.Forbidden("Listing all users is only available in development");
 

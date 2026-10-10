@@ -118,6 +118,12 @@ public sealed class VetPatchValidator : AbstractValidator<VetPatchRequest>
             clinic.RuleFor(c => c.State).MaximumLength(120);
             clinic.RuleFor(c => c.Lat).InclusiveBetween(-90, 90);
             clinic.RuleFor(c => c.Lng).InclusiveBetween(-180, 180);
+            // The practice's public line. Loose on format — clinics write numbers
+            // many ways — but bounded, and only digits and the usual punctuation.
+            clinic.RuleFor(c => c.Phone!)
+                .MaximumLength(40)
+                .Matches(@"^[0-9+()\-.\s]*$").WithMessage("That doesn't look like a phone number")
+                .When(c => c.Phone is not null);
         }).When(v => v.Clinic is not null);
 
         RuleForEach(v => v.Availability!).SetValidator(new AvailabilityDayValidator())

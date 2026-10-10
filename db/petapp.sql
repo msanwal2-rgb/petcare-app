@@ -666,7 +666,8 @@ CREATE TABLE public.vet_profiles (
     rating double precision DEFAULT 0 NOT NULL,
     "reviewCount" integer DEFAULT 0 NOT NULL,
     "responseRatePct" integer DEFAULT 100 NOT NULL,
-    "consultFeeCents" integer NOT NULL
+    "consultFeeCents" integer NOT NULL,
+    "clinicPhone" text DEFAULT ''::text NOT NULL
 );
 
 
@@ -1567,5 +1568,6 @@ INSERT INTO public.schema_version (script) VALUES
   ('001_from_prisma'),
   ('002_cents_and_timestamps'),
   ('001_sessions_valid_from_timestamptz'),
-  ('002_refresh_tokens')
+  ('002_refresh_tokens'),
+  ('003_vet_clinic_phone')
 ON CONFLICT (script) DO NOTHING;

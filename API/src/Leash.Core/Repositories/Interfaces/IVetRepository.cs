@@ -29,8 +29,8 @@ public sealed class VetSearchRow
 
 /// <summary>
 /// A partial edit, flattened from <see cref="VetPatchRequest"/> to the column
-/// shape — <c>clinic</c> is one nested object on the wire and five columns in
-/// the table, and a patch that omits it must leave all five alone.
+/// shape — <c>clinic</c> is one nested object on the wire and six columns in
+/// the table, and a patch that omits it must leave all six alone.
 /// </summary>
 public sealed record VetPatch(
     string? Bio,
@@ -46,7 +46,8 @@ public sealed record VetPatch(
     string? ClinicCity,
     string? ClinicState,
     double? Lat,
-    double? Lng);
+    double? Lng,
+    string? ClinicPhone);
 
 /// <summary>
 /// <c>vet_profiles</c> and its calendar.

@@ -6,9 +6,15 @@ namespace Leash.Core.Models.Dtos;
 /// Where the practice is. Flat columns on the table because Prisma emitted them
 /// that way; nested here because that is the shape
 /// <c>web/src/types/index.ts</c> already declares.
+///
+/// <see cref="Phone"/> is the <b>practice's</b> public line, which the profile's
+/// emergency panel shows (db/changes/003). Never the vet's own
+/// <c>users.phone</c> — that stays in the private projection. Always present
+/// on the way out (empty when unset); on a patch, omitting it leaves the stored
+/// number alone.
 /// </summary>
 public sealed record ClinicDto(
-    string Name, string City, string State, double Lat, double Lng);
+    string Name, string City, string State, double Lat, double Lng, string? Phone = null);
 
 /// <summary>
 /// A vet's profile.

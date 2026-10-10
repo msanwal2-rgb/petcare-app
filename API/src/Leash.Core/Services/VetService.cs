@@ -103,6 +103,7 @@ public sealed class VetService(
                 EmergencyAvailable = false,
                 ClinicCity = "",
                 ClinicState = "",
+                ClinicPhone = "",
                 Lat = 0,
                 Lng = 0,
                 Rating = 0,
@@ -163,5 +164,6 @@ public sealed class VetService(
             ? null
             : (int)Math.Round(p.ConsultFee.Value * 100m, MidpointRounding.AwayFromZero),
         p.EmergencyAvailable,
-        p.Clinic?.Name, p.Clinic?.City, p.Clinic?.State, p.Clinic?.Lat, p.Clinic?.Lng);
+        p.Clinic?.Name, p.Clinic?.City, p.Clinic?.State, p.Clinic?.Lat, p.Clinic?.Lng,
+        p.Clinic?.Phone?.Trim());
 }

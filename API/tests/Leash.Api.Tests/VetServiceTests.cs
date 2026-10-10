@@ -321,6 +321,62 @@ public sealed class VetServiceTests(DatabaseFixture db) : IAsyncLifetime
         Assert.Equal(30.5, profile.Clinic.Lat);
     }
 
+    // ── The clinic's public phone (db/changes/003) ──────────────────────────
+
+    [Fact]
+    public async Task The_public_profile_carries_the_clinic_phone_and_never_the_vets_own()
+    {
+        var vet = await _vets.GetAsync("v1");
+
+        // The practice's line, from the profile…
+        Assert.Equal("(512) 555-0700", vet!.Profile.Clinic.Phone);
+
+        // …and not Dr. Ruiz's personal number, which lives on the user row and
+        // stays in the private projection. Asked of the serialised shape, so a
+        // field added to the public user later cannot slip it back in.
+        Assert.DoesNotContain("555-0801", Json(vet));
+    }
+
+    [Fact]
+    public async Task A_vet_sets_the_clinic_phone_through_the_clinic_object()
+    {
+        var (profile, failure) = await _vets.UpsertAsync(
+            VetUser, VetUser,
+            Patch() with
+            {
+                Clinic = new ClinicDto("South Austin Animal Hospital", "Austin", "TX",
+                    30.259, -97.748, "  (512) 555-0999 "),
+            });
+
+        Assert.Null(failure);
+        Assert.Equal("(512) 555-0999", profile!.Clinic.Phone);
+        Assert.Equal("(512) 555-0999", (await _vets.GetAsync("v1"))!.Profile.Clinic.Phone);
+    }
+
+    [Fact]
+    public async Task A_clinic_patch_without_a_phone_leaves_the_stored_number_alone()
+    {
+        var (profile, _) = await _vets.UpsertAsync(
+            VetUser, VetUser,
+            Patch() with { Clinic = new ClinicDto("New Clinic", "Round Rock", "TX", 30.5, -97.7) });
+
+        Assert.Equal("New Clinic", profile!.ClinicName);
+        Assert.Equal("(512) 555-0700", profile.Clinic.Phone);
+    }
+
+    [Theory]
+    [InlineData("(512) 555-0700", true)]
+    [InlineData("+1 512.555.0700", true)]
+    [InlineData("call me maybe", false)]
+    [InlineData("<script>", false)]
+    public void The_clinic_phone_is_validated_loosely_but_not_left_open(string phone, bool valid)
+    {
+        var result = new Leash.Core.Validation.VetPatchValidator().Validate(
+            Patch() with { Clinic = new ClinicDto("Clinic", "Austin", "TX", 30, -97, phone) });
+
+        Assert.Equal(valid, result.IsValid);
+    }
+
     [Fact]
     public async Task Replaces_the_whole_availability_set_rather_than_merging()
     {

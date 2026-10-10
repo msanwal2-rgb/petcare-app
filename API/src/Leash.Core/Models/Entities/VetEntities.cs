@@ -36,6 +36,10 @@ public class VetProfileEntity
     public bool EmergencyAvailable { get; set; }
     public string ClinicCity { get; set; } = "";
     public string ClinicState { get; set; } = "";
+
+    /// <summary>The practice's public line. Empty until the vet sets one.</summary>
+    public string ClinicPhone { get; set; } = "";
+
     public double Lat { get; set; }
     public double Lng { get; set; }
     public double Rating { get; set; }
@@ -46,7 +50,7 @@ public class VetProfileEntity
         Id, UserId, ClinicName, Bio, Specialties, LicenseNumber, LicenseState,
         VerificationStatus, YearsExperience, AcceptedSpecies, ConsultModes,
         ConsultFeeCents / 100m, EmergencyAvailable,
-        new ClinicDto(ClinicName, ClinicCity, ClinicState, Lat, Lng),
+        new ClinicDto(ClinicName, ClinicCity, ClinicState, Lat, Lng, ClinicPhone),
         Rating, ReviewCount, ResponseRatePct,
         [.. availability.Select(a => a.ToDto())]);
 }

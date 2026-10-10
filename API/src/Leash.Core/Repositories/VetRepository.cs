@@ -28,6 +28,7 @@ public sealed class VetRepository(NpgsqlDataSource db) : IVetRepository
         v."consultFeeCents" AS "ConsultFeeCents",
         v."emergencyAvailable" AS "EmergencyAvailable",
         v."clinicCity" AS "ClinicCity", v."clinicState" AS "ClinicState",
+        v."clinicPhone" AS "ClinicPhone",
         v.lat AS "Lat", v.lng AS "Lng", v.rating AS "Rating",
         v."reviewCount" AS "ReviewCount", v."responseRatePct" AS "ResponseRatePct"
         """;
@@ -48,6 +49,7 @@ public sealed class VetRepository(NpgsqlDataSource db) : IVetRepository
         "consultFeeCents" AS "ConsultFeeCents",
         "emergencyAvailable" AS "EmergencyAvailable",
         "clinicCity" AS "ClinicCity", "clinicState" AS "ClinicState",
+        "clinicPhone" AS "ClinicPhone",
         lat AS "Lat", lng AS "Lng", rating AS "Rating",
         "reviewCount" AS "ReviewCount", "responseRatePct" AS "ResponseRatePct"
         """;
@@ -241,13 +243,13 @@ public sealed class VetRepository(NpgsqlDataSource db) : IVetRepository
                      id, "userId", "clinicName", bio, specialties, "licenseNumber",
                      "licenseState", "verificationStatus", "yearsExperience",
                      "acceptedSpecies", "consultModes", "consultFeeCents",
-                     "emergencyAvailable", "clinicCity", "clinicState", lat, lng,
+                     "emergencyAvailable", "clinicCity", "clinicState", "clinicPhone", lat, lng,
                      rating, "reviewCount", "responseRatePct")
                  VALUES (
                      @Id, @UserId, @ClinicName, @Bio, @Specialties, @LicenseNumber,
                      @LicenseState, @VerificationStatus, @YearsExperience,
                      @AcceptedSpecies, @ConsultModes, @ConsultFeeCents,
-                     @EmergencyAvailable, @ClinicCity, @ClinicState, @Lat, @Lng,
+                     @EmergencyAvailable, @ClinicCity, @ClinicState, @ClinicPhone, @Lat, @Lng,
                      @Rating, @ReviewCount, @ResponseRatePct)
                  RETURNING {ProfileColumnsBare}
                  """,
@@ -283,6 +285,7 @@ public sealed class VetRepository(NpgsqlDataSource db) : IVetRepository
                      "clinicName"          = COALESCE(@ClinicName::text, "clinicName"),
                      "clinicCity"          = COALESCE(@ClinicCity::text, "clinicCity"),
                      "clinicState"         = COALESCE(@ClinicState::text, "clinicState"),
+                     "clinicPhone"         = COALESCE(@ClinicPhone::text, "clinicPhone"),
                      lat                   = COALESCE(@Lat::float8, lat),
                      lng                   = COALESCE(@Lng::float8, lng)
                  WHERE id = @id
@@ -294,7 +297,7 @@ public sealed class VetRepository(NpgsqlDataSource db) : IVetRepository
                     patch.LicenseState, patch.YearsExperience, patch.AcceptedSpecies,
                     patch.ConsultModes, patch.ConsultFeeCents, patch.EmergencyAvailable,
                     patch.ClinicName, patch.ClinicCity, patch.ClinicState,
-                    patch.Lat, patch.Lng,
+                    patch.Lat, patch.Lng, patch.ClinicPhone,
                 },
                 session.Transaction, cancellationToken: ct));
     }

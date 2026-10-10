@@ -154,14 +154,35 @@ public sealed class UserEndpointTests(DatabaseFixture db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Batch_lookup_returns_public_projections_and_requires_a_session()
+    public async Task Batch_lookup_is_public_and_returns_public_projections_only()
     {
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await _app.CreateSessionClient().GetAsync("/api/v1/users?ids=u1,u2")).StatusCode);
+        // Public, like GET /users/{id}: a signed-out visitor reading reviews on a
+        // caretaker's profile needs the authors' names and faces.
+        var anonymous = await _app.CreateSessionClient().GetAsync("/api/v1/users?ids=u1,u2");
+        Assert.Equal(HttpStatusCode.OK, anonymous.StatusCode);
 
-        var body = await JsonOf(await (await SignedInAsync()).GetAsync("/api/v1/users?ids=u1,u2"));
-
+        var body = await JsonOf(anonymous);
         Assert.Equal(2, body.GetArrayLength());
-        Assert.False(body[0].TryGetProperty("email", out _));
+        foreach (var user in body.EnumerateArray())
+        {
+            Assert.False(user.TryGetProperty("email", out _));
+            Assert.False(user.TryGetProperty("phone", out _));
+            Assert.False(user.TryGetProperty("address", out var address)
+                && address.TryGetProperty("lat", out _));
+        }
+
+        var signedIn = await JsonOf(await (await SignedInAsync()).GetAsync("/api/v1/users?ids=u1,u2"));
+        Assert.Equal(2, signedIn.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Full_listing_still_requires_a_session()
+    {
+        // The unfiltered listing carries every email address. Opening the batch
+        // lookup must not have opened this with it.
+        var response = await _app.CreateSessionClient().GetAsync("/api/v1/users");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.True((await JsonOf(response)).TryGetProperty("error", out _));
     }
 }
