@@ -18,15 +18,12 @@ not repeat the permanent docs — read them in this order:
 
 ## 1. Where the history is
 
-M0–M6 and the landing page are committed. `main_newDev` is at `6f8608a`
-("CREATED THE ALL STRUCTRE AND IMPLEMENTATION TILL M6 MILESTONE"), which holds
-M5, the landing page and M6 together. **The UI parity pass is not committed** —
-it is the working tree: the ported screens under `web/`, the docs, and the
-follow-up from the owner's three decisions — `db/changes/003_vet_clinic_phone.sql`
-(with `petapp.sql` and the dev seed), the clinic phone through `Leash.Core`, and
-a public `GET /users?ids=` in `UsersController`, each with tests.
+Everything is committed; the working tree is clean. `origin/main_newDev` is at
+`6f8608a`; the parity-pass commits are local until you push.
 
 ```
+6c1e030  Clinic phone on vet profiles; public GET /users?ids=  (db/changes/003)
+eff89bf  UI parity pass: every M1–M6 screen ported from the reference, + docs
 6f8608a  M5 + landing page + M6
 c585829  m4 completed
 41f57ef  m3 completed with refill left and pet delete not possible if have history

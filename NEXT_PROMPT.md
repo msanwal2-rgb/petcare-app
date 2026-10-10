@@ -5,10 +5,9 @@ UI parity pass), then BUILD_PLAN.md §0 and §6 week 7, then ARCHITECTURE.md —
 State of play: M0–M6 are done and verified, plus the landing page and the UI
 parity pass — every screen built so far is now a port of the reference screen.
 539 xUnit tests passing, web build + oxlint clean, ./db/verify.sh IDENTICAL.
-M0–M6 are committed (main_newDev at 6f8608a). **The parity pass is NOT
-committed** — it is the working tree: web/, the docs, and db/changes/003 plus
-the API changes for the clinic phone and the public GET /users?ids=. Do not
-commit unless I ask.
+Everything is committed (main_newDev at 6c1e030: the parity pass in eff89bf,
+the clinic phone and public GET /users?ids= in 6c1e030). Do not commit unless
+I ask.
 
 ## This session: M8 (notifications), then M7 (payments and membership)
 
