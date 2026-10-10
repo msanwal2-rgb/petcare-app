@@ -30,3 +30,24 @@ export const JOURNEY: OrderStatus[] = [
   "out_for_delivery",
   "delivered",
 ];
+
+/**
+ * How long after being placed an order reaches each stage — the server's
+ * `Delivery.Schedule`, which the fulfilment job walks. Read by the support
+ * page, so the timings it quotes are the ones the job actually keeps.
+ */
+export const FULFILMENT_SCHEDULE: { status: OrderStatus; afterHours: number }[] = [
+  { status: "processing", afterHours: 1 },
+  { status: "packed", afterHours: 6 },
+  { status: "shipped", afterHours: 24 },
+  { status: "out_for_delivery", afterHours: 48 },
+  { status: "delivered", afterHours: 60 },
+];
+
+/** Hours after placement at which cancellation stops being possible. */
+export function hoursUntilUncancellable(): number {
+  const firstUncancellable = FULFILMENT_SCHEDULE.find(
+    (stage) => !CUSTOMER_CANCELLABLE.includes(stage.status),
+  );
+  return firstUncancellable?.afterHours ?? Infinity;
+}

@@ -1,106 +1,146 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { useState } from "react";
 import type { Order } from "@/types";
 import { listMyOrders } from "@/api/orders";
-import { EmptyState } from "@/components/EmptyState";
-import { OrderStatusBadge } from "@/components/store/OrderTracking";
+import { useAsync } from "@/hooks/useAsync";
+import { useSession } from "@/store/session";
 import { Button } from "@/components/ui/Button";
+import { OrderStatusBadge } from "@/components/store/OrderStatusBadge";
+import { AuthRequired } from "@/components/AuthRequired";
+import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { PackageIcon } from "@/components/ui/icons";
+import { BagIcon, ChevronRightIcon } from "@/components/ui/icons";
 import { formatCents, formatDate } from "@/lib/utils";
 
 /**
- * The customer's orders, newest first. "Show more" rather than page numbers —
- * the API is cursor-paginated, and a history is scrolled, not navigated.
- *
- * Each row shows what was bought as it was *at purchase* — the line items are
- * snapshots (REQUIREMENTS.md S11), so a product renamed or repriced since
- * still reads as what this customer actually paid for.
+ * Order history — the reference's `app/store/orders/page.tsx`. The list is a
+ * cursor page, newest first; "Show more" appears only past the first page.
  */
 export default function OrdersPage() {
-  const [items, setItems] = useState<Order[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const { currentUser, hasHydrated } = useSession();
+  const { data: first, loading } = useAsync(
+    () => (currentUser ? listMyOrders({ limit: 20 }) : Promise.resolve(null)),
+    [currentUser?.id]
+  );
+  const [more, setMore] = useState<{ items: Order[]; cursor: string | null } | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-
-  useEffect(() => {
-    listMyOrders({ limit: 10 })
-      .then((page) => {
-        setItems(page.items);
-        setCursor(page.nextCursor);
-      })
-      .catch(() => setItems([]));
-  }, []);
+  const orders = first ? [...first.items, ...(more?.items ?? [])] : [];
+  const cursor = more ? more.cursor : (first?.nextCursor ?? null);
 
   async function showMore() {
     if (!cursor) return;
     setLoadingMore(true);
     try {
-      const page = await listMyOrders({ cursor, limit: 10 });
-      setItems((current) => [...(current ?? []), ...page.items]);
-      setCursor(page.nextCursor);
+      const page = await listMyOrders({ limit: 20, cursor });
+      setMore({ items: [...(more?.items ?? []), ...page.items], cursor: page.nextCursor });
     } finally {
       setLoadingMore(false);
     }
   }
 
-  return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-      <h1 className="text-2xl font-semibold text-ink">Your orders</h1>
-      <p className="mt-1 text-sm text-charcoal/60">Track a parcel, or cancel before it ships.</p>
+  if (!hasHydrated || loading) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="mt-6 h-32 w-full rounded-2xl" />
+        <Skeleton className="mt-3 h-32 w-full rounded-2xl" />
+      </div>
+    );
+  }
 
-      {items === null && (
-        <div className="mt-8 space-y-3">
-          <Skeleton className="h-24 rounded-2xl" />
-          <Skeleton className="h-24 rounded-2xl" />
-        </div>
-      )}
+  if (!currentUser) return <AuthRequired message="Log in to see your orders." />;
 
-      {items?.length === 0 && (
+  if ((orders ?? []).length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
         <EmptyState
-          className="mt-8"
-          icon={<PackageIcon width={40} height={40} />}
+          icon={<BagIcon width={40} height={40} />}
           title="No orders yet"
-          description="Food, treats, and the therapeutic diets your vet prescribed — tracked to your door."
+          description="Food, treats and supplements, delivered and tracked to your door."
           actionLabel="Browse the store"
           actionHref="/store"
         />
-      )}
+      </div>
+    );
+  }
 
-      {items && items.length > 0 && (
-        <>
-          <ul className="mt-8 space-y-3">
-            {items.map((order) => (
-              <li key={order.id}>
-                <Link
-                  to={`/store/orders/${order.id}`}
-                  className="block rounded-2xl border border-mist bg-white p-4 transition-colors hover:border-ink"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-ink">
-                        {formatDate(order.placedAt)}
-                        <span className="text-charcoal/50"> · {formatCents(order.totalCents)}</span>
-                      </p>
-                      <p className="mt-0.5 font-mono text-xs text-charcoal/50">{order.id}</p>
-                    </div>
-                    <OrderStatusBadge status={order.status} />
-                  </div>
-                  <p className="mt-2 truncate text-sm text-charcoal/70">
-                    {order.items.map((i) => `${i.quantity} × ${i.name}`).join(" · ")}
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">Your orders</h1>
+
+      <div className="mt-6 space-y-3">
+        {(orders ?? []).map((order) => {
+          const latest = order.events.at(-1);
+          return (
+            <Link
+              key={order.id}
+              to={`/store/orders/${order.id}`}
+              className="group block rounded-2xl border border-mist bg-white p-5 transition-colors hover:border-ink/30"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-xs text-charcoal/50">
+                    {order.id} · {formatDate(order.placedAt)}
                   </p>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                  <p className="mt-1 font-medium text-ink">
+                    {order.items.length} item{order.items.length === 1 ? "" : "s"} ·{" "}
+                    {formatCents(order.totalCents)}
+                  </p>
+                </div>
+                <OrderStatusBadge status={order.status} />
+              </div>
 
-          {cursor && (
-            <div className="mt-8 text-center">
-              <Button variant="outline" onClick={showMore} disabled={loadingMore}>
-                {loadingMore ? "Loading…" : "Show more"}
-              </Button>
-            </div>
-          )}
-        </>
+              <div className="mt-4 flex items-center gap-2">
+                {order.items.slice(0, 4).map((item) => (
+                  <span
+                    key={item.id}
+                    className="relative h-12 w-12 overflow-hidden rounded-lg bg-fog"
+                  >
+<img
+                      src={item.imageUrl}
+                      alt=""
+                      width={48}
+                      height={48}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  </span>
+                ))}
+                {order.items.length > 4 && (
+                  <span className="font-mono text-xs text-charcoal/50">
+                    +{order.items.length - 4}
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-mist pt-3">
+                <p className="text-sm text-charcoal/70">
+                  {latest?.label}
+                  {latest?.location && (
+                    <span className="text-charcoal/50"> · {latest.location}</span>
+                  )}
+                </p>
+                <span className="flex items-center gap-1 text-sm font-medium text-ink">
+                  Track
+                  <ChevronRightIcon
+                    width={15}
+                    height={15}
+                    className="transition-transform group-hover:translate-x-0.5"
+                  />
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
+      {cursor && (
+        <div className="mt-6 text-center">
+          <Button variant="outline" onClick={showMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Show more"}
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -1,30 +1,9 @@
 import { motion } from "framer-motion";
 import type { Order, OrderStatus } from "@/types";
 import { ProgressLeash } from "@/components/ui/ProgressLeash";
-import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { CheckIcon, HomeIcon, PackageIcon, TruckIcon } from "@/components/ui/icons";
 import { JOURNEY } from "@/lib/delivery";
 import { ORDER_STATUS_LABELS, cn, formatDateTime } from "@/lib/utils";
-
-/**
- * Order status → badge tone. Refunded reads as "failed" deliberately: the
- * purchase did not happen as intended, even though the money came back.
- */
-const TONE: Record<OrderStatus, StatusTone> = {
-  pending_payment: "pending",
-  paid: "active",
-  processing: "progress",
-  packed: "progress",
-  shipped: "progress",
-  out_for_delivery: "progress",
-  delivered: "done",
-  cancelled: "muted",
-  refunded: "failed",
-};
-
-export function OrderStatusBadge({ status, className }: { status: OrderStatus; className?: string }) {
-  return <StatusBadge tone={TONE[status]} label={ORDER_STATUS_LABELS[status]} className={className} />;
-}
 
 const JOURNEY_LABELS = ["Paid", "Picking", "Packed", "Shipped", "On the van", "Delivered"];
 
@@ -67,7 +46,14 @@ export function OrderTracking({ order }: { order: Order }) {
           className="mb-8"
         />
       ) : (
-        <p className="mb-8 rounded-2xl border border-charcoal/15 bg-charcoal/[0.04] px-4 py-3 text-sm text-charcoal/75">
+        <p
+          className={cn(
+            "mb-8 rounded-2xl border px-4 py-3 text-sm",
+            order.status === "refunded"
+              ? "border-mist bg-white text-charcoal/75"
+              : "border-charcoal/15 bg-charcoal/[0.04] text-charcoal/75",
+          )}
+        >
           {order.status === "refunded"
             ? "This order was refunded. The payment has been returned to you."
             : "This order was cancelled. Anything you paid has been refunded and nothing was shipped."}

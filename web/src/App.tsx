@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { Outlet, ScrollRestoration } from "react-router";
 import { SessionSync } from "./components/SessionSync";
 import { SiteHeader } from "./components/SiteHeader";
 import { MaintenanceBanner } from "./components/MaintenanceBanner";
@@ -16,11 +16,16 @@ import { ToastProvider } from "./components/ToastProvider";
  *
  * `PageTransition` sits inside <main> and is keyed on the pathname, so it
  * re-runs per route while the chrome around it does not.
+ *
+ * `ScrollRestoration` does what Next.js did without being asked: a new page
+ * starts at the top, Back returns to where you were, and a `#hash` link
+ * (the footer's `/pet-health#emergencies`) scrolls to its target.
  */
 export function AppShell() {
   return (
     <div className="flex min-h-full flex-col bg-fog text-charcoal">
       <SessionSync />
+      <ScrollRestoration />
       <SiteHeader />
       <MaintenanceBanner />
 

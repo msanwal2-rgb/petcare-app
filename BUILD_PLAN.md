@@ -24,17 +24,17 @@ detailed source; this is the plan-level view.**
 | 19–20 | Week-4 checkpoint + first deploy | ⏭ **Skipped** — owner's decision, 2026-10-09 |
 | — | Landing page (`app/page.tsx`) | ✅ Done — **was never scheduled**; added 2026-10-09 |
 | 21–30 | M6 Store & orders | ✅ Done |
-| **31–34** | **UI parity pass** — see below | ⬜ **Next.** Added 2026-10-10 |
-| 35–36 | M8 Notifications | ⬜ |
+| 31–34 | UI parity pass — see below | ✅ Done 2026-10-10 |
+| **35–36** | **M8 Notifications** | ⬜ **Next** |
 | 37–39 | M7 Payments & membership | ⬜ |
 | 40–42 | M9 Admin console | ⬜ |
 | 43–44 | Release hardening + **first deploy** | ⬜ |
 | stretch | M10 Adoption | ⬜ |
 
-**28 plan-days of scope done; 2 skipped; 14 remain, plus the stretch.** The
+**32 plan-days of scope done; 2 skipped; 10 remain, plus the stretch.** The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
-531 xUnit tests passing; 15 of the reference's 28 Vitest suites ported (one in
+539 xUnit tests passing; 15 of the reference's 28 Vitest suites ported (one in
 half — `orders.test.ts` lines 434–868 belong to M7).
 
 ### The revisions, and what they cost
@@ -56,7 +56,17 @@ half — `orders.test.ts` lines 434–868 belong to M7).
    works but looks like a different product — the dashboard most of all. See
    the next section.
 
-### The UI parity pass — days 31–34
+### The UI parity pass — days 31–34 ✅ Done
+
+**Outcome (2026-10-10):** all ten rows below ported; 34 reference components
+added; no API change in the pass itself (531 tests untouched); its follow-up took the suite to 539. The differences that remain are
+listed in `STATUS.md` §3-0 — every one is a rule-3 fix, a cursor-paging
+consequence, or out-of-scope module (M7/M9/M10). Three API gaps were found and
+put to the owner, who decided them the same day: a clinic phone (yes —
+`db/changes/003`), allergen flags on store cards (no), reviewer names for
+signed-out visitors (yes) — `STATUS.md` §4. Two bugs found on the way: product images missing
+since M6, and no scroll-to-top on navigation.
+
 
 **Goal: every screen built so far looks and is structured like the reference
 app.** The reference's screens are the design; `web/` currently has its own.
@@ -99,7 +109,7 @@ shelter screens (M10) — arrive with their modules and are **out of scope** her
 | 5 | **Find a vet** | `vet/{VetSearchResults,VetCard,VetProfileForm,AppointmentBookingClient,VisitSummaryForm}.tsx` | Vet search, vet profile, booking a visit, the visit summary form (keeping `allergy`), the vet's profile editor |
 | 6 | **Health record** | `vet/{HealthRecordSection,MedicalRecordCard}.tsx` | The pet detail page's timeline |
 | 7 | **Store** | `store/{StoreCatalog,PetShoppingBar,RecommendedForPet,FeedingGuide}.tsx` | The shop grid and filters, the "shopping for <pet>" bar, recommendations, the feeding guide on a product page. Keep the server quote and allergen warnings |
-| 8 | **Login / signup** | `app/login/page.tsx`, `app/signup/page.tsx` | Mostly ported already; the reference has a photo panel (`Image` + `BLUR_DATA_URL`) the web version lacks. Line-by-line visual diff |
+| 8 | **Login / signup** | `app/login/page.tsx`, `app/signup/page.tsx` | Already faithful — the diff is auth plumbing only. (The "photo panel" noted here was the demo-account avatars, which were already ported) |
 | 9 | **Content pages** | `app/pet-health/page.tsx`, `app/support/page.tsx`, `lib/content/{pet-health,support-policies}.ts` | Missing entirely. `lib/content` is "copy as-is" per §4 |
 | 10 | **Dev account switcher** | `DevAccountSwitcher.tsx` | One-click switching between demo accounts in Development. Must stay off outside Development, as `demoLoginVisible` already is |
 
@@ -120,7 +130,7 @@ shelter screens (M10) — arrive with their modules and are **out of scope** her
 | ⚠ | **Port `orders.test.ts` 434–868, `webhooks.test.ts`, `stripe-signature.test.ts` before writing M7** | §7 and §11 already require this; M7 is the highest-risk week |
 | ❓ | **Owner to confirm "one refill per unit"** | M6 implemented P9 that way; one constant if the intent was per line |
 | | Refills are not restored when an order is cancelled | Needs `order_items."prescriptionId"` — a schema change |
-| | Route-level code splitting | Bundle is 749 kB in one chunk, growing ~70 kB a module |
+| | Route-level code splitting | Bundle is 847 kB in one chunk after the parity pass, growing ~70 kB a module |
 
 ---
 
@@ -577,7 +587,7 @@ week 4 is routine by week 8 instead of a crisis.
 **End of week 6:** the prescription written in week 4 unlocks an Rx-only product
 and a customer can buy it. That seam justifies the whole architecture.
 
-### Week 7 — Notifications & Payments (M8 + M7) ⬜ — after the UI parity pass (§0)
+### Week 7 — Notifications & Payments (M8 + M7) ⬜ — next; the UI parity pass (§0) is done
 
 | Day | Work |
 |---|---|

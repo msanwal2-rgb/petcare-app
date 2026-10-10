@@ -8,6 +8,7 @@ import { ButtonLink } from "./ui/Button";
 import { RoleToggle } from "./RoleToggle";
 import { Avatar } from "./Avatar";
 import { CartButton } from "./store/CartButton";
+import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { MenuIcon, XIcon } from "./ui/icons";
 import { DURATION, EASE_GLIDE, EASE_OUT, layoutGlide } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ export function SiteHeader() {
   }
 
   return (
+    <>
     <motion.header
       // The chrome tightens as you leave the top of the page: the bar loses
       // height, the blur deepens, and a hairline appears. At rest it should feel
@@ -291,5 +293,7 @@ export function SiteHeader() {
         )}
       </AnimatePresence>
     </motion.header>
+    <DevAccountSwitcher />
+    </>
   );
 }

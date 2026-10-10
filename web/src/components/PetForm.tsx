@@ -1,265 +1,288 @@
-import { useState, type FormEvent } from "react";
-import type { Pet } from "@/types";
-import type { PetInput } from "@/api/pets";
-import { ApiError } from "@/api/_client";
+/* watch() is React Hook Form's intended subscription API for reactive fields. */
+/* eslint-disable react-hooks/incompatible-library */
+
+import { useNavigate } from "react-router";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import type { Pet, Species } from "@/types";
+import { createPet, updatePet, type PetInput } from "@/api/pets";
+import { Field, Input, Textarea, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
-import { SPECIES_LABELS } from "@/lib/utils";
+import {
+  DOG_PHOTOS,
+  CAT_PHOTOS,
+  OTHER_PHOTOS,
+  unsplash,
+  BLUR_DATA_URL,
+} from "@/lib/photos";
+import { cn } from "@/lib/utils";
+
+const schema = z.object({
+  name: z.string().min(1, "What’s your pet’s name?"),
+  species: z.enum(["dog", "cat", "other"]),
+  breed: z.string().min(1, "Add a breed (or “Mixed”)."),
+  sex: z.enum(["male", "female"]),
+  dob: z.string().min(1, "Add a date of birth."),
+  weightLbs: z.coerce.number().positive("Weight must be greater than 0."),
+  photoUrl: z.string().min(1, "Pick a photo."),
+  vaccinated: z.boolean(),
+  allergies: z.string(),
+  medications: z.string(),
+  behaviorNotes: z.string(),
+  feedingInstructions: z.string(),
+  vetName: z.string().min(1, "Add your vet’s name."),
+  vetPhone: z.string().min(1, "Add your vet’s phone."),
+});
+
+type FormValues = z.input<typeof schema>;
+
+const PHOTOS: Record<Species, string[]> = {
+  dog: DOG_PHOTOS,
+  cat: CAT_PHOTOS,
+  other: OTHER_PHOTOS,
+};
 
 /**
  * The create/edit form for one animal.
  *
- * ── There is no owner field, and that is the point ──
- *
- * The reference project's version spread `ownerId` into every submit payload.
- * Combined with a patch schema that accepted it and a route that checked only
- * the *outgoing* owner, that was a transfer backdoor: a stale prop could hand
- * somebody's pet to another account with no consent, audit or notification.
- * `PetInput` has no such property, so the form cannot send one.
+ * No owner prop and no owner in the payload: the server takes the owner from
+ * the session on create, and ownership never moves through an edit form (see
+ * api/pets.ts).
  */
-export function PetForm({
-  initial,
-  submitLabel,
-  onSubmit,
-  onCancel,
-}: {
-  initial?: Pet;
-  submitLabel: string;
-  onSubmit: (input: PetInput) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [values, setValues] = useState<PetInput>(() => toInput(initial));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function PetForm({ pet }: { pet?: Pet }) {
+  const navigate = useNavigate();
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: pet
+      ? {
+          name: pet.name,
+          species: pet.species,
+          breed: pet.breed,
+          sex: pet.sex,
+          dob: pet.dob,
+          weightLbs: pet.weightLbs,
+          photoUrl: pet.photoUrl,
+          vaccinated: pet.vaccinated,
+          allergies: pet.allergies.join(", "),
+          medications: pet.medications.join(", "),
+          behaviorNotes: pet.behaviorNotes,
+          feedingInstructions: pet.feedingInstructions,
+          vetName: pet.vetContact.name,
+          vetPhone: pet.vetContact.phone,
+        }
+      : {
+          name: "",
+          species: "dog",
+          breed: "",
+          sex: "male",
+          dob: "",
+          weightLbs: 20,
+          photoUrl: unsplash(DOG_PHOTOS[0], 900, 700),
+          vaccinated: true,
+          allergies: "",
+          medications: "",
+          behaviorNotes: "",
+          feedingInstructions: "",
+          vetName: "",
+          vetPhone: "",
+        },
+  });
 
-  /**
-   * Field-level messages from the API's error envelope, keyed by the JSON path
-   * the validation filter emits (`species`, `vetContact.name`). Shown under the
-   * field that caused them rather than as one banner.
-   */
-  const [issues, setIssues] = useState<Record<string, string>>({});
+  const species = watch("species");
+  const photoUrl = watch("photoUrl");
 
-  function set<K extends keyof PetInput>(key: K, value: PetInput[K]) {
-    setValues((v) => ({ ...v, [key]: value }));
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    setIssues({});
+  async function onSubmit(values: FormValues) {
+    const toList = (s: string) =>
+      s.split(",").map((x) => x.trim()).filter(Boolean);
+    // No `ownerId`. It used to be spread into every payload, including edits,
+    // which meant a stale prop could hand somebody's animal away silently.
+    const payload: PetInput = {
+      name: values.name,
+      species: values.species,
+      breed: values.breed,
+      sex: values.sex,
+      dob: values.dob,
+      weightLbs: Number(values.weightLbs),
+      photoUrl: values.photoUrl,
+      vaccinated: values.vaccinated,
+      allergies: toList(values.allergies),
+      medications: toList(values.medications),
+      behaviorNotes: values.behaviorNotes,
+      feedingInstructions: values.feedingInstructions,
+      vetContact: { name: values.vetName, phone: values.vetPhone },
+    };
 
     try {
-      await onSubmit(values);
-    } catch (err) {
-      if (err instanceof ApiError && err.issues?.length) {
-        setIssues(Object.fromEntries(err.issues.map((i) => [i.path, i.message])));
-        setError(null);
+      if (pet) {
+        await updatePet(pet.id, payload);
+        toast.success(`${values.name}’s profile updated.`);
       } else {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        await createPet(payload);
+        toast.success(`${values.name} added to your pets.`);
       }
-    } finally {
-      setSaving(false);
+      navigate("/dashboard");
+    } catch {
+      toast.error("Couldn’t save. Please try again.");
     }
   }
 
+  const gallery = PHOTOS[species] ?? DOG_PHOTOS;
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-      {error && (
-        <p
-          role="alert"
-          className="rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash"
-        >
-          {error}
-        </p>
-      )}
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      {/* Photo picker */}
+      <div>
+        <p className="mb-2 text-sm font-medium text-ink">Photo</p>
+        <div className="flex items-center gap-4">
+          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-mist">
+            {photoUrl && (
+              <img
+                src={photoUrl}
+                alt=""
+                width={96}
+                height={96}
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ backgroundImage: `url("${BLUR_DATA_URL}")`, backgroundSize: "cover" }}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {gallery.slice(0, 6).map((id) => {
+              const url = unsplash(id, 900, 700);
+              const active = url === photoUrl;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setValue("photoUrl", url, { shouldValidate: true })}
+                  className={cn(
+                    "relative h-12 w-12 overflow-hidden rounded-lg border-2 transition-colors",
+                    active ? "border-leash" : "border-transparent hover:border-mist"
+                  )}
+                >
+                  <img
+                    src={unsplash(id, 120, 120)}
+                    alt=""
+                    width={48}
+                    height={48}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {errors.photoUrl && (
+          <p className="mt-1.5 text-xs text-leash">{errors.photoUrl.message}</p>
+        )}
+      </div>
 
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Name" htmlFor="name" error={issues.name}>
-          <Input
-            id="name"
-            value={values.name}
-            onChange={(e) => set("name", e.target.value)}
-            placeholder="Biscuit"
-            required
-          />
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field label="Name" htmlFor="name" error={errors.name?.message}>
+          <Input id="name" {...register("name")} placeholder="e.g. Biscuit" />
         </Field>
-
-        <Field label="Species" htmlFor="species" error={issues.species}>
-          <Select
-            id="species"
-            value={values.species}
-            onChange={(e) => set("species", e.target.value as Pet["species"])}
-          >
-            {(Object.keys(SPECIES_LABELS) as Pet["species"][]).map((s) => (
-              <option key={s} value={s}>
-                {SPECIES_LABELS[s]}
-              </option>
-            ))}
+        <Field label="Breed" htmlFor="breed" error={errors.breed?.message}>
+          <Input id="breed" {...register("breed")} placeholder="e.g. Golden Retriever" />
+        </Field>
+        <Field label="Species" htmlFor="species">
+          <Select id="species" {...register("species")}>
+            <option value="dog">Dog</option>
+            <option value="cat">Cat</option>
+            <option value="other">Other</option>
           </Select>
         </Field>
-
-        <Field label="Breed" htmlFor="breed" error={issues.breed}>
-          <Input
-            id="breed"
-            value={values.breed}
-            onChange={(e) => set("breed", e.target.value)}
-            placeholder="Golden Retriever"
-          />
-        </Field>
-
-        <Field label="Sex" htmlFor="sex" error={issues.sex}>
-          <Select
-            id="sex"
-            value={values.sex}
-            onChange={(e) => set("sex", e.target.value as Pet["sex"])}
-          >
-            <option value="female">Female</option>
+        <Field label="Sex" htmlFor="sex">
+          <Select id="sex" {...register("sex")}>
             <option value="male">Male</option>
+            <option value="female">Female</option>
           </Select>
         </Field>
-
-        <Field label="Date of birth" htmlFor="dob" error={issues.dob}>
-          <Input
-            id="dob"
-            type="date"
-            value={values.dob}
-            onChange={(e) => set("dob", e.target.value)}
-            required
-          />
+        <Field label="Date of birth" htmlFor="dob" error={errors.dob?.message}>
+          <Input id="dob" type="date" {...register("dob")} />
         </Field>
+        <Field label="Weight (lbs)" htmlFor="weight" error={errors.weightLbs?.message}>
+          <Input id="weight" type="number" step="0.1" {...register("weightLbs")} />
+        </Field>
+      </div>
 
-        <Field label="Weight" hint="lb" htmlFor="weightLbs" error={issues.weightLbs}>
+      <label className="flex items-center gap-2.5 rounded-xl border border-mist bg-white px-4 py-3">
+        <input
+          type="checkbox"
+          {...register("vaccinated")}
+          className="h-4 w-4 accent-ink"
+        />
+        <span className="text-sm text-charcoal">Vaccinations are up to date</span>
+      </label>
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field
+          label="Allergies"
+          htmlFor="allergies"
+          hint="Comma-separated"
+        >
+          <Input id="allergies" {...register("allergies")} placeholder="e.g. Chicken, grass" />
+        </Field>
+        <Field
+          label="Medications"
+          htmlFor="medications"
+          hint="Comma-separated"
+        >
           <Input
-            id="weightLbs"
-            type="number"
-            min={0}
-            max={400}
-            value={values.weightLbs}
-            onChange={(e) => set("weightLbs", Number(e.target.value))}
+            id="medications"
+            {...register("medications")}
+            placeholder="e.g. Apoquel 5.4mg, 1× daily"
           />
         </Field>
       </div>
 
-      <Field
-        label="Allergies"
-        hint="comma separated"
-        htmlFor="allergies"
-        error={issues.allergies}
-      >
-        <Input
-          id="allergies"
-          value={values.allergies.join(", ")}
-          onChange={(e) => set("allergies", splitList(e.target.value))}
-          placeholder="Chicken, Certain grains"
-        />
-      </Field>
-
-      <Field
-        label="Medications"
-        hint="comma separated"
-        htmlFor="medications"
-        error={issues.medications}
-      >
-        <Input
-          id="medications"
-          value={values.medications.join(", ")}
-          onChange={(e) => set("medications", splitList(e.target.value))}
-          placeholder="Gabapentin 25mg — 1 capsule if travelling"
-        />
-      </Field>
-
-      <Field
-        label="Feeding instructions"
-        htmlFor="feedingInstructions"
-        error={issues.feedingInstructions}
-      >
+      <Field label="Behavior notes" htmlFor="behavior">
         <Textarea
-          id="feedingInstructions"
-          value={values.feedingInstructions}
-          onChange={(e) => set("feedingInstructions", e.target.value)}
-          placeholder="2 cups dry food, morning and evening. No table scraps."
+          id="behavior"
+          {...register("behaviorNotes")}
+          placeholder="Temperament, triggers, how they are with other animals…"
         />
       </Field>
 
-      <Field label="Behaviour notes" htmlFor="behaviorNotes" error={issues.behaviorNotes}>
+      <Field label="Feeding instructions" htmlFor="feeding">
         <Textarea
-          id="behaviorNotes"
-          value={values.behaviorNotes}
-          onChange={(e) => set("behaviorNotes", e.target.value)}
-          placeholder="Friendly with everyone, pulls a little on the leash."
+          id="feeding"
+          {...register("feedingInstructions")}
+          placeholder="Food type, quantity, schedule…"
         />
       </Field>
 
-      <fieldset className="rounded-xl border border-mist p-4">
-        <legend className="px-1.5 text-sm font-medium text-ink">Your vet</legend>
-        <p className="mb-4 text-xs text-charcoal/55">
-          Shared with a sitter while they are looking after {values.name || "your pet"}.
-        </p>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Practice" htmlFor="vetName" error={issues["vetContact.name"]}>
-            <Input
-              id="vetName"
-              value={values.vetContact.name}
-              onChange={(e) =>
-                set("vetContact", { ...values.vetContact, name: e.target.value })
-              }
-              required
-            />
-          </Field>
-          <Field label="Phone" htmlFor="vetPhone" error={issues["vetContact.phone"]}>
-            <Input
-              id="vetPhone"
-              type="tel"
-              value={values.vetContact.phone}
-              onChange={(e) =>
-                set("vetContact", { ...values.vetContact, phone: e.target.value })
-              }
-              required
-            />
-          </Field>
-        </div>
-      </fieldset>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <Field label="Vet name / clinic" htmlFor="vetName" error={errors.vetName?.message}>
+          <Input id="vetName" {...register("vetName")} placeholder="e.g. South Austin Animal Hospital" />
+        </Field>
+        <Field label="Vet phone" htmlFor="vetPhone" error={errors.vetPhone?.message}>
+          <Input id="vetPhone" {...register("vetPhone")} placeholder="(512) 555-0100" />
+        </Field>
+      </div>
 
-      <div className="flex items-center gap-3 pt-1">
-        <Button type="submit" variant="cta" disabled={saving}>
-          {saving ? "Saving…" : submitLabel}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={saving}>
+      <div className="flex items-center justify-end gap-3 border-t border-mist pt-6">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => navigate("/dashboard")}
+        >
           Cancel
+        </Button>
+        <Button type="submit" variant="cta" disabled={isSubmitting}>
+          {isSubmitting ? "Saving…" : pet ? "Save changes" : "Add pet"}
         </Button>
       </div>
     </form>
   );
-}
-
-/** "Chicken, , Grains " -> ["Chicken", "Grains"] — blanks dropped, not stored. */
-function splitList(value: string): string[] {
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function toInput(pet?: Pet): PetInput {
-  if (pet) {
-    const { id: _id, ownerId: _ownerId, ...input } = pet;
-    return input;
-  }
-
-  return {
-    name: "",
-    species: "dog",
-    breed: "",
-    sex: "female",
-    dob: "",
-    weightLbs: 0,
-    photoUrl: "",
-    vaccinated: false,
-    allergies: [],
-    medications: [],
-    behaviorNotes: "",
-    feedingInstructions: "",
-    vetContact: { name: "", phone: "" },
-  };
 }

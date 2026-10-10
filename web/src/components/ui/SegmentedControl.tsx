@@ -44,7 +44,9 @@ export function SegmentedControl<T extends string>({
       role="tablist"
       aria-label={label}
       className={cn(
-        "inline-flex rounded-full border border-mist bg-white p-0.5",
+        // `isolate` makes this the stacking context, so the selected pill's -z-10
+        // lands above this background rather than behind it.
+        "isolate inline-flex rounded-full border border-mist bg-white p-0.5",
         className
       )}
     >

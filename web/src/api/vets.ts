@@ -84,7 +84,15 @@ export interface VetProfilePatch {
   /** USD. The column is integer cents; the crossing happens server-side. */
   consultFee?: number;
   emergencyAvailable?: boolean;
-  clinic?: { name: string; city: string; state: string; lat: number; lng: number };
+  /** `phone` omitted leaves the stored number alone. */
+  clinic?: {
+    name: string;
+    city: string;
+    state: string;
+    lat: number;
+    lng: number;
+    phone?: string;
+  };
   availability?: AvailabilityDay[];
 }
 

@@ -1,90 +1,50 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
-import type { CartQuote, Pet } from "@/types";
+import { Link, useNavigate } from "react-router";
+import {
+  MAX_PER_LINE,
+  useCart,
+  cartToLines,
+  displaySubtotalCents,
+} from "@/store/cart";
 import { quote as quoteCart } from "@/api/orders";
 import { listMyPets } from "@/api/pets";
+import { useAsync } from "@/hooks/useAsync";
+import { useSession } from "@/store/session";
 import { EmptyState } from "@/components/EmptyState";
-import { ButtonLink } from "@/components/ui/Button";
-import { Field, Select } from "@/components/ui/Field";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { AlertIcon, BagIcon, TrashIcon } from "@/components/ui/icons";
-import { useSession } from "@/store/session";
-import { MAX_PER_LINE, cartToLines, displaySubtotalCents, useCart } from "@/store/cart";
-import {
-  DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS,
-  shippingFor,
-  taxFor,
-} from "@/lib/pricing";
+import { DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS } from "@/lib/pricing";
 import { cn, formatCents } from "@/lib/utils";
 
 /**
- * The cart.
+ * The cart — the reference's `app/store/cart/page.tsx`.
  *
- * ── Two sets of numbers, and which one wins ──
- *
- * Signed out, the cart shows an **estimate** from its own snapshot and
- * `lib/pricing.ts`. Signed in, it asks the server for a **quote**, which
- * re-reads every product and applies the real threshold, stock, the
- * prescription gate and the allergen check — so a blocked line is visible
- * here, against the line, rather than as a surprise at the payment step. When
- * there is a quote, every figure on this page is the quote's.
- *
- * ── Why the pet is chosen here ──
- *
- * The pet decides two things only the server can answer: whether an Rx-only
- * line is authorised, and whether anything in the basket contains something
- * the animal reacts to. Choosing it here means both answers are on screen
- * before checkout.
+ * Signed in, every figure is the server's quote, which re-reads each product
+ * and applies the real threshold, stock, the prescription gate (refills spent
+ * one per unit) and the allergen check. The one addition is that last one
+ * shown against its line: the quote's `allergenWarnings` are the only allergen
+ * matcher in the system (REQUIREMENTS.md S18), so the cart is where a clash
+ * surfaces. Signed out, the figures are an estimate from the cart's snapshot.
  */
 export default function CartPage() {
-  const { lines, setQuantity, remove, petId, setPet, hasHydrated } = useCart();
+  const { lines, setQuantity, remove, petId, setPet, clear, hasHydrated } = useCart();
   const { currentUser } = useSession();
+  const navigate = useNavigate();
 
-  const [pets, setPets] = useState<Pet[]>([]);
+  const { data: pets } = useAsync(
+    () => (currentUser ? listMyPets() : Promise.resolve([])),
+    [currentUser?.id]
+  );
 
-  /**
-   * The last answer from the server, and which basket it answered. "Quoting"
-   * is derived — the basket on screen is not the one the answer is for — so
-   * nothing has to be set synchronously when the basket changes.
-   */
-  const [result, setResult] = useState<{
-    key: string;
-    quote: CartQuote | null;
-    error: string | null;
-  }>({ key: "", quote: null, error: null });
-
-  const basketKey = JSON.stringify([cartToLines(lines), petId, currentUser?.id ?? null]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    listMyPets().then(setPets).catch(() => setPets([]));
-  }, [currentUser]);
-
-  // Re-quote whenever the basket or the pet changes. The `live` flag stops a
-  // slow quote for the old basket overwriting a fast one for the new.
-  useEffect(() => {
-    if (!currentUser || lines.length === 0) return;
-
-    let live = true;
-    quoteCart(cartToLines(lines), petId)
-      .then((quote) => live && setResult({ key: basketKey, quote, error: null }))
-      .catch((e: Error) => live && setResult((r) => ({ key: basketKey, quote: r.quote, error: e.message })));
-
-    return () => {
-      live = false;
-    };
-    // basketKey is derived from exactly these.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, petId, currentUser]);
-
-  const quoting = !!currentUser && lines.length > 0 && result.key !== basketKey;
-  const quoteError = result.key === basketKey ? result.error : null;
-
-  // A pet the customer no longer owns (or a different account's leftover
-  // selection) would be refused by the server with a 403; drop it instead.
-  useEffect(() => {
-    if (petId && pets.length > 0 && !pets.some((p) => p.id === petId)) setPet(null);
-  }, [petId, pets, setPet]);
+  // The server's arithmetic, not ours — including the prescription check, so a
+  // blocked item is visible here rather than at the payment step.
+  const { data: quote, loading: quoting } = useAsync(
+    () =>
+      currentUser && lines.length > 0
+        ? quoteCart(cartToLines(lines), petId).catch(() => null)
+        : Promise.resolve(null),
+    [JSON.stringify(cartToLines(lines)), petId, currentUser?.id]
+  );
 
   if (!hasHydrated) {
     return (
@@ -101,7 +61,7 @@ export default function CartPage() {
         <EmptyState
           icon={<BagIcon width={40} height={40} />}
           title="Your cart is empty"
-          description="Food, treats, supplements, and the therapeutic diets your vet prescribed."
+          description="Food, treats, supplements and the therapeutic diets your vet prescribed."
           actionLabel="Browse the store"
           actionHref="/store"
         />
@@ -109,49 +69,26 @@ export default function CartPage() {
     );
   }
 
-  // While a new quote is in flight the previous one stays on screen, dimmed —
-  // better than the totals blinking to an estimate and back. Signed out, there
-  // is no quote at all.
-  const quote = currentUser ? result.quote : null;
-
-  const estimate = displaySubtotalCents(lines);
-  const subtotal = quote?.subtotalCents ?? estimate;
-  const shipping = quote?.shippingCents ?? shippingFor(estimate, DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS);
-  const tax = quote?.taxCents ?? taxFor(estimate);
-  const total = quote?.totalCents ?? estimate + shipping + tax;
-
-  const problemFor = (productId: string) => quote?.problems.find((p) => p.productId === productId);
+  const displaySubtotal = displaySubtotalCents(lines);
+  // A member is always already there, so never nag them to spend more. The
+  // quote is the authority on whether membership applied — the client does not
+  // decide, it reports.
+  const toFreeShipping = quote
+    ? quote.amountToFreeShippingCents
+    : Math.max(0, DEFAULT_FREE_SHIPPING_THRESHOLD_CENTS - displaySubtotal);
+  const problemFor = (productId: string) =>
+    quote?.problems.find((p) => p.productId === productId);
   const warningFor = (productId: string) =>
     quote?.allergenWarnings.find((w) => w.productId === productId);
-
+  const petName = (pets ?? []).find((p) => p.id === petId)?.name;
   const blocked = (quote?.problems.length ?? 0) > 0;
-  const hasRx = lines.some((l) => l.requiresPrescription);
-  const petName = pets.find((p) => p.id === petId)?.name;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Your cart</h1>
 
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_340px]">
         <div className="space-y-3">
-          {currentUser && pets.length > 0 && (
-            <Field
-              label="Shopping for"
-              hint={hasRx ? "needed for prescription items" : "for allergy warnings"}
-              htmlFor="pet"
-              className="rounded-2xl border border-mist bg-white p-4"
-            >
-              <Select id="pet" value={petId ?? ""} onChange={(e) => setPet(e.target.value || null)}>
-                <option value="">No particular pet</option>
-                {pets.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-
           {lines.map((line) => {
             const problem = problemFor(line.productId);
             const warning = warningFor(line.productId);
@@ -160,14 +97,22 @@ export default function CartPage() {
                 key={line.productId}
                 className={cn(
                   "flex gap-4 rounded-2xl border bg-white p-4",
-                  problem ? "border-leash/40" : "border-mist",
+                  problem ? "border-leash/40" : "border-mist"
                 )}
               >
                 <Link
                   to={`/store/${line.slug}`}
                   className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-fog"
                 >
-                  <img src={line.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img
+                    src={line.imageUrl}
+                    alt=""
+                    width={80}
+                    height={80}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
                 </Link>
 
                 <div className="min-w-0 flex-1">
@@ -187,29 +132,20 @@ export default function CartPage() {
                   {problem && (
                     <p className="mt-2 flex items-start gap-1.5 text-xs text-[#a83c27]">
                       <AlertIcon width={13} height={13} className="mt-px shrink-0" />
-                      <span>
-                        {problem.message}
-                        {problem.code === "prescription_required" && (
-                          <>
-                            {" "}
-                            {petId ? (
-                              <Link to="/vets" className="font-medium underline">
-                                Book a vet
-                              </Link>
-                            ) : (
-                              "Choose the pet it's for above."
-                            )}
-                          </>
-                        )}
-                      </span>
+                      {problem.message}
+                      {problem.code === "prescription_required" && (
+                        <Link to="/vets" className="ml-1 font-medium underline">
+                          Book a vet
+                        </Link>
+                      )}
                     </p>
                   )}
 
                   {warning && (
-                    <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-marigold/10 px-2 py-1.5 text-xs text-[#7a5410]">
+                    <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-leash/8 px-2 py-1.5 text-[11px] text-[#a83c27]">
                       <AlertIcon width={13} height={13} className="mt-px shrink-0" />
-                      Contains {warning.allergens.join(", ").toLowerCase()} — {petName ?? "your pet"}{" "}
-                      is listed as allergic.
+                      Contains {warning.allergens.join(", ").toLowerCase()}, which{" "}
+                      {petName ?? "your pet"} reacts to.
                     </p>
                   )}
 
@@ -220,7 +156,9 @@ export default function CartPage() {
                     <select
                       id={`qty-${line.productId}`}
                       value={line.quantity}
-                      onChange={(e) => setQuantity(line.productId, Number(e.target.value))}
+                      onChange={(e) =>
+                        setQuantity(line.productId, Number(e.target.value))
+                      }
                       className="rounded-lg border border-mist bg-white px-2.5 py-1.5 text-sm"
                     >
                       {Array.from({ length: MAX_PER_LINE }, (_, i) => i + 1).map((n) => (
@@ -230,77 +168,138 @@ export default function CartPage() {
                       ))}
                     </select>
                     <button
-                      type="button"
                       onClick={() => remove(line.productId)}
-                      className="flex items-center gap-1 text-xs text-charcoal/60 hover:text-leash"
+                      className="flex items-center gap-1 text-xs text-charcoal/55 transition-colors hover:text-leash"
                     >
-                      <TrashIcon width={13} height={13} />
+                      <TrashIcon width={14} height={14} />
                       Remove
                     </button>
                   </div>
                 </div>
 
-                <p className="shrink-0 font-mono text-sm font-medium text-ink">
+                <p className="font-mono text-sm font-semibold text-ink">
                   {formatCents(line.unitPriceCents * line.quantity)}
                 </p>
               </div>
             );
           })}
+
+          <button
+            onClick={clear}
+            className="text-xs text-charcoal/55 underline-offset-2 hover:text-ink hover:underline"
+          >
+            Empty cart
+          </button>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-mist bg-white p-6 lg:sticky lg:top-24">
-          <h2 className="text-base font-semibold text-ink">Summary</h2>
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-2xl border border-mist bg-white p-6">
+            <h2 className="text-sm font-semibold text-ink">Summary</h2>
 
-          <dl className={cn("mt-4 space-y-2 text-sm", quoting && "opacity-60")}>
-            <Row label="Subtotal" value={formatCents(subtotal)} />
-            <Row label="Shipping" value={shipping === 0 ? "Free" : formatCents(shipping)} />
-            <Row label="Tax" value={formatCents(tax)} />
-            <div className="flex justify-between border-t border-mist pt-3 text-base font-semibold text-ink">
-              <dt>Total</dt>
-              <dd className="font-mono">{formatCents(total)}</dd>
-            </div>
-          </dl>
+            {/* Choosing a pet is what unlocks their prescription items. */}
+            {(pets ?? []).length > 0 && (
+              <div className="mt-4 border-b border-mist pb-4">
+                <label
+                  htmlFor="cart-pet"
+                  className="mb-1.5 block text-sm font-medium text-ink"
+                >
+                  This order is for
+                </label>
+                <select
+                  id="cart-pet"
+                  value={petId ?? ""}
+                  onChange={(e) => setPet(e.target.value || null)}
+                  className="w-full rounded-xl border border-mist bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">Not specified</option>
+                  {(pets ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-charcoal/55">
+                  Required for prescription items.
+                </p>
+              </div>
+            )}
 
-          {quote && quote.amountToFreeShippingCents > 0 && (
-            <p className="mt-3 text-xs text-charcoal/65">
-              Spend {formatCents(quote.amountToFreeShippingCents)} more for free shipping.
-            </p>
-          )}
+            <dl className="mt-4 space-y-2 text-sm">
+              <Row
+                label="Subtotal"
+                value={formatCents(quote?.subtotalCents ?? displaySubtotal)}
+              />
+              <Row
+                label="Shipping"
+                value={
+                  quote
+                    ? quote.shippingCents === 0
+                      ? "Free"
+                      : formatCents(quote.shippingCents)
+                    : "—"
+                }
+              />
+              <Row label="Tax" value={quote ? formatCents(quote.taxCents) : "—"} />
+              <div className="flex justify-between border-t border-mist pt-3 text-base font-semibold text-ink">
+                <dt>Total</dt>
+                <dd className="font-mono">
+                  {quote ? formatCents(quote.totalCents) : "—"}
+                </dd>
+              </div>
+            </dl>
 
-          {!quote && (
-            <p className="mt-3 text-xs text-charcoal/55">
-              {currentUser
-                ? quoteError ?? "Checking prices…"
-                : "An estimate. Sign in to see your final price, including prescription items."}
-            </p>
-          )}
+            {quote?.shippingWaivedByMembership ? (
+              <p className="mt-3 rounded-xl bg-[#2F6F5E]/10 px-3 py-2 text-xs text-[#215144]">
+                Free delivery, included with Leash Plus — saving you{" "}
+                {formatCents(quote.membershipSavingsCents)} on this order.
+              </p>
+            ) : (
+              toFreeShipping > 0 && (
+                <p className="mt-3 rounded-xl bg-fog px-3 py-2 text-xs text-charcoal/70">
+                  Add {formatCents(toFreeShipping)} more for free shipping, or{" "}
+                  <Link to="/plus" className="underline hover:text-ink">
+                    get it on everything with Leash Plus
+                  </Link>
+                  .
+                </p>
+              )
+            )}
 
-          <div className="mt-6">
-            {currentUser ? (
+            {!currentUser ? (
+              <ButtonLink
+                to={`/login?callbackUrl=${encodeURIComponent("/store/cart")}`}
+                variant="cta"
+                size="lg"
+                className="mt-5 w-full"
+              >
+                Log in to check out
+              </ButtonLink>
+            ) : (
               <ButtonLink
                 to="/store/checkout"
                 variant="cta"
-                className={cn("w-full justify-center", (blocked || !quote) && "pointer-events-none opacity-50")}
-                aria-disabled={blocked || !quote}
+                size="lg"
+                className={cn("mt-5 w-full", (blocked || quoting) && "pointer-events-none opacity-50")}
+                aria-disabled={blocked || quoting}
               >
-                Checkout
-              </ButtonLink>
-            ) : (
-              <ButtonLink to={`/login?callbackUrl=${encodeURIComponent("/store/cart")}`} variant="cta" className="w-full justify-center">
-                Sign in to check out
+                {quoting ? "Checking availability…" : "Check out"}
               </ButtonLink>
             )}
+
+            {blocked && (
+              <p className="mt-3 text-center text-xs text-[#a83c27]">
+                Sort out the flagged items above to continue.
+              </p>
+            )}
+
+            <Button
+              variant="ghost"
+              className="mt-2 w-full"
+              onClick={() => navigate(-1)}
+            >
+              Keep shopping
+            </Button>
           </div>
-
-          {blocked && (
-            <p className="mt-3 text-xs text-[#a83c27]">
-              Sort out the items marked above before checking out.
-            </p>
-          )}
-
-          <ButtonLink to="/store" variant="ghost" size="sm" className="mt-3 w-full justify-center">
-            Keep shopping
-          </ButtonLink>
         </aside>
       </div>
     </div>
@@ -309,9 +308,9 @@ export default function CartPage() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between text-charcoal/80">
-      <dt>{label}</dt>
-      <dd className="font-mono">{value}</dd>
+    <div className="flex justify-between">
+      <dt className="text-charcoal/65">{label}</dt>
+      <dd className="font-mono text-ink">{value}</dd>
     </div>
   );
 }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="Product packaging">
+  <rect width="400" height="400" fill="#fbe6e1"/>
+  <circle cx="200" cy="212" r="150" fill="#ffffff" opacity="0.55"/>
+  
+        <rect x="176" y="92" width="48" height="34" rx="6" fill="#e85c41" opacity="0.7"/>
+        <path d="M150 126h100a14 14 0 0 1 14 14v152a18 18 0 0 1-18 18H154a18 18 0 0 1-18-18V140a14 14 0 0 1 14-14z" fill="#e85c41"/>
+        <rect x="156" y="182" width="88" height="62" rx="8" fill="#ffffff" opacity="0.85"/>
+  <!-- Leash ID-tag mark, matching the site logo -->
+  <circle cx="340" cy="60" r="18" fill="#e85c41"/>
+  <circle cx="340" cy="60" r="7" fill="none" stroke="#f2a93b" stroke-width="3"/>
+</svg>

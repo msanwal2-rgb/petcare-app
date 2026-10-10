@@ -1,6 +1,7 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **M6**, 2026-10-10.
+For whoever picks this up next. Written at the end of the **UI parity pass**,
+2026-10-10.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -17,15 +18,16 @@ not repeat the permanent docs — read them in this order:
 
 ## 1. Where the history is
 
-M0–M4 are committed and pushed; `main_newDev` and `origin/main_newDev` are both
-at `c585829`. **M5, the landing page and M6 are complete and verified but not
-committed.** That is three bodies of work in one working tree — worth
-committing as three commits (`git add -p` by path splits cleanly: M5 is the vet
-and appointment files, the landing page is `web/src/pages/HomePage.tsx` plus
-`components/{HeroSection,SearchBar,FeaturedCaretakers,CaretakerCard,RatingStars,
-ServiceTypeChip}.tsx` and `lib/cities.ts`, and M6 is everything store-shaped).
+M0–M6 and the landing page are committed. `main_newDev` is at `6f8608a`
+("CREATED THE ALL STRUCTRE AND IMPLEMENTATION TILL M6 MILESTONE"), which holds
+M5, the landing page and M6 together. **The UI parity pass is not committed** —
+it is the working tree: the ported screens under `web/`, the docs, and the
+follow-up from the owner's three decisions — `db/changes/003_vet_clinic_phone.sql`
+(with `petapp.sql` and the dev seed), the clinic phone through `Leash.Core`, and
+a public `GET /users?ids=` in `UsersController`, each with tests.
 
 ```
+6f8608a  M5 + landing page + M6
 c585829  m4 completed
 41f57ef  m3 completed with refill left and pet delete not possible if have history
 ce34802  m2 completed
@@ -40,31 +42,40 @@ Never pushed. Delete them when the old hashes no longer need to be recoverable.
 
 ## 2. Where the build actually is
 
-**7 of 11 modules, plus the landing page.** M0–M6 are done and verified. The
-week-4 checkpoint and first deploy were **skipped by the owner's decision**
-(STATUS §5) — see §5 below for what that leaves.
+**7 of 11 modules, the landing page, and the UI parity pass.** M0–M6 are done
+and verified, and every screen they built is now a port of the reference
+screen. The week-4 checkpoint and first deploy were **skipped by the owner's
+decision** (STATUS §5) — see §5 below for what that leaves.
 
 ```bash
-cd API && dotnet test        # 531 passing, ~3–4 min
+cd API && dotnet test        # 539 passing, ~3 min
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
 
-**All three were green at the time of writing.** `psql` and `pg_dump` are at
-`C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
-
-No schema change in M5 or M6 — every column both needed already existed.
+**All three were green at the end of the parity pass**, after its follow-up
+added the first schema change since M4: `db/changes/003_vet_clinic_phone.sql`,
+applied to `petapp_dev` with the seed's clinic numbers. `psql` and `pg_dump`
+are at `C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
 
 ---
 
-## 3. What to do next — the UI parity pass, then M8, then M7
+## 3. What to do next — M8, then M7
 
-**Changed 2026-10-10, after this file was first written:** the owner put a UI
-parity pass first. Most M1–M6 screens were written fresh rather than ported from
-the reference, so the app works but looks like a different product — the
-dashboard most of all. `BUILD_PLAN.md` §0 ("The UI parity pass") has the rules
-and a ten-row inventory, starting with the role-based dashboard. Do that first;
-the M7 notes below still apply once it is done.
+`NEXT_PROMPT.md` is the brief. The rule that changes from here on:
+
+> **Every module ports the reference screens first and adapts them to the API
+> second.** Copy the reference component, apply ARCHITECTURE.md §6, swap the
+> `lib/api/*` calls for `web/src/api/*`. If it looks different afterwards,
+> the port is not finished. The parity pass exists because M1–M6 did the
+> opposite.
+
+**M8 first** (`NotificationBell`, `GET /notifications`), because orders
+generate notifications and the hook is one place: `OrderLifecycle.MoveAsync`.
+Two §12 defects are M8's: the notification email interpolates user text into
+HTML unescaped, and the email is fired without `await`. The support page
+already promises "a notification when it ships, when it is out for delivery,
+and when it arrives" — M8 makes that true.
 
 ### Then M7, payments and membership
 
@@ -73,10 +84,6 @@ highest-risk days of the project"* and says to port `tests/webhooks.test.ts` and
 `tests/stripe-signature.test.ts` **before** writing the implementation. Add to
 that list the second half of `tests/orders.test.ts` (lines 434–868) — M6 ported
 only the first half, deliberately.
-
-The plan puts **M8 (notifications) first in week 7**, because orders generate
-notifications. That order still makes sense: M8 is small, and the one place it
-hooks into orders is `OrderLifecycle.MoveAsync`.
 
 What M6 left for M7, all at the safe default and all marked in code:
 
@@ -89,6 +96,23 @@ What M6 left for M7, all at the safe default and all marked in code:
 | Priority booking (C13) | `Services/LeadTime.cs`, `member: false` at both call sites | Ask whether the caller holds `priority_booking` |
 | The payment state machine | — | The reference's `PAYMENT_TRANSITIONS`; M6 writes only `unpaid`, `paid`, `refunded` |
 
+What the parity pass left for M7 in `web/`:
+
+| Where | What M7 does |
+|---|---|
+| `pages/CheckoutPage.tsx` | The reference's third step ("Pay") with `PaymentForm`. The `STEPS` label is already there; the step is skipped while the demo provider settles synchronously |
+| `pages/OrderDetailPage.tsx` | `?paid=1` already calls `syncPayment` on arrival, as the reference did after Stripe's redirect. The "Retry payment" button for `pending_payment` becomes "finish paying" |
+| `/plus`, `/account/membership` | `/plus` is a named placeholder (the cart links to it); `/account/membership` is not registered yet |
+| `components/booking/BookingNewClient.tsx` | The confirm step shows the reference's mock card. Booking payments are not in §9's scope as written — check before wiring |
+
+### Owner decisions still open
+
+- **One refill per unit** (STATUS §4) — as before.
+- ~~Three API gaps from the parity pass~~ — **decided 2026-10-10** (STATUS §4):
+  the clinic phone is in (`db/changes/003`, so M8's script is `004`), allergen
+  flags on store cards are not, and `GET /users?ids=` is public. The pet page
+  keeps the owner's Remove link.
+
 ---
 
 ## 4. Decisions that are settled — do not re-open them
@@ -99,7 +123,7 @@ What M6 left for M7, all at the safe default and all marked in code:
 |---|---|
 | **`refillsLeft`**: 0 = exhausted, null = no limit, **spent at checkout** | Implemented in M6. **One refill per unit is pending the owner's confirmation** — see STATUS §4 |
 | **Deleting a pet with clinical history is a 409** | Not a bug. Soft delete is a later pass |
-| **No booking cancellation cutoff** | §11.1 as written. Revisit in M7 with penalties and refunds |
+| **No booking cancellation cutoff, no penalty** | §11.1 as written. C14 decided 2026-10-10: only a warning when cancelling within 12 hours of the start — not built yet |
 | **A cookie copied before sign-out keeps working** | Deliberate. Do **not** bump the watermark on logout |
 | **A vet review is one-directional** | The owner reviews the vet. `ReviewKinds` exists for exactly this |
 | **Completing a visit requires a summary** | There is no status button for `completed` |
@@ -132,7 +156,28 @@ None of these is hard. All of them are cheaper now than in week 8.
 
 ## 6. Traps in this codebase that cost real time
 
-`ARCHITECTURE.md` §9 has the standing list (now ten items). New in M6:
+`ARCHITECTURE.md` §9 has the standing list. New in the parity pass:
+
+- **The reference serves files from `public/`.** Product art lives at
+  `/products/*.svg`; `web/public/products/` was missing until this pass, so
+  every store image had been broken since M6. Anything else a ported screen
+  references by absolute path needs the same copy.
+- **Many root files are CRLF.** Multi-line find-and-replace that assumes `\n`
+  silently matches nothing. Normalise, edit, and write back with the original
+  ending.
+- **Next.js scrolled to the top on navigation; React Router does not** unless
+  `ScrollRestoration` is mounted (it is now, in `App.tsx`).
+- **`GET /users?ids=` is public now** (the owner's call); the unfiltered
+  `GET /users` is not — it still needs a session and a Development host.
+- **A new column on a positionally-seeded table goes at the end.** The dev seed
+  is `INSERT … VALUES (…)` with no column list, so a column appended by a change
+  script needs its value appended to every seed row (as 003 did) — or it takes
+  the default.
+- **Reference shapes are flat, ours are nested.** `caretaker.id` is
+  `caretaker.profile.id`, `vet.userId` is `vet.user.id`. A port that compiles
+  can still be wrong where the reference used a field both shapes share.
+
+New in M6:
 
 - **Event ordering needs a tie-break that is not the id.** Ids are random
   UUIDs. Anything that writes several rows with one timestamp — the fulfilment
@@ -155,7 +200,20 @@ None of these is hard. All of them are cheaper now than in week 8.
 
 ---
 
-## 7. What was checked by hand over HTTP
+## 7. What was checked by hand
+
+- **Parity pass:** a headless Chrome walk (Playwright from the root
+  `node_modules`, the system Chrome) of every screen as signed out, maya.chen,
+  liam.novak and naomi.ruiz — no console errors, no failed API calls except the
+  expected signed-out `401 /me`; every retired URL redirected. The product page
+  checked against the quote: Biscuit refused the Rx diet, Luna's prescription
+  recognised with expiry and refills, quantity 4 against 3 refills refused, and
+  "Contains chicken, which Luna reacts to". **Nothing was mutated** — no
+  booking accepted, no visit completed, no order placed — so the
+  summary-completes-the-visit path is covered by the API suite, not by a click.
+
+Over HTTP, earlier:
+
 
 Because neither M5 nor M6 has an endpoint suite yet (STATUS §4), each was walked
 with curl against a running API. Recorded so the endpoint tests know what to

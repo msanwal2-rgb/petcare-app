@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-10**, end of M6.
+Last updated: **2026-10-10**, end of the UI parity pass.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -24,9 +24,9 @@ Last updated: **2026-10-10**, end of M6.
 | — | Week-4 checkpoint & first deploy | ⏭ **Skipped** by the owner, 2026-10-09. See §5 and §4 |
 | — | Landing page | ✅ Done — the reference's `app/page.tsx`, ported |
 | **M6** | Store & orders | ✅ Done — 10 endpoints, 116 tests, a fulfilment job |
-| — | **UI parity pass** | ⬜ **Next.** Make every built screen match the reference app — `BUILD_PLAN.md` §0 has the inventory. Owner's decision, 2026-10-10 |
+| — | **UI parity pass** | ✅ Done — every M1–M6 screen ported from the reference; 34 components added. See §3-0 |
+| M8 | Notifications | ⬜ **Next** |
 | M7 | Payments | ⬜ (after M8) |
-| M8 | Notifications | ⬜ |
 | M9 | Admin console | ⬜ |
 | M10 | Adoption | ⬜ Stretch |
 
@@ -53,19 +53,20 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, proxies /api
 
 # check it
-cd API && dotnet test        # 531 passing, ~3–4m
+cd API && dotnet test        # 539 passing, ~3m
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
 
 Demo logins: any seeded marketplace account with `leashdemo123` —
-`maya.chen@example.com` (owner), `elena.petrova@example.com` (caretaker),
-`naomi.ruiz@example.com` (vet). Staff accounts use `STAFF_PASSWORD`, not the
+`maya.chen@example.com` (owner), `liam.novak@example.com` (caretaker),
+`naomi.ruiz@example.com` (vet). In development the "Dev" switcher, bottom left,
+changes account in one click. Staff accounts use `STAFF_PASSWORD`, not the
 demo password.
 
 ### Database
 
-31 tables. 29 from the original schema (32 minus the three assistant tables),
+31 tables (three change scripts since the bootstrap). 29 from the original schema (32 minus the three assistant tables),
 plus `schema_version` and `refresh_tokens`.
 
 | Script | What |
@@ -75,6 +76,7 @@ plus `schema_version` and `refresh_tokens`.
 | `db/_bootstrap/002_cents_and_timestamps.sql` | Historical: money → integer cents, ISO text → `timestamptz` |
 | `db/changes/001_sessions_valid_from_timestamptz.sql` | `users."sessionsValidFrom"` text → `timestamptz`. The bootstrap regex missed it (ends in "From", not "At") |
 | `db/changes/002_refresh_tokens.sql` | The `refresh_tokens` table for mobile auth |
+| `db/changes/003_vet_clinic_phone.sql` | `vet_profiles."clinicPhone"` — the practice's public line. Empty by default, deliberately not backfilled from `users.phone` |
 | `db/reference/R001_*.sql` | Plans, settings, catalogue — every environment |
 | `db/devseed/D001_*.sql` | 25 users, 12 pets, bookings, orders — **dev/test only** |
 
@@ -161,44 +163,43 @@ Cross-cutting, settled and inherited by every later module:
 
 ### web
 
+The route tree is the reference project's `app/` directory, path for path
+(`web/src/routes.tsx`). Every screen below is a port of the reference screen.
+
 ```
-/                    home (M1 form; the real landing page needs M4/M6)
+/                    the landing page — hero search (city picker), pillars, featured caretakers
 /login  /signup  /forgot-password  /reset-password  /verify-email
-/onboarding          role selection            [guarded]
-/dashboard           the M1 landing place      [guarded]
-/dashboard/pets      the owner's pets          [guarded]
-/dashboard/pets/new  add a pet                 [guarded]
-/dashboard/pets/:id  profile, health timeline, recommendations  [guarded]
-/search              caretaker search, cursor-paginated
-/caretaker/:id       profile, rates, availability, reviews
-/booking/new         request a booking         [guarded]
-/booking/:id         status, messages, reviews [guarded]
-/dashboard/bookings  the owner's bookings      [guarded]
-/dashboard/caretaker-profile   listing, rate card, request queue  [guarded]
-/vets                vet search, cursor-paginated
-/vet/:id             clinic profile, availability, reviews
-/appointment/new     request a visit           [guarded]
-/appointment/:id     status, visit summary, review  [guarded]
-/dashboard/appointments        the owner's visits  [guarded]
-/dashboard/vet-profile         listing, fee, schedule  [guarded]
-/store               the shelves, cursor-paginated
-/store/:slug         one product
-/store/cart          the basket, priced by the server's quote when signed in
-/store/checkout      address, final quote, place order   [guarded]
-/store/orders        the customer's orders              [guarded]
-/store/orders/:id    tracking, timeline, cancel         [guarded]
-/dashboard/orders    the ops fulfilment queue           [guarded; ops in the API]
-/adopt                                         named placeholder
+/onboarding          role selection                       [guarded]
+/dashboard           one role-aware page: owner · caretaker · vet ("Viewing as")  [guarded]
+/dashboard/pets/new  add a pet                            [guarded]
+/dashboard/pets/:id  Details / Health record tabs          [guarded]
+/dashboard/caretaker-profile   the caretaker's listing    [guarded]
+/dashboard/vet-profile         the clinic's listing       [guarded]
+/dashboard/orders    the ops fulfilment queue             [guarded; ops in the API]
+/search              caretaker search, filter rail, cursor "Show more"
+/caretaker/:id       profile hero, rates, availability, reviews
+/booking/new         three-step request                   [guarded]
+/booking/:id         status, parties, thread, reviews     [guarded]
+/vets                vet search
+/vets/:id            clinic profile
+/vets/book           three-step visit request             [guarded]
+/appointments/:id    status, patient, visit summary, review  [guarded]
+/store  /store/:slug  /store/cart
+/store/checkout  /store/orders  /store/orders/:id         [guarded]
+/pet-health  /support                                     content pages
+/adopt  /plus  /dashboard/admin/*                         named placeholders (M10, M7, M9)
 ```
 
-`/` is the real landing page now — hero with a working search, the three
-pillars, featured caretakers from the live search, trust, CTA.
+Retired URLs redirect, carrying their query string: `/dashboard/pets`,
+`/dashboard/bookings`, `/dashboard/appointments` → `/dashboard`; `/vet/:id` →
+`/vets/:id`; `/appointment/new` → `/vets/book`; `/appointment/:id` →
+`/appointments/:id` (`components/Moved.tsx`).
 
 Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 531 passing
+### Tests — 539 passing
 
 | File | Covers |
 |---|---|
@@ -219,6 +220,53 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-0. The UI parity pass — what landed
+
+Every screen M1–M6 built is now a port of the reference screen rather than a
+fresh design: 34 reference components added to `web/` (`components/dashboard/*`,
+the `ui/` kit — `Panel`, `ProfileHero`, `ResultsGrid`, `SelectFilter`,
+`ToggleChips` — `PetCard`, `ReviewCard`, the three status badges,
+`AvailabilityCalendar`, `AuthRequired`, `search/`, `booking/`, `reviews/`, eight
+`vet/` components, five `store/` components, `DevAccountSwitcher`) and every page
+rewritten from its `app/**/page.tsx`. **No API change in the pass itself; its follow-up (the owner's three decisions, §4) added a column and opened one endpoint — 539 tests.**
+Walked headlessly as owner, caretaker, vet and signed out: no console errors and
+no failed API calls beyond the expected signed-out `401 /me`.
+
+### Differences from the reference that remain — all deliberate
+
+| Screen | Difference | Why |
+|---|---|---|
+| Hero, caretaker and vet search | Location is a city picker; no "end date" box | The reference's free-text location and end date filtered nothing (rule 3) |
+| Search, vets, store, orders | "Show more" instead of page numbers or full lists; counts read "12+" | Every list is a cursor page and the API never counts the set |
+| Search, vets, store | Filters live in the URL | So `/pet-health` → `/vets?emergencyOnly=true` and "Shop everything for Bruno" land correctly |
+| Appointment | No "Complete visit" button; the visit-summary form completes the visit | STATUS §5 |
+| Visit summary form | Offers `allergy` | V9 |
+| Product page | Rx gate and allergen warning come from `POST /orders/quote` for that pet and quantity | P8/S18 — the reference duplicated both rules in the browser. A side effect: a quantity beyond the refills is refused there too |
+| Store grid | No per-card allergen flag | Only a client matcher could produce it (S18). The product page and cart show the server's finding |
+| Cart | The quote's allergen warning under each line | Rule 3 |
+| Booking and appointment detail | Either party can cancel through `in_progress` | §11.1/§11.2 as settled; the reference stopped earlier and contradicted its own support page |
+| Booking thread | Explicit mark-as-read after the thread renders | C10 |
+| Pet page | Non-owners see only the health record; the owner has "Remove {name}" under the form | The reference showed vets an edit form the server refuses; delete is the only UI for the 409 rule |
+| Checkout, order detail | No Stripe step; a 502 after the order exists turns the button into "Retry payment" | M7; the API's documented failure mode |
+| Ops queue | No refund button | As in the reference — refunds are the M9 admin console |
+| Vet profile | The emergency panel's number is the clinic's own line (`clinic.phone`), not the vet's personal phone; the vet's profile form has a "Clinic phone" field the reference lacked | Owner's decision (§4) — the reference leaked the whole user record |
+| Caretaker and vet profiles | Signed out, review bylines show the author's name | `GET /users?ids=` is now public (§4); in the reference it needed a session too |
+| Pet page | The owner's "Remove" link stays | Owner's decision, 2026-10-10 |
+| Shelter dashboard | A placeholder | M10 |
+
+### Fixed on the way
+
+- **Product images were broken throughout the store** since M6: the reference
+  serves them from `public/products/`, which was never copied. Now in
+  `web/public/products/` (25 SVGs).
+- **The page never scrolled to the top on navigation**, and `#hash` links did
+  nothing. `ScrollRestoration` in the shell.
+- **The selected segment of `SegmentedControl` was invisible** (white on white):
+  a `-z-10` pill inside a non-stacking button. Also in the reference. `isolate`
+  on the container — this fixes the "Viewing as" toggle too.
 
 ---
 
@@ -643,7 +691,9 @@ because §4 requires the set ported in full, together, and reviewed once.
 | ⚠ | **Nothing builds the SPA into `wwwroot`.** `Program.cs` calls `UseStaticFiles()` and `MapFallbackToFile("index.html")`, and `ARCHITECTURE.md` §6 says production serves the SPA from the API's `wwwroot` — but no `.csproj` target, script or pipeline step runs `npm run build` or copies `web/dist` there. A deploy done today ships an API that answers `/api/v1/*` and returns 404 for every page. Found while wiring M5's routes; see §6 of `HANDOFF.md` |
 | ⚠ | **The test project pulls vulnerable transitive packages.** `Azure.Identity` 1.3.0 (one high, two moderate) and `System.Drawing.Common` 5.0.0 (one critical) — nine `NU19xx` warnings on every build. Test-only and not shipped, but any CI with a vulnerability gate fails on day one, which is a bad way to discover them |
 | ⚠ | **`verify.sh` cannot run in CI as written.** It diffs `petapp.sql` against `petapp_at_last_release.sql` + `changes/`, and that baseline is **gitignored** — a fresh clone does not have it, so the script has nothing to compare against. CI needs either a committed baseline, a tagged-release checkout to generate one from, or a mode that skips the delta half |
-| | The web bundle is **749 kB (216 kB gzipped)** in one chunk — 606 at M4, 687 at M5. Route-level code splitting is now worth doing; the store and the vet screens are natural first splits, and nobody needs the ops console in their first load |
+| | The web bundle is **847 kB (246 kB gzipped)** in one chunk — 606 at M4, 687 at M5, 749 at M6; the parity pass added ~100 kB of ported screens. Route-level code splitting is now worth doing; the store and the vet screens are natural first splits, and nobody needs the ops console in their first load |
+| | **The parity pass's three API questions — decided 2026-10-10.** (1) **Clinic phone: yes.** `vet_profiles."clinicPhone"` (db/changes/003), on the wire as `clinic.phone`, set by the vet on their profile form, shown as a `tel:` link in the emergency panel. Not backfilled from `users.phone`, so a live database never publishes a vet's personal number; the dev seed carries clinic numbers. (2) **Allergen flags on store cards: no.** The product page and cart show the server's finding; the catalogue search takes no pet. (3) **Reviewer names for signed-out visitors: yes.** `GET /users?ids=` is public, like `GET /users/{id}` — the public projection only, capped at 50. The unfiltered listing still needs a session and a Development host. Both pinned by tests (`VetServiceTests`, `UserEndpointTests`) |
+| | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past" |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
 
 ---
@@ -662,6 +712,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 | `refillsLeft`: 0 = exhausted, null = no limit. **M6 decrements it inside the checkout/order transaction, alongside stock** | Owner's call, 2026-09-22. REQUIREMENTS P9 settled; M3 closed the read side |
 | Deleting a pet with clinical history stays a **409** | Owner's call, 2026-09-22. Soft delete / archival is a later pass, not a regression to fix |
 | **No booking cancellation cutoff.** §11.1 as written: either party cancels from any non-terminal state | Owner's call, 2026-09-22. REQUIREMENTS C14 deferred to M7, where cutoffs and penalties get designed together |
+| **C14 decided: no penalty, a warning inside 12 hours.** Cancelling stays free and always allowed (§11.1). When the booking starts within 12 hours, the person cancelling is warned before it goes through — a confirmation, not a refusal and not a fee | Owner's call, 2026-10-10. Not yet built — the M8/M7 session does it. The server rule does not change; it is a UI warning |
 | Cursor pagination on every list endpoint | From M4. No endpoint loads an unbounded set. One shared implementation in `Persistence/Cursor.cs` from M5 |
 | **A vet review is one-directional**: the owner reviews the vet, never the reverse | REQUIREMENTS V10. Not a missing feature and not a symmetry to restore later — a clinician's rating of the client, attached to the animal's record and read by whoever treats it next, is a different product. `ReviewKinds` exists for this |
 | **Completing a visit requires a summary.** There is no status button for `completed` | M5. The summary endpoint is the only way in, and it writes the records in the same transaction. A consultation marked done with no clinical record is a hole in the patient's history nothing would notice |

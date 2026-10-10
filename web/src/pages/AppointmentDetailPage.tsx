@@ -1,652 +1,422 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router";
-import type {
-  AppointmentStatus,
-  MedicalRecord,
-  MedicalRecordType,
-  Pet,
-  Review,
-  VetAppointment,
-} from "@/types";
+import { useState } from "react";
+import { toast } from "sonner";
+import type { AppointmentStatus } from "@/types";
 import {
-  completeVisit,
   createAppointmentReview,
   getAppointment,
   getAppointmentReviews,
   updateAppointmentStatus,
-  type VisitSummaryEntry,
 } from "@/api/appointments";
-import { getVet, type VetWithUser } from "@/api/vets";
-import { getPetById } from "@/api/pets";
-import { ApiError } from "@/api/_client";
-import { Button } from "@/components/ui/Button";
-import { Field, Input, Select, Textarea } from "@/components/ui/Field";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { getVet } from "@/api/vets";
+import { getPetById, getPetRecords } from "@/api/pets";
+import { getUserById } from "@/api/users";
+import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
+import { AuthRequired } from "@/components/AuthRequired";
+import { Avatar } from "@/components/Avatar";
+import { AppointmentStatusBadge } from "@/components/vet/AppointmentStatusBadge";
+import { VisitSummaryForm } from "@/components/vet/VisitSummaryForm";
+import { MedicalRecordCard } from "@/components/vet/MedicalRecordCard";
+import { ReviewCard } from "@/components/ReviewCard";
+import { LeaveReview } from "@/components/reviews/LeaveReview";
+import { EmptyState } from "@/components/EmptyState";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Panel } from "@/components/ui/Panel";
+import { ProgressLeash } from "@/components/ui/ProgressLeash";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Reveal } from "@/components/ui/Reveal";
+import { MapPinIcon, StethoscopeIcon } from "@/components/ui/icons";
 import {
-  APPOINTMENT_STATUS_LABELS,
-  APPOINTMENT_STATUS_TONE,
   CONSULT_MODE_LABELS,
-  RECORD_TYPE_LABELS,
-  RECORD_TYPE_OPTIONS,
+  SPECIES_LABELS,
   formatCurrency,
-  formatDateTime,
+  formatRange,
 } from "@/lib/utils";
 
+/** The happy path, for the leash. Terminal branches render without it. */
+const JOURNEY: AppointmentStatus[] = [
+  "requested",
+  "confirmed",
+  "in_progress",
+  "completed",
+];
+const JOURNEY_LABELS = ["Requested", "Confirmed", "In visit", "Complete"];
+
 /**
- * One appointment: its details, whatever action is next, and — once the visit
- * has happened — the summary the vet wrote and the owner's review.
+ * One vet appointment — the reference's `app/appointments/[id]/page.tsx`.
+ * Two behaviours differ, both because a rule says so:
  *
- * ── The buttons mirror the server's rules, and do not replace them ──
+ *  - **There is no "Complete visit" button.** A visit completes when the vet
+ *    writes its summary (STATUS.md §5): while it is in progress, the form
+ *    below submits through `POST /appointments/:id/visit-summary`, which files
+ *    the entry and completes the visit in one transaction. The reference's
+ *    bare status button let a consultation finish with no clinical record.
+ *  - **Either party can cancel until it completes**, in progress included —
+ *    REQUIREMENTS.md §11.2. The reference stopped at `confirmed`.
  *
- * Which transitions appear depends on the appointment's state and on which side
- * of it you are: the same two tables the API enforces (REQUIREMENTS.md **§11.2**
- * — `confirmed`, not `accepted`). Showing an owner a Confirm button they would
- * be refused is a worse experience than not showing it. But the check that
- * matters happens server-side on every request: this is UX, and the 403 behind
- * it is the security.
- *
- * ── Completing is not a status button ──
- *
- * A vet finishes a visit by writing its summary, not by pressing "complete".
- * That is deliberate, and it matches the API: the summary endpoint is what
- * moves the appointment to `completed`, in one transaction with the records it
- * writes. A visit that could be marked done without a summary would leave a
- * consultation with no clinical record of having happened.
+ * The summary form offers `allergy` (V9) — see `VisitSummaryForm`.
  */
 export default function AppointmentDetailPage() {
   const { id = "" } = useParams();
-  const { currentUser } = useSession();
+  const { currentUser, hasHydrated } = useSession();
+  const [busy, setBusy] = useState(false);
 
-  const [appointment, setAppointment] = useState<VetAppointment | null | undefined>(
-    undefined,
+  const {
+    data: appointment,
+    loading,
+    reload,
+  } = useAsync(() => getAppointment(id).catch(() => null), [id]);
+
+  const { data: vet } = useAsync(
+    () => (appointment ? getVet(appointment.vetId) : Promise.resolve(null)),
+    [appointment?.vetId]
   );
-  const [vet, setVet] = useState<VetWithUser | null>(null);
-  const [pet, setPet] = useState<Pet | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: pet } = useAsync(
+    () => (appointment ? getPetById(appointment.petId) : Promise.resolve(null)),
+    [appointment?.petId]
+  );
+  const { data: owner } = useAsync(
+    () => (appointment ? getUserById(appointment.ownerId) : Promise.resolve(null)),
+    [appointment?.ownerId]
+  );
+  const { data: reviews, reload: reloadReviews } = useAsync(
+    () => (appointment ? getAppointmentReviews(appointment.id) : Promise.resolve([])),
+    [appointment?.id]
+  );
+  const {
+    data: records,
+    reload: reloadRecords,
+  } = useAsync(
+    () =>
+      appointment ? getPetRecords(appointment.petId).catch(() => []) : Promise.resolve([]),
+    [appointment?.petId]
+  );
 
-  const load = useCallback(() => {
-    getAppointment(id).then(setAppointment).catch(() => setAppointment(null));
-  }, [id]);
+  if (!hasHydrated || loading) return <DetailSkeleton />;
+  if (!currentUser) return <AuthRequired />;
 
-  useEffect(load, [load]);
-
-  useEffect(() => {
-    if (!appointment) return;
-    getVet(appointment.vetId).then(setVet).catch(() => setVet(null));
-    // A vet reading this may see the pet; an owner always may. Either way the
-    // server decides, and a refusal simply leaves the name out.
-    getPetById(appointment.petId).then(setPet).catch(() => setPet(null));
-  }, [appointment]);
-
-  if (appointment === undefined) {
+  if (!appointment) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-12 sm:px-6">
-        <Skeleton className="h-40 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+        <EmptyState
+          title="Appointment not found"
+          description="It may have been cancelled, or you may not have access to it."
+          actionLabel="Back to dashboard"
+          actionHref="/dashboard"
+        />
       </div>
     );
   }
 
-  if (appointment === null) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-6">
-        <h1 className="text-xl font-semibold text-ink">Appointment not found</h1>
-        <p className="mt-2 text-sm text-charcoal/60">
-          It may not exist, or it may not be yours.
-        </p>
-      </div>
-    );
-  }
+  const isVet = vet?.user.id === currentUser.id;
+  const isOwner = appointment.ownerId === currentUser.id;
+  const visitRecords = (records ?? []).filter((r) => r.appointmentId === appointment.id);
 
-  const isOwner = currentUser?.id === appointment.ownerId;
-  const isVet = vet !== null && currentUser?.id === vet.user.id;
+  const journeyIndex = JOURNEY.indexOf(appointment.status);
+  const onHappyPath = journeyIndex >= 0;
 
-  async function move(status: AppointmentStatus) {
-    setError(null);
+  // Only the owner reviews, only once the visit happened, only once. The
+  // server enforces all three; this decides whether to offer the form.
+  const alreadyReviewed = (reviews ?? []).some((r) => r.fromUserId === currentUser.id);
+  const canReview =
+    isOwner && appointment.status === "completed" && !alreadyReviewed;
+
+  async function move(status: AppointmentStatus, message: string) {
+    setBusy(true);
     try {
-      setAppointment(await updateAppointmentStatus(id, status));
-    } catch (err) {
-      // A 409 means the appointment moved under us; a 403 means the wrong
-      // party. Both carry a message worth showing verbatim.
-      setError(
-        err instanceof ApiError ? err.message : "Could not update this appointment",
-      );
-    }
-  }
-
-  return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-12 sm:px-6">
-      <section className="rounded-2xl border border-mist bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">
-              {CONSULT_MODE_LABELS[appointment.mode]}
-              {vet && <span className="text-charcoal/55"> with {vet.user.name}</span>}
-            </h1>
-            <p className="mt-1 text-sm text-charcoal/60">
-              {formatDateTime(appointment.startDateTime)}
-              {pet && ` · ${pet.name}`}
-            </p>
-          </div>
-          <StatusBadge
-            tone={APPOINTMENT_STATUS_TONE[appointment.status]}
-            label={APPOINTMENT_STATUS_LABELS[appointment.status]}
-          />
-        </div>
-
-        <dl className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Detail label="Reason" value={appointment.reason} />
-          <Detail label="Fee" value={formatCurrency(appointment.fee)} />
-          {appointment.symptoms.length > 0 && (
-            <Detail label="Symptoms" value={appointment.symptoms.join(", ")} />
-          )}
-          <Detail label="Requested" value={formatDateTime(appointment.createdAt)} />
-          {appointment.notes && <Detail label="Notes" value={appointment.notes} />}
-        </dl>
-
-        {error && (
-          <p
-            role="alert"
-            className="mt-5 rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash"
-          >
-            {error}
-          </p>
-        )}
-
-        <Actions
-          status={appointment.status}
-          isOwner={isOwner}
-          isVet={isVet}
-          onMove={move}
-        />
-      </section>
-
-      {isVet && appointment.status === "in_progress" && (
-        <VisitSummaryForm
-          appointmentId={id}
-          petName={pet?.name}
-          onComplete={(result) => setAppointment(result)}
-        />
-      )}
-
-      {appointment.status === "completed" && isOwner && pet && (
-        <p className="rounded-2xl border border-mist bg-white p-6 text-sm text-charcoal/70">
-          The visit summary is in{" "}
-          <Link
-            to={`/dashboard/pets/${appointment.petId}`}
-            className="font-medium text-ink underline underline-offset-2"
-          >
-            {pet.name}'s health record
-          </Link>
-          , along with any prescriptions.
-        </p>
-      )}
-
-      {appointment.status === "completed" && vet && (
-        <ReviewPanel
-          appointmentId={id}
-          isOwner={isOwner}
-          currentUserId={currentUser?.id ?? ""}
-          vetUserId={vet.user.id}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * The moves available from here, to this person.
- *
- * A direct transcription of the two tables in REQUIREMENTS.md §11.2:
- * confirm/decline/start belong to the vet, and either side may cancel while the
- * appointment is not yet terminal. There is no Complete button — see the page
- * comment.
- */
-function Actions({
-  status,
-  isOwner,
-  isVet,
-  onMove,
-}: {
-  status: AppointmentStatus;
-  isOwner: boolean;
-  isVet: boolean;
-  onMove: (status: AppointmentStatus) => void;
-}) {
-  const vetMoves: Partial<Record<AppointmentStatus, [AppointmentStatus, string][]>> = {
-    requested: [
-      ["confirmed", "Confirm"],
-      ["declined", "Decline"],
-    ],
-    confirmed: [["in_progress", "Start visit"]],
-  };
-
-  const moves = isVet ? (vetMoves[status] ?? []) : [];
-  const canCancel =
-    (isOwner || isVet) && ["requested", "confirmed", "in_progress"].includes(status);
-
-  if (moves.length === 0 && !canCancel) return null;
-
-  return (
-    <div className="mt-6 flex flex-wrap gap-3 border-t border-mist pt-5">
-      {moves.map(([next, label]) => (
-        <Button key={next} variant="cta" size="sm" onClick={() => onMove(next)}>
-          {label}
-        </Button>
-      ))}
-      {canCancel && (
-        <Button variant="ghost" size="sm" onClick={() => onMove("cancelled")}>
-          Cancel appointment
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/** A blank entry. `type` defaults to the one most visits start with. */
-const blankEntry = (): VisitSummaryEntry => ({
-  type: "visit_note",
-  title: "",
-  details: "",
-});
-
-/**
- * The visit summary — REQUIREMENTS.md V7.
- *
- * ── Every record type the server accepts is offered here ──
- *
- * REQUIREMENTS.md V9, and it is a real bug being fixed rather than a tidy-up.
- * The reference implementation's form offered five of the six and omitted
- * `allergy`, so a vet who found a food allergy during a consultation had
- * nowhere to record it — and the allergy list is exactly what the store's
- * recommendations read. The options come from `RECORD_TYPE_OPTIONS`, which is
- * generated from the same label map the rest of the app uses, so a seventh type
- * would appear here without anyone remembering to add it.
- *
- * Note what the form does **not** collect: no `vetId`, no `authorUserId`, no
- * `petId` and no `appointmentId`. All four are stamped by the server from the
- * appointment and from the access check that let this vet in.
- */
-function VisitSummaryForm({
-  appointmentId,
-  petName,
-  onComplete,
-}: {
-  appointmentId: string;
-  petName?: string;
-  onComplete: (appointment: VetAppointment) => void;
-}) {
-  const [entries, setEntries] = useState<VisitSummaryEntry[]>([blankEntry()]);
-  const [written, setWritten] = useState<MedicalRecord[] | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function update(index: number, patch: Partial<VisitSummaryEntry>) {
-    setEntries((current) =>
-      current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
-    );
-  }
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const result = await completeVisit(appointmentId, entries);
-      setWritten(result.records);
-      onComplete(result.appointment);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the summary");
+      await updateAppointmentStatus(id, status);
+      toast.success(message);
+      reload();
+    } catch (e) {
+      toast.error("Couldn't update the appointment", {
+        description: e instanceof Error ? e.message : undefined,
+      });
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
-  if (written) {
-    return (
-      <section className="rounded-2xl border border-mist bg-white p-6">
-        <h2 className="text-lg font-semibold text-ink">Visit summary saved</h2>
-        <p className="mt-1 text-sm text-charcoal/60">
-          {written.length === 1 ? "One entry is" : `${written.length} entries are`} now
-          in {petName ? `${petName}'s` : "the"} permanent health record.
-        </p>
-        <ul className="mt-5 space-y-2">
-          {written.map((record) => (
-            <li
-              key={record.id}
-              className="rounded-xl border border-mist px-4 py-3 text-sm"
-            >
-              <span className="font-mono text-[10px] uppercase tracking-widest text-charcoal/50">
-                {RECORD_TYPE_LABELS[record.type]}
-              </span>
-              <p className="mt-1 text-ink">{record.title}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
-  }
-
   return (
-    <section className="rounded-2xl border border-mist bg-white p-6">
-      <h2 className="text-lg font-semibold text-ink">Visit summary</h2>
-      <p className="mt-1 text-sm text-charcoal/60">
-        This goes into {petName ? `${petName}'s` : "the animal's"} permanent health
-        record and completes the visit. A prescription here is what lets the owner
-        buy the product it names.
-      </p>
-
-      <form onSubmit={submit} className="mt-6 space-y-6" noValidate>
-        {error && (
-          <p
-            role="alert"
-            className="rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash"
-          >
-            {error}
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-widest text-leash">
+            Vet appointment
           </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
+            {appointment.reason}
+          </h1>
+          <p className="mt-1 text-sm text-charcoal/70">
+            {formatRange(appointment.startDateTime, appointment.endDateTime)} ·{" "}
+            {CONSULT_MODE_LABELS[appointment.mode]}
+          </p>
+        </div>
+        <AppointmentStatusBadge status={appointment.status} />
+      </div>
+
+      {onHappyPath && (
+        <ProgressLeash
+          steps={JOURNEY_LABELS}
+          activeIndex={journeyIndex}
+          label="Appointment stage"
+          className="my-6"
+        />
+      )}
+
+      {appointment.status === "declined" && (
+        <p className="my-6 rounded-2xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-charcoal/80">
+          This request was declined.{" "}
+          <Link to="/vets" className="font-medium text-ink underline">
+            Find another vet
+          </Link>
+          .
+        </p>
+      )}
+      {appointment.status === "cancelled" && (
+        <p className="my-6 rounded-2xl border border-mist bg-white px-4 py-3 text-sm text-charcoal/70">
+          This appointment was cancelled.
+        </p>
+      )}
+
+      {/* Actions — which party you are decides what you can do. */}
+      {(isVet || isOwner) && (
+        <div className="mb-8 flex flex-wrap gap-2">
+          {isVet && appointment.status === "requested" && (
+            <>
+              <Button
+                variant="cta"
+                disabled={busy}
+                onClick={() => move("confirmed", "Appointment confirmed")}
+              >
+                Confirm
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => move("declined", "Request declined")}
+              >
+                Decline
+              </Button>
+            </>
+          )}
+          {isVet && appointment.status === "confirmed" && (
+            <Button
+              variant="cta"
+              disabled={busy}
+              onClick={() => move("in_progress", "Visit started")}
+            >
+              Start visit
+            </Button>
+          )}
+          {isVet && appointment.status === "in_progress" && (
+            <p className="self-center text-sm text-charcoal/65">
+              Write the visit summary below to complete the visit.
+            </p>
+          )}
+          {["requested", "confirmed", "in_progress"].includes(appointment.status) && (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => move("cancelled", "Appointment cancelled")}
+            >
+              Cancel appointment
+            </Button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {pet && (
+          <Reveal>
+            <Panel title="Patient">
+              <div className="flex items-center gap-3">
+                <Avatar src={pet.photoUrl} size={56} />
+                <div className="min-w-0">
+                  <p className="font-medium text-ink">{pet.name}</p>
+                  <p className="text-sm text-charcoal/65">
+                    {pet.breed} · {SPECIES_LABELS[pet.species]} · {pet.weightLbs} lb
+                  </p>
+                  {owner && (
+                    <p className="text-xs text-charcoal/55">Owner: {owner.name}</p>
+                  )}
+                </div>
+              </div>
+              {(pet.allergies.length > 0 || pet.medications.length > 0) && (
+                <dl className="mt-4 space-y-2 border-t border-mist pt-3 text-sm">
+                  {pet.allergies.length > 0 && (
+                    <div>
+                      <dt className="text-xs text-charcoal/55">Allergies</dt>
+                      <dd className="text-charcoal">{pet.allergies.join(", ")}</dd>
+                    </div>
+                  )}
+                  {pet.medications.length > 0 && (
+                    <div>
+                      <dt className="text-xs text-charcoal/55">Current medication</dt>
+                      <dd className="text-charcoal">{pet.medications.join("; ")}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+              <ButtonLink
+                to={`/dashboard/pets/${pet.id}`}
+                variant="outline"
+                size="sm"
+                className="mt-4 w-full"
+              >
+                View health record
+              </ButtonLink>
+            </Panel>
+          </Reveal>
         )}
 
-        {entries.map((entry, index) => (
-          <fieldset
-            key={index}
-            className="space-y-4 rounded-xl border border-mist p-4"
-          >
-            <legend className="px-1 font-mono text-[10px] uppercase tracking-widest text-charcoal/50">
-              Entry {index + 1}
-            </legend>
+        {vet && (
+          <Reveal>
+            <Panel title="Vet">
+              <div className="flex items-center gap-3">
+                <Avatar src={vet.user.avatarUrl} size={56} />
+                <div className="min-w-0">
+                  <p className="font-medium text-ink">{vet.user.name}</p>
+                  <p className="text-sm text-charcoal/65">{vet.profile.clinicName}</p>
+                  <p className="flex items-center gap-1 text-xs text-charcoal/55">
+                    <MapPinIcon width={12} height={12} />
+                    {vet.profile.clinic.city}, {vet.profile.clinic.state}
+                  </p>
+                </div>
+              </div>
+              <dl className="mt-4 space-y-2 border-t border-mist pt-3 text-sm">
+                {appointment.fee != null && (
+                  <div className="flex justify-between">
+                    <dt className="text-charcoal/60">Consultation fee</dt>
+                    <dd className="font-mono text-ink">{formatCurrency(appointment.fee)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <dt className="text-charcoal/60">Format</dt>
+                  <dd className="text-ink">{CONSULT_MODE_LABELS[appointment.mode]}</dd>
+                </div>
+              </dl>
+              <ButtonLink
+                to={`/vets/${vet.profile.id}`}
+                variant="outline"
+                size="sm"
+                className="mt-4 w-full"
+              >
+                View profile
+              </ButtonLink>
+            </Panel>
+          </Reveal>
+        )}
+      </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Type" htmlFor={`type-${index}`}>
-                <Select
-                  id={`type-${index}`}
-                  value={entry.type}
-                  onChange={(e) =>
-                    update(index, { type: e.target.value as MedicalRecordType })
-                  }
-                >
-                  {RECORD_TYPE_OPTIONS.map((type) => (
-                    <option key={type} value={type}>
-                      {RECORD_TYPE_LABELS[type]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <Field label="Title" htmlFor={`title-${index}`}>
-                <Input
-                  id={`title-${index}`}
-                  value={entry.title}
-                  onChange={(e) => update(index, { title: e.target.value })}
-                  placeholder="Soft-tissue strain, front right"
-                  required
-                />
-              </Field>
-            </div>
-
-            <Field label="Details" htmlFor={`details-${index}`}>
-              <Textarea
-                id={`details-${index}`}
-                value={entry.details ?? ""}
-                onChange={(e) => update(index, { details: e.target.value })}
-                placeholder="No swelling, full range of motion. Short lead walks for ten days."
-              />
-            </Field>
-
-            {entry.type === "prescription" && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Medication" htmlFor={`med-${index}`}>
-                  <Input
-                    id={`med-${index}`}
-                    value={entry.medicationName ?? ""}
-                    onChange={(e) => update(index, { medicationName: e.target.value })}
-                    placeholder="Carprofen 75 mg"
-                    required
-                  />
-                </Field>
-
-                <Field label="Dosage" htmlFor={`dose-${index}`}>
-                  <Input
-                    id={`dose-${index}`}
-                    value={entry.dosage ?? ""}
-                    onChange={(e) => update(index, { dosage: e.target.value })}
-                    placeholder="1 tablet twice daily with food"
-                  />
-                </Field>
-
-                <Field
-                  label="Refills"
-                  hint="blank means no limit"
-                  htmlFor={`refills-${index}`}
-                >
-                  <Input
-                    id={`refills-${index}`}
-                    type="number"
-                    min={0}
-                    value={entry.refillsLeft ?? ""}
-                    onChange={(e) =>
-                      update(index, {
-                        refillsLeft:
-                          e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
-
-                <Field label="Valid until" htmlFor={`expires-${index}`}>
-                  <Input
-                    id={`expires-${index}`}
-                    type="date"
-                    value={entry.expiresAt?.slice(0, 10) ?? ""}
-                    onChange={(e) =>
-                      update(index, {
-                        expiresAt: e.target.value
-                          ? new Date(e.target.value).toISOString()
-                          : null,
-                      })
-                    }
-                  />
-                </Field>
+      {(appointment.symptoms.length > 0 || appointment.notes) && (
+        <Reveal className="mt-6">
+          <Panel title="What the owner reported">
+            {appointment.symptoms.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {appointment.symptoms.map((s) => (
+                  <span
+                    key={s}
+                    className="rounded-full border border-mist bg-fog px-2.5 py-1 text-xs text-charcoal"
+                  >
+                    {s}
+                  </span>
+                ))}
               </div>
             )}
-
-            {(entry.type === "vaccination" || entry.type === "visit_note") && (
-              <Field
-                label="Next due"
-                hint="optional"
-                htmlFor={`due-${index}`}
-              >
-                <Input
-                  id={`due-${index}`}
-                  type="date"
-                  value={entry.nextDueAt?.slice(0, 10) ?? ""}
-                  onChange={(e) =>
-                    update(index, {
-                      nextDueAt: e.target.value
-                        ? new Date(e.target.value).toISOString()
-                        : null,
-                    })
-                  }
-                />
-              </Field>
-            )}
-
-            {entries.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setEntries((current) => current.filter((_, i) => i !== index))
-                }
-              >
-                Remove entry
-              </Button>
-            )}
-          </fieldset>
-        ))}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setEntries((current) => [...current, blankEntry()])}
-          >
-            Add another entry
-          </Button>
-          <Button
-            type="submit"
-            variant="cta"
-            disabled={saving || entries.some((e) => !e.title.trim())}
-          >
-            {saving ? "Saving…" : "Save and complete visit"}
-          </Button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-/**
- * The review — REQUIREMENTS.md V10.
- *
- * **One direction.** The owner reviews the vet; the vet sees what was written
- * and has no form. That is not a missing feature: a clinician rating the client
- * is a different and much worse product, and once such a rating exists it is
- * read by whoever treats the animal next.
- */
-function ReviewPanel({
-  appointmentId,
-  isOwner,
-  currentUserId,
-  vetUserId,
-}: {
-  appointmentId: string;
-  isOwner: boolean;
-  currentUserId: string;
-  vetUserId: string;
-}) {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(() => {
-    getAppointmentReviews(appointmentId).then(setReviews).catch(() => setReviews([]));
-  }, [appointmentId]);
-
-  useEffect(load, [load]);
-
-  const alreadyMine = reviews.some((r) => r.fromUserId === currentUserId);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      await createAppointmentReview(appointmentId, {
-        toUserId: vetUserId,
-        rating,
-        comment,
-      });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not leave that review");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="rounded-2xl border border-mist bg-white p-6">
-      <h2 className="text-lg font-semibold text-ink">Review</h2>
-      <p className="mt-1 text-sm text-charcoal/60">
-        Owners review their vet. It goes one way.
-      </p>
-
-      {reviews.length > 0 && (
-        <ul className="mt-5 space-y-4">
-          {reviews.map((review) => (
-            <li key={review.id} className="border-l-2 border-mist pl-4">
-              <p className="text-sm text-charcoal/70">
-                {review.rating.toFixed(1)} ★
-                <span className="text-charcoal/45">
-                  {" · "}
-                  {formatDateTime(review.createdAt)}
-                </span>
+            {appointment.notes && (
+              <p className="mt-3 text-sm leading-relaxed text-charcoal/85">
+                {appointment.notes}
               </p>
-              {review.comment && (
-                <p className="mt-1 text-sm text-ink">{review.comment}</p>
-              )}
-            </li>
-          ))}
-        </ul>
+            )}
+          </Panel>
+        </Reveal>
       )}
 
-      {!isOwner && reviews.length === 0 && (
-        <p className="mt-3 text-sm text-charcoal/60">
-          Nothing yet. The owner may leave one.
-        </p>
-      )}
-
-      {isOwner && !alreadyMine && (
-        <form onSubmit={submit} className="mt-5 space-y-4" noValidate>
-          {error && (
-            <p
-              role="alert"
-              className="rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash"
-            >
-              {error}
+      {/* The visit's clinical output — the record that outlives the appointment. */}
+      <Reveal className="mt-6">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
+          <StethoscopeIcon width={18} height={18} />
+          Visit summary
+        </h2>
+        <div className="mt-3 space-y-3">
+          {visitRecords.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-mist bg-white/60 px-4 py-6 text-center text-sm text-charcoal/60">
+              {isVet
+                ? appointment.status === "in_progress"
+                  ? "Nothing recorded yet. The summary you write below completes the visit."
+                  : "Nothing recorded yet. Add notes, vaccinations or a prescription below."
+                : "Your vet hasn't added notes for this visit yet."}
             </p>
+          ) : (
+            visitRecords.map((r) => <MedicalRecordCard key={r.id} record={r} />)
           )}
+        </div>
 
-          <Field label="Rating" hint="1 to 5, half stars allowed" htmlFor="rating">
-            <Input
-              id="rating"
-              type="number"
-              min={1}
-              max={5}
-              step={0.5}
-              value={rating}
-              onChange={(e) => setRating(Number(e.target.value))}
-            />
-          </Field>
+        {isVet && appointment.status !== "cancelled" && appointment.status !== "declined" && (
+          <VisitSummaryForm
+            petId={appointment.petId}
+            appointmentId={appointment.id}
+            completes={appointment.status === "in_progress"}
+            onCreated={() => {
+              reloadRecords();
+              reload();
+            }}
+            className="mt-4"
+          />
+        )}
+      </Reveal>
 
-          <Field label="Comment" htmlFor="comment">
-            <Textarea
-              id="comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="She took the time to explain the plan rather than just handing me a bag."
-            />
-          </Field>
+      {appointment.status === "completed" && vet && (
+        <Reveal className="mt-8">
+          <h2 className="text-lg font-semibold text-ink">Reviews</h2>
+          <div className="mt-3 space-y-4">
+            {(reviews ?? []).map((r) => (
+              <ReviewCard
+                key={r.id}
+                review={r}
+                author={r.fromUserId === owner?.id ? owner : undefined}
+              />
+            ))}
 
-          <Button type="submit" disabled={saving}>
-            {saving ? "Posting…" : "Post review"}
-          </Button>
-        </form>
+            {canReview && (
+              <LeaveReview
+                toName={vet.user.name}
+                prompt="How was the visit? What would help another owner choosing a vet?"
+                onSubmit={async ({ rating, comment }) => {
+                  await createAppointmentReview(appointment.id, {
+                    toUserId: vet.user.id,
+                    rating,
+                    comment,
+                  });
+                  reloadReviews();
+                }}
+              />
+            )}
+
+            {!canReview && (reviews ?? []).length === 0 && (
+              <p className="text-sm text-charcoal/55">
+                {isVet
+                  ? "Nothing from the owner yet."
+                  : "This visit hasn't been reviewed."}
+              </p>
+            )}
+          </div>
+        </Reveal>
       )}
-
-      {isOwner && alreadyMine && (
-        <p className="mt-3 text-xs text-charcoal/55">
-          You have reviewed this visit. A review you can rewrite afterwards is a
-          negotiating position, not a review.
-        </p>
-      )}
-    </section>
+    </div>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function DetailSkeleton() {
   return (
-    <div>
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-charcoal/50">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm text-ink">{value}</dd>
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
+      <Skeleton className="h-8 w-72" />
+      <Skeleton className="mt-6 h-24 w-full rounded-2xl" />
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Skeleton className="h-56 w-full rounded-2xl" />
+        <Skeleton className="h-56 w-full rounded-2xl" />
+      </div>
     </div>
   );
 }

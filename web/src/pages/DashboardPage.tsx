@@ -1,136 +1,91 @@
+import type { UserRole } from "@/types";
 import { useSession } from "@/store/session";
-import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
+import { OwnerDashboard } from "@/components/dashboard/OwnerDashboard";
+import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
+import { VetDashboard } from "@/components/dashboard/VetDashboard";
+import { AuthRequired } from "@/components/AuthRequired";
+import { EmptyState } from "@/components/EmptyState";
 import { RoleToggle } from "@/components/RoleToggle";
-import { ROLE_LABELS, STAFF_ROLE_LABELS, formatDate } from "@/lib/utils";
-import { Avatar } from "@/components/Avatar";
-import { ButtonLink } from "@/components/ui/Button";
+import { VerifyEmailBanner } from "@/components/VerifyEmailBanner";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
- * The dashboard: who you are, and a way into every area built so far.
+ * The reference's `app/dashboard/page.tsx`: one page that switches by role.
  *
- * Still the simple version. The reference project's dashboard is role-aware —
- * `components/dashboard/{Owner,Caretaker,Vet}Dashboard.tsx`, with upcoming
- * bookings, requests waiting on you and the day's schedule inline — and that is
- * part of the UI alignment pass (BUILD_PLAN.md §0), not yet ported.
- *
- * Rendered inside RequireAuth, so `currentUser` is non-null here.
+ * The shelter view is the one gap — `ShelterDashboard` arrives with adoption
+ * in M10, so a shelter account sees a named placeholder rather than nothing.
  */
 export default function DashboardPage() {
-  const { currentUser, activeRole } = useSession();
-  const user = currentUser!;
+  const { currentUser, activeRole, hasHydrated } = useSession();
+
+  if (!hasHydrated) {
+    return (
+      <div className="mx-auto w-full max-w-[1000px] px-4 py-10 sm:px-6">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="mt-6 h-40 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!currentUser) return <AuthRequired />;
+
+  if (currentUser.roles.length === 0)
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
+        <EmptyState
+          title="Finish setting up your account"
+          description="Tell us whether you’re here to book care, offer care, or both."
+          actionLabel="Choose your roles"
+          actionHref="/onboarding"
+        />
+      </div>
+    );
+
+  // Which view: multi-role users follow the header toggle; single-role users
+  // see their only role. The `includes` guard matters because activeRole is a
+  // cached client value that can outlive a role being removed.
+  const canSwitch = currentUser.roles.length > 1;
+  const view =
+    canSwitch && currentUser.roles.includes(activeRole)
+      ? activeRole
+      : currentUser.roles[0];
+
+  const HEADINGS: Record<UserRole, string> = {
+    owner: "Owner dashboard",
+    caretaker: "Caretaker dashboard",
+    vet: "Vet dashboard",
+    shelter: "Shelter dashboard",
+  };
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-10 sm:px-6">
       <VerifyEmailBanner />
-
-      <div className="flex items-center gap-4">
-        <Avatar src={user.avatarUrl} size={56} />
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-semibold text-ink">{user.name}</h1>
-          <p className="text-sm text-charcoal/60">{user.email}</p>
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-widest text-leash">
+            {HEADINGS[view]}
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-ink">
+            Welcome back, {currentUser.name.split(" ")[0]}
+          </h1>
         </div>
-        <RoleToggle />
-      </div>
-
-      <dl className="mt-8 grid gap-4 sm:grid-cols-2">
-        <Row label="Active role" value={ROLE_LABELS[activeRole]} />
-        <Row
-          label="Roles"
-          value={user.roles.map((r) => ROLE_LABELS[r]).join(", ") || "None chosen yet"}
-        />
-        <Row label="Email verified" value={user.verified ? "Yes" : "Not yet"} />
-        <Row label="Member since" value={formatDate(user.createdAt)} />
-        <Row
-          label="Location"
-          value={`${user.address.city}, ${user.address.state}`}
-        />
-        {user.staffRoles.length > 0 && (
-          <Row
-            label="Staff"
-            value={user.staffRoles.map((r) => STAFF_ROLE_LABELS[r]).join(", ")}
-          />
-        )}
-      </dl>
-
-      <div className="mt-10 space-y-3">
-        <Panel
-          title="Your pets"
-          description="Profiles, health records and what the store suggests for each animal."
-          to="/dashboard/pets"
-        />
-        <Panel
-          title="Your bookings"
-          description="Requests, confirmed visits and everything already done."
-          to="/dashboard/bookings"
-        />
-        {/* Shown to everyone rather than gated on the caretaker role: the page
-            creates a listing for someone who has none, which is how a customer
-            becomes a caretaker in the first place. */}
-        <Panel
-          title="Your vet visits"
-          description="Appointments you've booked, and the visit summaries they produced."
-          to="/dashboard/appointments"
-        />
-        <Panel
-          title="Your orders"
-          description="Track a parcel, or cancel before it ships."
-          to="/store/orders"
-        />
-        <Panel
-          title="Your caretaker listing"
-          description="What owners see in search, and the rate card that prices your bookings."
-          to="/dashboard/caretaker-profile"
-        />
-        {/* Shown to everyone, for the same reason as the caretaker listing:
-            filling it in is how somebody becomes a vet on Leash. */}
-        <Panel
-          title="Your clinic listing"
-          description="Your profile, consultation fee, and the schedule of visits waiting on you."
-          to="/dashboard/vet-profile"
-        />
-        {/* Only offered to staff who can use it. The API refuses everyone else
-            regardless — this just keeps a dead end off customers' dashboards. */}
-        {user.staffRoles.some((r) => r === "ops" || r === "admin") && (
-          <Panel
-            title="Fulfilment queue"
-            description="Paid orders on their way out, oldest first."
-            to="/dashboard/orders"
-          />
+        {canSwitch && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-charcoal/50">Viewing as</span>
+            <RoleToggle />
+          </div>
         )}
       </div>
-    </div>
-  );
-}
 
-function Panel({
-  title,
-  description,
-  to,
-}: {
-  title: string;
-  description: string;
-  to: string;
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-mist bg-white p-5">
-      <div className="min-w-0">
-        <h2 className="font-medium text-ink">{title}</h2>
-        <p className="mt-0.5 text-sm text-charcoal/60">{description}</p>
-      </div>
-      <ButtonLink to={to} variant="outline" size="sm">
-        Open
-      </ButtonLink>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-mist bg-white p-4">
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-charcoal/50">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm text-ink">{value}</dd>
+      {view === "owner" && <OwnerDashboard user={currentUser} />}
+      {view === "caretaker" && <CaretakerDashboard user={currentUser} />}
+      {view === "vet" && <VetDashboard user={currentUser} />}
+      {view === "shelter" && (
+        <EmptyState
+          title="Shelter tools are on the way"
+          description="Listings, applications and the health record that transfers with the animal arrive with M10."
+        />
+      )}
     </div>
   );
 }

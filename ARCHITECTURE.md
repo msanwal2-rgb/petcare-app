@@ -371,13 +371,22 @@ web/src/
 | `next/image` | `components/Avatar.tsx`, or a plain `<img>` with width/height |
 | `"use client"` | delete it |
 | `app/x/page.tsx` | `pages/XPage.tsx` + an entry in `routes.tsx` |
+| `next/image fill` in a sized box | an `absolute inset-0 h-full w-full object-cover` `<img>`, with `BLUR_DATA_URL` as the box's CSS background |
+| a file under the reference's `public/` | the same path under `web/public/` |
+| `lib/api/*` | `web/src/api/*` — cursor pages (`{ items, nextCursor }`), nested `{ profile, user }`, self-only lists with no user id |
+| a client copy of a server rule (Rx active, allergen match) | ask the server — the quote answers both |
+| a renamed or removed route | a `<Moved to=…>` entry in `routes.tsx`, so old links redirect |
+
+**Port the reference screen first, adapt it to the API second.** A screen that
+looks different from the reference is an unfinished port unless the difference
+is a REQUIREMENTS.md §12 fix — and then it is listed in `STATUS.md`.
 
 ---
 
 ## 7. Testing
 
 ```bash
-cd API && dotnet test          # 531 tests, ~3–4m
+cd API && dotnet test          # 539 tests, ~3m
 cd web && npm run build        # tsc -b && vite build
 cd web && npx oxlint src
 ./db/verify.sh                 # must print ✓ IDENTICAL

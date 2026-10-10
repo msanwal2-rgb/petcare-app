@@ -586,7 +586,12 @@ export interface VetProfile {
   consultModes: ConsultMode[];
   consultFee: number; // USD, per appointment
   emergencyAvailable: boolean;
-  clinic: { name: string; city: string; state: string; lat: number; lng: number };
+  /**
+   * `phone` is new in this build: the practice's public line, shown in the
+   * profile's emergency panel. Empty until the vet sets it. The reference
+   * printed the vet's personal `user.phone` there instead (db/changes/003).
+   */
+  clinic: { name: string; city: string; state: string; lat: number; lng: number; phone: string };
   rating: number; // 0–5
   reviewCount: number;
   responseRatePct: number; // 0–100

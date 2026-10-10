@@ -1,181 +1,235 @@
-import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
-import type { Order } from "@/types";
+import { useState } from "react";
+import { toast } from "sonner";
 import { cancelOrder, getOrder, syncPayment } from "@/api/orders";
-import { ApiError } from "@/api/_client";
-import { OrderStatusBadge, OrderTracking } from "@/components/store/OrderTracking";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { useAsync } from "@/hooks/useAsync";
+import { useSession } from "@/store/session";
+import { OrderTracking } from "@/components/store/OrderTracking";
+import { OrderStatusBadge } from "@/components/store/OrderStatusBadge";
+import { AuthRequired } from "@/components/AuthRequired";
+import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/Button";
+import { Panel } from "@/components/ui/Panel";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { CheckIcon } from "@/components/ui/icons";
+import { Reveal } from "@/components/ui/Reveal";
+import { formatCents, formatDate } from "@/lib/utils";
 import { canCustomerCancel } from "@/lib/delivery";
-import { formatCents, formatDateTime } from "@/lib/utils";
 
 /**
- * One order: where it is, what happened, what was in it, and — while it is
- * still ours to stop — a Cancel button.
+ * One order — the reference's `app/store/orders/[id]/page.tsx`.
  *
- * The button is a courtesy mirror of the server's window (`lib/delivery.ts`).
- * The server is the authority; if the parcel shipped between this page loading
- * and the click, the 409 says so and the page reloads to show why.
- *
- * Opened by its customer or by store operations; anyone else gets the same 404
- * an order that does not exist gets.
+ * One addition: an order left at `pending_payment` (the checkout's 502 path —
+ * the order exists, starting its payment failed) offers "Retry payment".
+ * Until M7 brings a card form there is no other way to settle it.
  */
 export default function OrderDetailPage() {
   const { id = "" } = useParams();
-  const [params] = useSearchParams();
-  const justPlaced = params.get("placed") === "1";
+  const [searchParams] = useSearchParams();
+  const [retrying, setRetrying] = useState(false);
+  const { currentUser, hasHydrated } = useSession();
+  const [cancelling, setCancelling] = useState(false);
 
-  const [order, setOrder] = useState<Order | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * Arriving straight from the payment step. The browser knowing the card went
+   * through is not the same as the server knowing — that arrives on a webhook,
+   * which can lag by seconds. So the first fetch after paying asks the server
+   * to reconcile with the provider first, and the page shows the settled state
+   * rather than "awaiting payment" to somebody who has just paid.
+   */
+  const [justPaid] = useState(() => searchParams.get("paid") === "1");
 
-  const load = useCallback(() => {
-    getOrder(id).then(setOrder).catch(() => setOrder(null));
-  }, [id]);
-
-  useEffect(load, [load]);
-
-  if (order === undefined) {
-    return (
-      <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-12 sm:px-6">
-        <Skeleton className="h-24 rounded-2xl" />
-        <Skeleton className="h-96 rounded-2xl" />
-      </div>
-    );
-  }
-
-  if (order === null) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-6">
-        <h1 className="text-xl font-semibold text-ink">Order not found</h1>
-        <p className="mt-2 text-sm text-charcoal/60">It may not exist, or it may not be yours.</p>
-        <ButtonLink to="/store/orders" variant="outline" className="mt-6">
-          Your orders
-        </ButtonLink>
-      </div>
-    );
-  }
-
-  async function cancel() {
-    if (!window.confirm("Cancel this order? Anything you paid will be refunded.")) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setOrder(await cancelOrder(id));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not cancel this order");
-      load();
-    } finally {
-      setBusy(false);
+  const { data: order, loading, reload } = useAsync(async () => {
+    if (justPaid) {
+      try {
+        return await syncPayment(id);
+      } catch {
+        // The webhook may still land; fall through to a plain read.
+      }
     }
+    return getOrder(id).catch(() => null);
+  }, [id, justPaid]);
+
+  if (!hasHydrated || loading) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="mt-6 h-24 w-full rounded-2xl" />
+        <Skeleton className="mt-6 h-72 w-full rounded-2xl" />
+      </div>
+    );
+  }
+
+  if (!currentUser) return <AuthRequired message="Log in to track this order." />;
+
+  if (!order) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+        <EmptyState
+          title="Order not found"
+          description="It may have been placed on another account."
+          actionLabel="Your orders"
+          actionHref="/store/orders"
+        />
+      </div>
+    );
   }
 
   async function retryPayment() {
-    setBusy(true);
-    setError(null);
+    setRetrying(true);
     try {
       await syncPayment(id);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not start the payment");
+      toast.success("Payment received", { description: "We'll start picking your order." });
+      reload();
+    } catch (e) {
+      toast.error("Still couldn't take the payment", {
+        description: e instanceof Error ? e.message : undefined,
+      });
     } finally {
-      setBusy(false);
+      setRetrying(false);
+    }
+  }
+
+  async function cancel() {
+    setCancelling(true);
+    try {
+      await cancelOrder(id);
+      toast.success("Order cancelled", {
+        description: "Anything already charged has been returned.",
+      });
+      reload();
+    } catch (e) {
+      toast.error("Couldn't cancel that order", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    } finally {
+      setCancelling(false);
     }
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8 px-4 py-12 sm:px-6">
-      <Link to="/store/orders" className="text-sm text-charcoal/60 hover:text-ink">
-        ← Your orders
+    <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
+      <Link
+        to="/store/orders"
+        className="text-sm text-charcoal/60 underline-offset-2 hover:text-ink hover:underline"
+      >
+        ← All orders
       </Link>
 
-      {justPlaced && order.status !== "pending_payment" && (
-        <div className="flex items-center gap-3 rounded-2xl border border-[#2F6F5E]/30 bg-[#2F6F5E]/8 p-4 text-sm text-[#215144]">
-          <CheckIcon width={18} height={18} className="shrink-0" />
-          Thanks — your order is placed and paid. We'll keep this page up to date as it moves.
-        </div>
-      )}
-
-      <section className="rounded-2xl border border-mist bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Order {order.id}</h1>
-            <p className="mt-1 text-sm text-charcoal/60">Placed {formatDateTime(order.placedAt)}</p>
-          </div>
-          <OrderStatusBadge status={order.status} />
-        </div>
-
-        {error && (
-          <p role="alert" className="mt-5 rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash">
-            {error}
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-widest text-leash">
+            Order {order.id}
           </p>
-        )}
-
-        <div className="mt-8">
-          <OrderTracking order={order} />
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">
+            {order.items.length} item{order.items.length === 1 ? "" : "s"} ·{" "}
+            {formatCents(order.totalCents)}
+          </h1>
+          <p className="mt-1 text-sm text-charcoal/70">
+            Placed {formatDate(order.placedAt)}
+          </p>
         </div>
+        <OrderStatusBadge status={order.status} />
+      </div>
 
-        {(canCustomerCancel(order.status) || order.status === "pending_payment") && (
-          <div className="mt-8 flex flex-wrap gap-3 border-t border-mist pt-5">
-            {order.status === "pending_payment" && (
-              <Button variant="cta" size="sm" onClick={retryPayment} disabled={busy}>
-                Pay now
-              </Button>
-            )}
-            {canCustomerCancel(order.status) && (
-              <Button variant="ghost" size="sm" onClick={cancel} disabled={busy}>
-                Cancel order
-              </Button>
-            )}
-          </div>
-        )}
-      </section>
+      <Reveal className="mt-8">
+        <OrderTracking order={order} />
+      </Reveal>
 
-      <section className="rounded-2xl border border-mist bg-white p-6">
-        <h2 className="text-lg font-semibold text-ink">What's in it</h2>
-        <ul className="mt-4 divide-y divide-mist">
-          {order.items.map((item) => (
-            <li key={item.id} className="flex items-center gap-4 py-3">
-              <img
-                src={item.imageUrl}
-                alt=""
-                loading="lazy"
-                className="h-14 w-14 shrink-0 rounded-lg bg-fog object-cover"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="font-mono text-[10px] uppercase tracking-wide text-charcoal/45">{item.brand}</p>
-                <Link to={`/store/${item.slug}`} className="block truncate text-sm text-ink hover:underline">
-                  {item.name}
+      <Reveal className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
+        <Panel title="What's in this order">
+          <ul className="space-y-4">
+            {order.items.map((item) => (
+              <li key={item.id} className="flex items-center gap-3">
+                <Link
+                  to={`/store/${item.slug}`}
+                  className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-fog"
+                >
+                  <img
+                    src={item.imageUrl}
+                    alt=""
+                    width={56}
+                    height={56}
+                    loading="lazy"
+                    decoding="async"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
                 </Link>
-                <p className="font-mono text-xs text-charcoal/60">
-                  {item.quantity} × {formatCents(item.unitPriceCents)}
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-charcoal/45">
+                    {item.brand}
+                  </p>
+                  <Link
+                    to={`/store/${item.slug}`}
+                    className="block truncate text-sm text-ink hover:underline"
+                  >
+                    {item.name}
+                  </Link>
+                  <p className="font-mono text-xs text-charcoal/55">
+                    {item.quantity} × {formatCents(item.unitPriceCents)}
+                  </p>
+                </div>
+                <p className="font-mono text-sm text-ink">
+                  {formatCents(item.lineTotalCents)}
                 </p>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+
+        <div>
+          <Panel title="Payment">
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-charcoal/65">Subtotal</dt>
+                <dd className="font-mono text-ink">
+                  {formatCents(order.subtotalCents)}
+                </dd>
               </div>
-              <p className="font-mono text-sm text-ink">{formatCents(item.lineTotalCents)}</p>
-            </li>
-          ))}
-        </ul>
+              <div className="flex justify-between">
+                <dt className="text-charcoal/65">Shipping</dt>
+                <dd className="font-mono text-ink">
+                  {order.shippingCents === 0
+                    ? "Free"
+                    : formatCents(order.shippingCents)}
+                </dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-charcoal/65">Tax</dt>
+                <dd className="font-mono text-ink">{formatCents(order.taxCents)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-mist pt-2 font-semibold text-ink">
+                <dt>Total</dt>
+                <dd className="font-mono">{formatCents(order.totalCents)}</dd>
+              </div>
+            </dl>
+            <p className="mt-3 border-t border-mist pt-3 font-mono text-[11px] text-charcoal/50">
+              {order.paymentStatus} · {order.paymentRef ?? "no reference"}
+            </p>
+          </Panel>
 
-        <dl className="mt-4 space-y-1.5 border-t border-mist pt-4 text-sm">
-          <Row label="Subtotal" value={formatCents(order.subtotalCents)} />
-          <Row label="Shipping" value={order.shippingCents === 0 ? "Free" : formatCents(order.shippingCents)} />
-          <Row label="Tax" value={formatCents(order.taxCents)} />
-          <div className="flex justify-between pt-2 text-base font-semibold text-ink">
-            <dt>Total</dt>
-            <dd className="font-mono">{formatCents(order.totalCents)}</dd>
-          </div>
-        </dl>
-      </section>
-    </div>
-  );
-}
+          {order.status === "pending_payment" && (
+            <Button
+              variant="cta"
+              className="mt-4 w-full"
+              disabled={retrying}
+              onClick={retryPayment}
+            >
+              {retrying ? "Trying again…" : "Retry payment"}
+            </Button>
+          )}
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-charcoal/80">
-      <dt>{label}</dt>
-      <dd className="font-mono">{value}</dd>
+          {canCustomerCancel(order.status) && (
+            <Button
+              variant="outline"
+              className="mt-4 w-full"
+              disabled={cancelling}
+              onClick={cancel}
+            >
+              {cancelling ? "Cancelling…" : "Cancel order"}
+            </Button>
+          )}
+        </div>
+      </Reveal>
     </div>
   );
 }

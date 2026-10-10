@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { AppShell } from "./App";
 import { RequireAuth } from "./components/RequireAuth";
+import { Moved } from "./components/Moved";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -9,20 +10,17 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import DashboardPage from "./pages/DashboardPage";
-import PetsPage from "./pages/PetsPage";
 import PetNewPage from "./pages/PetNewPage";
 import PetDetailPage from "./pages/PetDetailPage";
 import SearchPage from "./pages/SearchPage";
 import CaretakerDetailPage from "./pages/CaretakerDetailPage";
 import BookingNewPage from "./pages/BookingNewPage";
 import BookingDetailPage from "./pages/BookingDetailPage";
-import BookingsPage from "./pages/BookingsPage";
 import CaretakerProfilePage from "./pages/CaretakerProfilePage";
 import VetSearchPage from "./pages/VetSearchPage";
 import VetDetailPage from "./pages/VetDetailPage";
 import AppointmentNewPage from "./pages/AppointmentNewPage";
 import AppointmentDetailPage from "./pages/AppointmentDetailPage";
-import AppointmentsPage from "./pages/AppointmentsPage";
 import VetProfilePage from "./pages/VetProfilePage";
 import StorePage from "./pages/StorePage";
 import ProductPage from "./pages/ProductPage";
@@ -31,11 +29,13 @@ import CheckoutPage from "./pages/CheckoutPage";
 import OrdersPage from "./pages/OrdersPage";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import OpsOrdersPage from "./pages/OpsOrdersPage";
+import PetHealthPage from "./pages/PetHealthPage";
+import SupportPage from "./pages/SupportPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 /**
- * The route tree.
+ * The route tree — the reference project's `app/` directory, path for path.
  *
  * One layout route wrapping everything, which is what `app/layout.tsx` was: the
  * header, the maintenance banner, the footer, the toaster and the session sync
@@ -48,7 +48,7 @@ import NotFoundPage from "./pages/NotFoundPage";
  * replacement for `proxy.ts` and its matcher
  * (`/dashboard/*`, `/onboarding/*`, `/booking/*`, `/account/*`) — see
  * components/RequireAuth.tsx for why moving the check into the browser is not a
- * security regression.
+ * security regression. The server re-checks every one of them regardless.
  *
  * ── Why the auth pages are not guarded the other way ──
  *
@@ -63,7 +63,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
 
-      // ── M1: the auth flows ──
+      // ── The auth flows ──
       { path: "login", element: <LoginPage /> },
       { path: "signup", element: <SignupPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
@@ -82,25 +82,16 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
+
+      // ── The dashboard ──
+      // One role-aware page. The owner's pets, bookings, visits and orders are
+      // all sections of it, as in the reference — there is no separate list
+      // page for any of them.
       {
         path: "dashboard",
         element: (
           <RequireAuth>
             <DashboardPage />
-          </RequireAuth>
-        ),
-      },
-
-      // ── M3: pets and the health record ──
-      // Guarded individually rather than under a `/dashboard` layout route,
-      // because `RequireAuth` wraps the element and each of these renders its
-      // own page. The server re-checks every one of them regardless — the guard
-      // is UX, not security.
-      {
-        path: "dashboard/pets",
-        element: (
-          <RequireAuth>
-            <PetsPage />
           </RequireAuth>
         ),
       },
@@ -121,8 +112,34 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
+      {
+        path: "dashboard/caretaker-profile",
+        element: (
+          <RequireAuth>
+            <CaretakerProfilePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: "dashboard/vet-profile",
+        element: (
+          <RequireAuth>
+            <VetProfilePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Store operations. The page asks the API and renders "operations
+        // only" on a 403 — the guard here is only that you are signed in.
+        path: "dashboard/orders",
+        element: (
+          <RequireAuth>
+            <OpsOrdersPage />
+          </RequireAuth>
+        ),
+      },
 
-      // ── M4: caretakers and bookings ──
+      // ── Find care ──
       //
       // Search and the caretaker profile are unguarded: browsing the
       // marketplace is what brings people to it, and both serve only public
@@ -146,66 +163,33 @@ export const router = createBrowserRouter([
           </RequireAuth>
         ),
       },
-      {
-        path: "dashboard/bookings",
-        element: (
-          <RequireAuth>
-            <BookingsPage />
-          </RequireAuth>
-        ),
-      },
-      {
-        path: "dashboard/caretaker-profile",
-        element: (
-          <RequireAuth>
-            <CaretakerProfilePage />
-          </RequireAuth>
-        ),
-      },
 
-      // ── M5: vets and appointments ──
+      // ── Find a vet ──
       //
       // Search and the clinic profile are unguarded, for the same reason the
       // caretaker equivalents are: an owner looking for a vet at eleven at
-      // night should not have to sign up first, and both serve only public
-      // projections. Booking is where an account becomes necessary.
+      // night should not have to sign up first. Booking is guarded.
       { path: "vets", element: <VetSearchPage /> },
-      { path: "vet/:id", element: <VetDetailPage /> },
       {
-        // Before `appointment/:id`, so "new" is not matched as an id.
-        path: "appointment/new",
+        // Static, so it outranks `vets/:id` — "book" is never read as a vet id.
+        path: "vets/book",
         element: (
           <RequireAuth>
             <AppointmentNewPage />
           </RequireAuth>
         ),
       },
+      { path: "vets/:id", element: <VetDetailPage /> },
       {
-        path: "appointment/:id",
+        path: "appointments/:id",
         element: (
           <RequireAuth>
             <AppointmentDetailPage />
           </RequireAuth>
         ),
       },
-      {
-        path: "dashboard/appointments",
-        element: (
-          <RequireAuth>
-            <AppointmentsPage />
-          </RequireAuth>
-        ),
-      },
-      {
-        path: "dashboard/vet-profile",
-        element: (
-          <RequireAuth>
-            <VetProfilePage />
-          </RequireAuth>
-        ),
-      },
 
-      // ── M6: the store ──
+      // ── The store ──
       //
       // The shelves, a product and the cart are unguarded: browsing and
       // filling a basket need no account, and the cart lives in localStorage.
@@ -243,16 +227,20 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "store/:slug", element: <ProductPage /> },
-      {
-        // Store operations. The page asks the API and renders "operations
-        // only" on a 403 — the guard here is only that you are signed in.
-        path: "dashboard/orders",
-        element: (
-          <RequireAuth>
-            <OpsOrdersPage />
-          </RequireAuth>
-        ),
-      },
+
+      // ── Content ──
+      { path: "pet-health", element: <PetHealthPage /> },
+      { path: "support", element: <SupportPage /> },
+
+      // ── Retired URLs ──
+      // Earlier builds of this app used these. Each redirects to where its
+      // content lives now, so no bookmark or emailed link 404s.
+      { path: "dashboard/pets", element: <Moved to="/dashboard" /> },
+      { path: "dashboard/bookings", element: <Moved to="/dashboard" /> },
+      { path: "dashboard/appointments", element: <Moved to="/dashboard" /> },
+      { path: "vet/:id", element: <Moved to="/vets/:id" /> },
+      { path: "appointment/new", element: <Moved to="/vets/book" /> },
+      { path: "appointment/:id", element: <Moved to="/appointments/:id" /> },
 
       // ── Later milestones ──
       // Registered as named placeholders so the header's nav does not 404 on
@@ -265,6 +253,30 @@ export const router = createBrowserRouter([
             title="Adoption is on the way"
             description="Shelter listings, applications, and the health record that transfers with the animal arrive with M10."
           />
+        ),
+      },
+      {
+        // The cart offers free shipping "with Leash Plus"; membership is M7's.
+        path: "plus",
+        element: (
+          <ComingSoonPage
+            milestone="M7 · membership"
+            title="Leash Plus is on the way"
+            description="Free delivery on everything, a discount on every vet consultation, and same-day booking arrive with M7."
+          />
+        ),
+      },
+      {
+        // The header offers "Admin" to staff; the console is M9's.
+        path: "dashboard/admin/*",
+        element: (
+          <RequireAuth>
+            <ComingSoonPage
+              milestone="M9 · admin console"
+              title="The admin console is on the way"
+              description="User management, professional verification, payments and settings arrive with M9."
+            />
+          </RequireAuth>
         ),
       },
 

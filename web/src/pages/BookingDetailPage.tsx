@@ -1,411 +1,417 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useParams } from "react-router";
-import type { Booking, BookingStatus, Message, Review } from "@/types";
+import { Link, useParams } from "react-router";
+import { toast } from "sonner";
+import { useState, type ReactNode } from "react";
+import type { BookingStatus } from "@/types";
 import {
   createBookingReview,
   getBooking,
   getBookingReviews,
-  getMessages,
-  markMessagesRead,
-  sendMessage,
   updateBookingStatus,
 } from "@/api/bookings";
-import { getCaretaker, type CaretakerWithUser } from "@/api/caretakers";
-import { ApiError } from "@/api/_client";
-import { Button } from "@/components/ui/Button";
-import { Field, Input, Textarea } from "@/components/ui/Field";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { getCaretaker } from "@/api/caretakers";
+import { getUserById } from "@/api/users";
+import { getPetsByIds } from "@/api/pets";
+import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
+import { Avatar } from "@/components/Avatar";
+import { BookingStatusBadge } from "@/components/BookingStatusBadge";
+import { ServiceTypeChip } from "@/components/ServiceTypeChip";
+import { PetCard } from "@/components/PetCard";
+import { ReviewCard } from "@/components/ReviewCard";
+import { EmptyState } from "@/components/EmptyState";
+import { LeaveReview } from "@/components/reviews/LeaveReview";
+import { MessageThread } from "@/components/booking/MessageThread";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Reveal } from "@/components/ui/Reveal";
 import {
   SERVICE_LABELS,
-  BOOKING_STATUS_TONE,
   STATUS_LABELS,
-  formatCurrency,
-  formatDateTime,
   formatRange,
+  formatCurrency,
+  cn,
 } from "@/lib/utils";
 
+const TIMELINE: BookingStatus[] = [
+  "requested",
+  "accepted",
+  "in_progress",
+  "completed",
+];
+
 /**
- * One booking: its details, the thread, and whatever action is next.
+ * One booking — the reference's `app/booking/[id]/page.tsx`. Two behaviours
+ * differ, both because a rule says so:
  *
- * ── The buttons mirror the server's rules, and do not replace them ──
+ *  - **Either party can cancel from any non-terminal state**, in progress
+ *    included — REQUIREMENTS.md §11.1, settled with no cutoff (STATUS.md §5).
+ *    The reference offered it only to the owner and only before the visit
+ *    started, which contradicted its own support page.
+ *  - **The thread marks messages read explicitly** — see `MessageThread`.
  *
- * Which transitions appear depends on the booking's state and on which side of
- * it you are — the same two tables the API enforces (REQUIREMENTS.md §11.1).
- * Showing an owner an Accept button they would be refused is a worse experience
- * than not showing it. But the check that matters happens server-side on every
- * request: this is UX, and the 403 behind it is the security.
+ * The booking itself is 404 to anyone but its two parties.
  */
 export default function BookingDetailPage() {
   const { id = "" } = useParams();
   const { currentUser } = useSession();
+  const [busy, setBusy] = useState(false);
 
-  const [booking, setBooking] = useState<Booking | null | undefined>(undefined);
-  const [caretaker, setCaretaker] = useState<CaretakerWithUser | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { data: booking, loading, reload } = useAsync(
+    () => getBooking(id).catch(() => null),
+    [id]
+  );
+  const { data: caretaker } = useAsync(
+    () => (booking ? getCaretaker(booking.caretakerId) : Promise.resolve(null)),
+    [booking?.caretakerId]
+  );
+  const { data: owner } = useAsync(
+    () => (booking ? getUserById(booking.ownerId) : Promise.resolve(null)),
+    [booking?.ownerId]
+  );
+  const { data: pets } = useAsync(
+    () => (booking ? getPetsByIds(booking.petIds) : Promise.resolve([])),
+    [booking?.id]
+  );
+  const { data: reviews, reload: reloadReviews } = useAsync(
+    () => (booking ? getBookingReviews(booking.id) : Promise.resolve([])),
+    [booking?.id]
+  );
 
-  const load = useCallback(() => {
-    getBooking(id).then(setBooking).catch(() => setBooking(null));
-  }, [id]);
-
-  useEffect(load, [load]);
-
-  useEffect(() => {
-    if (!booking) return;
-    getCaretaker(booking.caretakerId).then(setCaretaker).catch(() => setCaretaker(null));
-  }, [booking]);
-
-  if (booking === undefined) {
-    return (
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-12 sm:px-6">
-        <Skeleton className="h-40 rounded-2xl" />
-        <Skeleton className="h-64 rounded-2xl" />
+  if (loading || booking === null) {
+    return !loading && booking === null ? (
+      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+        <EmptyState
+          title="Booking not found"
+          description="This booking may have been removed. Check your dashboard for current bookings."
+          actionLabel="Go to dashboard"
+          actionHref="/dashboard"
+        />
       </div>
-    );
-  }
-
-  if (booking === null) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center sm:px-6">
-        <h1 className="text-xl font-semibold text-ink">Booking not found</h1>
-        <p className="mt-2 text-sm text-charcoal/60">
-          It may not exist, or it may not be yours.
-        </p>
+    ) : (
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="mt-6 h-40 w-full rounded-2xl" />
+        <Skeleton className="mt-4 h-56 w-full rounded-2xl" />
       </div>
     );
   }
 
   const isOwner = currentUser?.id === booking.ownerId;
   const isCaretaker =
-    caretaker !== null && currentUser?.id === caretaker.user.id;
+    !!caretaker && !!currentUser && caretaker.user.id === currentUser.id;
 
-  async function move(status: BookingStatus) {
-    setError(null);
+  async function setStatus(status: BookingStatus, message: string) {
+    setBusy(true);
     try {
-      setBooking(await updateBookingStatus(id, status));
-    } catch (err) {
-      // A 409 means the booking moved under us; a 403 means the wrong party.
-      // Both carry a message worth showing verbatim.
-      setError(err instanceof ApiError ? err.message : "Could not update this booking");
+      await updateBookingStatus(booking!.id, status);
+      toast.success(message);
+      reload();
+    } catch (e) {
+      toast.error("Couldn’t update the booking", {
+        description: e instanceof Error ? e.message : "Try again.",
+      });
+    } finally {
+      setBusy(false);
     }
   }
 
+  const terminal =
+    booking.status === "declined" || booking.status === "cancelled";
+  const timelineActive = TIMELINE.indexOf(booking.status);
+  const alreadyReviewed =
+    !!reviews && !!currentUser && reviews.some((r) => r.fromUserId === currentUser.id);
+
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-12 sm:px-6">
-      <section className="rounded-2xl border border-mist bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">
-              {SERVICE_LABELS[booking.serviceType]}
-              {caretaker && (
-                <span className="text-charcoal/55"> with {caretaker.user.name}</span>
-              )}
-            </h1>
-            <p className="mt-1 text-sm text-charcoal/60">
-              {formatRange(booking.startDateTime, booking.endDateTime)}
-            </p>
-          </div>
-          <StatusBadge
-            tone={BOOKING_STATUS_TONE[booking.status]}
-            label={STATUS_LABELS[booking.status]}
+    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <div className="mb-1 flex items-center gap-2 text-sm text-charcoal/55">
+        <span className="font-mono">#{booking.id}</span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold text-ink">
+          {SERVICE_LABELS[booking.serviceType]} booking
+        </h1>
+        <BookingStatusBadge status={booking.status} />
+      </div>
+
+      {/* Status timeline (non-terminal) */}
+      {!terminal ? (
+        <Reveal className="mt-6 rounded-2xl border border-mist bg-white p-5">
+          <ol className="flex items-center">
+            {TIMELINE.map((s, i) => {
+              const done = i <= timelineActive;
+              const isLast = i === TIMELINE.length - 1;
+              return (
+                <li key={s} className={cn("flex items-center", !isLast && "flex-1")}>
+                  <div className="flex flex-col items-center">
+                    <span
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-full border-2 text-xs font-mono",
+                        done
+                          ? "border-ink bg-ink text-white"
+                          : "border-mist bg-white text-charcoal/40"
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-1.5 text-[11px]",
+                        done ? "text-ink" : "text-charcoal/40"
+                      )}
+                    >
+                      {STATUS_LABELS[s]}
+                    </span>
+                  </div>
+                  {!isLast && (
+                    <span
+                      className={cn(
+                        "mx-1 mb-5 h-0.5 flex-1 rounded",
+                        i < timelineActive ? "bg-ink" : "bg-mist"
+                      )}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </Reveal>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-mist bg-white p-5 text-sm text-charcoal/70">
+          This booking was {STATUS_LABELS[booking.status].toLowerCase()}.{" "}
+          {isOwner && (
+            <ButtonLink
+              to={`/booking/new?caretakerId=${booking.caretakerId}`}
+              variant="ghost"
+              size="sm"
+            >
+              Rebook
+            </ButtonLink>
+          )}
+        </div>
+      )}
+
+      {/* Parties */}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {caretaker && (
+          <PartyCard
+            label="Caretaker"
+            name={caretaker.user.name}
+            avatarUrl={caretaker.user.avatarUrl}
+            sub={`${caretaker.user.address.city}, ${caretaker.user.address.state}`}
+            href={`/caretaker/${caretaker.profile.id}`}
           />
+        )}
+        {owner && (
+          <PartyCard
+            label="Pet owner"
+            name={owner.name}
+            avatarUrl={owner.avatarUrl}
+            sub={`${owner.address.city}, ${owner.address.state}`}
+          />
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="mt-4 rounded-2xl border border-mist bg-white p-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Detail label="Service">
+            <ServiceTypeChip service={booking.serviceType} size="sm" />
+          </Detail>
+          <Detail label="Price">
+            <span className="font-mono font-semibold text-ink">
+              {formatCurrency(booking.priceTotal)}
+            </span>
+          </Detail>
+          <Detail label="When" full>
+            <span className="text-sm text-charcoal">
+              {formatRange(booking.startDateTime, booking.endDateTime)}
+            </span>
+          </Detail>
+          {booking.notes && (
+            <Detail label="Notes" full>
+              <span className="text-sm text-charcoal/80">{booking.notes}</span>
+            </Detail>
+          )}
         </div>
 
-        <dl className="mt-6 grid gap-4 sm:grid-cols-2">
-          <Detail label="Price" value={formatCurrency(booking.priceTotal)} />
-          <Detail label="Pets" value={`${booking.petIds.length} on this booking`} />
-          <Detail label="Requested" value={formatDateTime(booking.createdAt)} />
-          {booking.notes && <Detail label="Notes" value={booking.notes} />}
-        </dl>
-
-        {error && (
-          <p
-            role="alert"
-            className="mt-5 rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-leash"
-          >
-            {error}
+        <div className="mt-4 border-t border-mist pt-4">
+          <p className="mb-2 text-sm font-medium text-ink">
+            Pet{pets && pets.length > 1 ? "s" : ""}
           </p>
-        )}
+          <div className="space-y-2">
+            {pets === null ? (
+              <Skeleton className="h-24 w-full rounded-[12px]" />
+            ) : (
+              pets.map((pet) => (
+                <PetCard
+                  key={pet.id}
+                  pet={pet}
+                  href={isOwner ? `/dashboard/pets/${pet.id}` : undefined}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
 
-        <Actions
-          status={booking.status}
-          isOwner={isOwner}
-          isCaretaker={isCaretaker}
-          onMove={move}
-        />
-      </section>
-
-      <MessagesPanel bookingId={id} currentUserId={currentUser?.id ?? ""} />
-
-      {booking.status === "completed" && caretaker && (
-        <ReviewPanel
-          bookingId={id}
-          currentUserId={currentUser?.id ?? ""}
-          otherUserId={isOwner ? caretaker.user.id : booking.ownerId}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * The moves available from here, to this person.
- *
- * A direct transcription of the two tables in REQUIREMENTS.md §11.1:
- * accept/decline/start/complete belong to the caretaker, and either side may
- * cancel while the booking is not yet terminal.
- */
-function Actions({
-  status,
-  isOwner,
-  isCaretaker,
-  onMove,
-}: {
-  status: BookingStatus;
-  isOwner: boolean;
-  isCaretaker: boolean;
-  onMove: (status: BookingStatus) => void;
-}) {
-  const caretakerMoves: Partial<Record<BookingStatus, [BookingStatus, string][]>> = {
-    requested: [
-      ["accepted", "Accept"],
-      ["declined", "Decline"],
-    ],
-    accepted: [["in_progress", "Start"]],
-    in_progress: [["completed", "Mark complete"]],
-  };
-
-  const moves = isCaretaker ? (caretakerMoves[status] ?? []) : [];
-  const canCancel =
-    (isOwner || isCaretaker) &&
-    ["requested", "accepted", "in_progress"].includes(status);
-
-  if (moves.length === 0 && !canCancel) return null;
-
-  return (
-    <div className="mt-6 flex flex-wrap gap-3 border-t border-mist pt-5">
-      {moves.map(([next, label]) => (
-        <Button key={next} variant="cta" size="sm" onClick={() => onMove(next)}>
-          {label}
-        </Button>
-      ))}
-      {canCancel && (
-        <Button variant="ghost" size="sm" onClick={() => onMove("cancelled")}>
-          Cancel booking
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function MessagesPanel({
-  bookingId,
-  currentUserId,
-}: {
-  bookingId: string;
-  currentUserId: string;
-}) {
-  const [thread, setThread] = useState<Message[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-
-  const load = useCallback(() => {
-    getMessages(bookingId).then(setThread).catch(() => setThread([]));
-  }, [bookingId]);
-
-  useEffect(load, [load]);
-
-  // Marking read is its own request, fired after the thread is on screen —
-  // never folded into the GET. See REQUIREMENTS.md C10: doing it inside the
-  // read made an unread message impossible to observe.
-  useEffect(() => {
-    if (!thread?.some((m) => m.fromUserId !== currentUserId && m.readAt === null)) return;
-    markMessagesRead(bookingId).then(load).catch(() => {});
-  }, [thread, bookingId, currentUserId, load]);
-
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    if (!draft.trim()) return;
-
-    setSending(true);
-    try {
-      await sendMessage(bookingId, draft.trim());
-      setDraft("");
-      load();
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <section className="rounded-2xl border border-mist bg-white p-6">
-      <h2 className="text-lg font-semibold text-ink">Messages</h2>
-
-      {thread === null ? (
-        <Skeleton className="mt-4 h-24 rounded-xl" />
-      ) : thread.length === 0 ? (
-        <p className="mt-3 text-sm text-charcoal/60">
-          Nothing yet. Say hello — they can see this thread too.
-        </p>
-      ) : (
-        <ul className="mt-5 space-y-3">
-          {thread.map((message) => {
-            const mine = message.fromUserId === currentUserId;
-            return (
-              <li
-                key={message.id}
-                className={mine ? "flex justify-end" : "flex justify-start"}
+      {/* Actions */}
+      {(isOwner || isCaretaker) && (
+        <div className="mt-4 flex flex-wrap gap-3 rounded-2xl border border-mist bg-white p-5">
+          {isCaretaker && booking.status === "requested" && (
+            <>
+              <Button
+                variant="cta"
+                onClick={() => setStatus("accepted", "Booking accepted.")}
+                disabled={busy}
               >
-                <div
-                  className={
-                    "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm " +
-                    (mine ? "bg-ink text-white" : "bg-mist/50 text-ink")
-                  }
-                >
-                  <p>{message.body}</p>
-                  <p
-                    className={
-                      "mt-1 text-[10px] " +
-                      (mine ? "text-white/55" : "text-charcoal/50")
-                    }
-                  >
-                    {formatDateTime(message.createdAt)}
-                    {mine && message.readAt && " · Read"}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <form onSubmit={send} className="mt-5 flex gap-3">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Write a message"
-          aria-label="Message"
-        />
-        <Button type="submit" disabled={sending || !draft.trim()}>
-          Send
-        </Button>
-      </form>
-    </section>
-  );
-}
-
-function ReviewPanel({
-  bookingId,
-  currentUserId,
-  otherUserId,
-}: {
-  bookingId: string;
-  currentUserId: string;
-  otherUserId: string;
-}) {
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(() => {
-    getBookingReviews(bookingId).then(setReviews).catch(() => setReviews([]));
-  }, [bookingId]);
-
-  useEffect(load, [load]);
-
-  const alreadyMine = reviews.some((r) => r.fromUserId === currentUserId);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      await createBookingReview(bookingId, { toUserId: otherUserId, rating, comment });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not leave that review");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="rounded-2xl border border-mist bg-white p-6">
-      <h2 className="text-lg font-semibold text-ink">Reviews</h2>
-      <p className="mt-1 text-sm text-charcoal/60">
-        Both sides review each other, once each.
-      </p>
-
-      {reviews.length > 0 && (
-        <ul className="mt-5 space-y-4">
-          {reviews.map((review) => (
-            <li key={review.id} className="border-l-2 border-mist pl-4">
-              <p className="text-sm text-charcoal/70">
-                {review.rating.toFixed(1)} ★
-                {review.fromUserId === currentUserId && (
-                  <span className="text-charcoal/45"> · yours</span>
-                )}
-              </p>
-              {review.comment && (
-                <p className="mt-1 text-sm text-ink">{review.comment}</p>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {alreadyMine ? (
-        <p className="mt-5 text-sm text-charcoal/60">
-          You have already reviewed this booking.
-        </p>
-      ) : (
-        <form onSubmit={submit} className="mt-6 space-y-4 border-t border-mist pt-5">
-          {error && (
-            <p role="alert" className="text-sm text-leash">
-              {error}
-            </p>
+                Accept request
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setStatus("declined", "Booking declined.")}
+                disabled={busy}
+              >
+                Decline
+              </Button>
+            </>
           )}
-
-          <Field label="Rating" hint="1–5" htmlFor="rating">
-            <Input
-              id="rating"
-              type="number"
-              min={1}
-              max={5}
-              step={0.5}
-              value={rating}
-              onChange={(e) => setRating(Number(e.target.value))}
-            />
-          </Field>
-
-          <Field label="Comment" htmlFor="comment">
-            <Textarea
-              id="comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="How did it go?"
-            />
-          </Field>
-
-          <Button type="submit" variant="cta" disabled={saving}>
-            {saving ? "Posting…" : "Leave review"}
-          </Button>
-        </form>
+          {isCaretaker && booking.status === "accepted" && (
+            <Button
+              variant="cta"
+              onClick={() => setStatus("in_progress", "Service started.")}
+              disabled={busy}
+            >
+              Start service
+            </Button>
+          )}
+          {isCaretaker && booking.status === "in_progress" && (
+            <Button
+              variant="cta"
+              onClick={() => setStatus("completed", "Marked complete — nice work!")}
+              disabled={busy}
+            >
+              Mark complete
+            </Button>
+          )}
+          {["requested", "accepted", "in_progress"].includes(booking.status) && (
+              <Button
+                variant="outline"
+                onClick={() => setStatus("cancelled", "Booking cancelled.")}
+                disabled={busy}
+              >
+                Cancel booking
+              </Button>
+            )}
+          {!["requested", "accepted", "in_progress"].includes(booking.status) && (
+              <p className="text-sm text-charcoal/55">
+                No actions available for this booking right now.
+              </p>
+            )}
+        </div>
       )}
-    </section>
+
+      {/* Messages (participants only) */}
+      {(isOwner || isCaretaker) && currentUser && (owner || caretaker) && (
+        <MessageThread
+          bookingId={booking.id}
+          currentUserId={currentUser.id}
+          people={{
+            ...(owner
+              ? { [owner.id]: { name: owner.name, avatarUrl: owner.avatarUrl } }
+              : {}),
+            ...(caretaker
+              ? {
+                  [caretaker.user.id]: {
+                    name: caretaker.user.name,
+                    avatarUrl: caretaker.user.avatarUrl,
+                  },
+                }
+              : {}),
+          }}
+        />
+      )}
+
+      {/* Reviews */}
+      {booking.status === "completed" && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold text-ink">Reviews</h2>
+          <div className="mt-3 space-y-4">
+            {reviews && reviews.length > 0 ? (
+              reviews.map((r) => <ReviewCard key={r.id} review={r} />)
+            ) : (
+              <p className="text-sm text-charcoal/55">No reviews yet.</p>
+            )}
+            {(isOwner || isCaretaker) && !alreadyReviewed && caretaker && owner && (
+              <LeaveReview
+                toName={isOwner ? caretaker.user.name : owner.name}
+                onSubmit={async ({ rating, comment }) => {
+                  await createBookingReview(booking.id, {
+                    toUserId: isOwner ? caretaker.user.id : booking.ownerId,
+                    rating,
+                    comment,
+                  });
+                  reloadReviews();
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function PartyCard({
+  label,
+  name,
+  avatarUrl,
+  sub,
+  href,
+}: {
+  label: string;
+  name: string;
+  avatarUrl: string;
+  sub: string;
+  href?: string;
+}) {
+  const inner = (
+    <>
+      <Avatar src={avatarUrl} size={44} />
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] uppercase tracking-wide text-charcoal/50">
+          {label}
+        </p>
+        <p className="truncate font-semibold text-ink">{name}</p>
+        <p className="truncate text-xs text-charcoal/60">{sub}</p>
+      </div>
+    </>
+  );
+  const cls =
+    "flex items-center gap-3 rounded-2xl border border-mist bg-white p-4";
+  return href ? (
+    <Link to={href} className={cn(cls, "transition-colors hover:border-ink/30")}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function Detail({
+  label,
+  children,
+  full,
+}: {
+  label: string;
+  children: ReactNode;
+  full?: boolean;
+}) {
   return (
-    <div>
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-charcoal/50">
+    <div className={cn(full && "sm:col-span-2")}>
+      <p className="font-mono text-[10px] uppercase tracking-wide text-charcoal/50">
         {label}
-      </dt>
-      <dd className="mt-1 text-sm text-ink">{value}</dd>
+      </p>
+      <div className="mt-1">{children}</div>
     </div>
   );
 }
