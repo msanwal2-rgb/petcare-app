@@ -353,6 +353,12 @@ public sealed class FakeSubscriptions : ISubscriptionProvider
         return Task.CompletedTask;
     }
 
+    public Task CancelNowAsync(string reference, CancellationToken ct = default)
+    {
+        CancelCalls.Add($"{reference}:now");
+        return Task.CompletedTask;
+    }
+
     public Task<ProviderSubscription?> GetSubscriptionAsync(string reference, CancellationToken ct = default)
         => Task.FromResult<ProviderSubscription?>(null);
 

@@ -26,6 +26,13 @@ public static class NotificationKinds
     public const string AdoptionRejected = "adoption_rejected";
     public const string AdoptionCompleted = "adoption_completed";
     public const string AdoptionReversed = "adoption_reversed";
+
+    /// <summary>
+    /// Staff verified a caretaker, vet or shelter (M9). New: the reference sent
+    /// this as <c>membership_started</c>, which any consumer of the kind would
+    /// have filed under Leash Plus.
+    /// </summary>
+    public const string ProfileVerified = "profile_verified";
 }
 
 /// <summary>

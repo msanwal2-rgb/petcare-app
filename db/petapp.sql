@@ -30,7 +30,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict toalIrp9SAWcpWx49oJJ5YbpMvg3iAkE2OZVfzuSqoJCK0eAHZQlaPgGErq5YfB
+\restrict ntXUAQ93pKhagkaIaXi9hNjLenc8VHpiv5ceb64AFeBhiPJhJIFDlROMccyOy8h
 
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
@@ -64,7 +64,22 @@ CREATE TABLE public.admin_audit_log (
     summary text NOT NULL,
     metadata jsonb,
     ip text DEFAULT ''::text NOT NULL,
-    "createdAt" timestamp with time zone NOT NULL
+    "createdAt" timestamp with time zone NOT NULL,
+    seq bigint NOT NULL
+);
+
+
+--
+-- Name: admin_audit_log_seq_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.admin_audit_log ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.admin_audit_log_seq_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -1003,6 +1018,13 @@ CREATE INDEX "admin_audit_log_actorUserId_createdAt_idx" ON public.admin_audit_l
 
 
 --
+-- Name: admin_audit_log_createdAt_seq_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "admin_audit_log_createdAt_seq_idx" ON public.admin_audit_log USING btree ("createdAt" DESC, seq DESC);
+
+
+--
 -- Name: admin_audit_log_targetType_targetId_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1627,7 +1649,7 @@ ALTER TABLE ONLY public.vet_profiles
 -- PostgreSQL database dump complete
 --
 
-\unrestrict toalIrp9SAWcpWx49oJJ5YbpMvg3iAkE2OZVfzuSqoJCK0eAHZQlaPgGErq5YfB
+\unrestrict ntXUAQ93pKhagkaIaXi9hNjLenc8VHpiv5ceb64AFeBhiPJhJIFDlROMccyOy8h
 
 
 
@@ -1641,5 +1663,6 @@ INSERT INTO public.schema_version (script) VALUES
   ('001_sessions_valid_from_timestamptz'),
   ('002_refresh_tokens'),
   ('003_vet_clinic_phone'),
-  ('004_notification_outbox')
+  ('004_notification_outbox'),
+  ('005_audit_log_seq')
 ON CONFLICT (script) DO NOTHING;

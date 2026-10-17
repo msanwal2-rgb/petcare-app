@@ -27,6 +27,26 @@ public static class AuthClaims
     /// the cookie stores the same name so one accessor reads either principal.
     /// </summary>
     public const string Subject = "sub";
+
+    /// <summary>
+    /// When the session was issued, in Unix milliseconds — the value compared
+    /// with <c>sessionsValidFrom</c>.
+    ///
+    /// Needed because neither credential keeps its own issue time precisely:
+    /// the cookie ticket serialises <c>IssuedUtc</c> in RFC 1123 (whole
+    /// seconds) and a JWT's <c>iat</c> is whole seconds by definition, while the
+    /// watermark is written to the millisecond. Without this, a session
+    /// established in the same second as a revocation — signing straight back
+    /// in after a forced sign-out, or after a password reset — was refused.
+    /// Credentials minted before the claim existed fall back to the coarse value.
+    /// </summary>
+    public const string IssuedAtMs = "iat_ms";
+
+    /// <summary>The precise issue time if the credential carries one, else <paramref name="fallback"/>.</summary>
+    public static DateTimeOffset? IssuedAt(System.Security.Claims.ClaimsPrincipal? principal, DateTimeOffset? fallback)
+        => principal?.FindFirst(IssuedAtMs)?.Value is { } raw && long.TryParse(raw, out var ms)
+            ? DateTimeOffset.FromUnixTimeMilliseconds(ms)
+            : fallback;
 }
 
 /// <summary>

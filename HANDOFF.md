@@ -1,7 +1,6 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **M7 (payments and membership)**,
-2026-10-17.
+For whoever picks this up next. Written at the end of **M9 (admin console)**, 2026-10-17.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -33,17 +32,17 @@ rewritten without them on purpose.
 
 ## 2. Where the build is
 
-**9 of 11 modules** (M0–M8), the landing page, the UI parity pass, and
+**10 of 11 modules** (M0–M9; M10 is the stretch), the landing page, the UI parity pass, and
 an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 732 passing, ~4 min
+cd API && dotnet test        # 840 passing, ~5 min
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
 
-All three green at the end of M7. Change scripts run to `004` (M7 needed none); **005 is next**.
-`petapp_dev` and `leash_review` are both at 004 (`leash_review` is updated by
+All three green at the end of M9. Change scripts run to `005`; **006 is next**.
+`petapp_dev` and `leash_review` are both at 005 (`leash_review` is updated by
 hand — deploy/README.md). `psql` and `pg_dump` are at
 `C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
 
@@ -55,29 +54,30 @@ working cross-origin; do not revert this.
 
 ---
 
-## 3. What to do next — M9, the admin console
+## 3. What to do next — release hardening, then M10
 
-`NEXT_PROMPT.md` has the brief; `REQUIREMENTS.md` §10.2 is the spec. Port
-`components/admin/AdminShell.tsx`, `app/dashboard/admin/*` and
-`app/api/admin/*`, and `tests/admin.test.ts` (plus `users.test.ts` if not
-covered). Every action re-checks the staff role server-side (D1), answers a
-non-staff caller 403 with an explanation (D2), and writes `admin_audit_log`
-(D3) — the table exists, nothing writes it yet.
+`NEXT_PROMPT.md` has the brief (BUILD_PLAN §0, days 43–44):
 
-What M7 leaves ready for M9:
+- **CI** in `.github/workflows/`: a throwaway PostgreSQL built from
+  `db/petapp.sql`, `dotnet test`, web build + oxlint, and `verify.sh` — which
+  needs a committed baseline (`petapp_at_last_release.sql` is gitignored) or a
+  mode that skips the delta half. Pick one and document it.
+- **The vulnerable transitive packages** in the test project
+  (`Azure.Identity` 1.3.0, `System.Drawing.Common` 5.0.0) — upgrade or pin.
+- **Endpoint suites for M5 and M6** (`VetEndpointTests`, `StoreEndpointTests`) —
+  S9 and price tampering are HTTP-shaped and only ever hand-checked.
+- **The fulfilment job on one instance** — document `Fulfilment__Enabled=false`
+  for the others (the notification drain is safe everywhere).
+- **Route-level code splitting** — the bundle is ~900 kB in one chunk.
+- **`deploy/publish-iis.ps1`** — still the single-site layout; see §5.
+- **Redeploy** to the IIS sites and apply every change script to `leash_review`
+  (it is at 005 now — nothing outstanding unless a new one is written).
 
-| M9 needs | Already there |
-|---|---|
-| Refunds from the payments screen (`finance`) | `IPaymentLedger.RequestRefundAsync(new RefundRequest(PaymentId, AmountCents, Reason, InitiatedBy: staffId, Note))` — partial or full, pending row first, `RefundFailure` says why not. `ProviderUnavailable` means "queued for retry", not "failed" |
-| A payment's refund history | `IPaymentRepository.ListRefundsAsync(paymentId)` |
-| Subscriptions list / cancel / resume (`finance`) | `ISubscriptionProvider.SetCancelAtPeriodEndAsync` + `ISubscriptionRepository.SetCancelAtPeriodEndAsync` — what `MembershipService.CancelAsync` does for the member; staff need the same for another user, audited |
-| Verification status (V11, `support`) | `vet_profiles`/`caretaker_profiles`/`shelter_profiles."verificationStatus"` — absent from every self-service DTO on purpose |
-| Suspend / force sign-out (D5, A15) | Bump `sessionsValidFrom` **and** revoke refresh tokens in one transaction (ARCHITECTURE §4) |
-| Settings | `ISettingsService` already reads `signupsOpen`, `maintenanceBanner`, `demoLoginVisible` for `/config` |
-
-The header's Admin link and the `/dashboard/admin/*` placeholder route exist;
-the placeholder goes. Staff accounts u21 (ops), u22 (admin), u23
-(support + finance) sign in with `STAFF_PASSWORD` from the root `.env.local`.
+Then **M10, adoption** (stretch): `tests/adoption-transfer.test.ts` first; the
+transfer sets `ownerId` and `ownedSince` in **one statement** (STATUS §3d).
+M7 and M9 left it ready: the ledger has `PaymentKinds.AdoptionFee` and
+`payments."adoptionApplicationId"`; `NotificationKinds` has every `adoption_*`
+kind; the professionals screen already verifies shelters.
 
 ### Owner decisions still open
 
@@ -168,6 +168,18 @@ New in M6:
   Re-seed it if a clean demo matters.
 
 
+New in M9:
+
+- **Admin authority is checked in the service, not the controller.** A new
+  admin endpoint gets its check by calling an `IAdmin*Service` method; do not
+  add a role attribute to the controller and assume that is enough.
+- **Anything that can remove an admin takes `LockActiveAdminsAsync` first**, and
+  re-reads the caller's own authority under that lock.
+- **Session issue times are in the `iat_ms` claim.** The cookie's `IssuedUtc`
+  and a JWT's `iat` are whole seconds; the watermark is milliseconds.
+- **The suite signs staff in by copying the demo password's hash** onto
+  u21–u23 (`AdminEndpointTests`); the real `STAFF_PASSWORD` is only in `.env.local`.
+
 New in M7:
 
 - **`SubscriptionStatuses` exists in both our enums and Stripe.net.** Files that
@@ -204,6 +216,13 @@ New in M8:
 ---
 
 ## 7. What was checked by hand
+
+- **M9** (2026-10-17, headless Chrome against `petapp_dev`): Tom suspended and
+  reactivated Daniel (his open session 200 → 401), verified a professional,
+  refunded $5.00 of Maya's o1 (her order: `partially_refunded`); Priya read the
+  audit log and set a maintenance banner Maya then saw; Rosa saw Overview and
+  Fulfilment only; Maya saw "Staff only". **This mutated `petapp_dev`**: o1 is
+  partially refunded, one professional is verified, and the audit log has rows.
 
 - **M7** (2026-10-17, headless Chrome against `petapp_dev`, API with a local
   webhook secret): Maya joined Leash Plus on the demo provider → free shipping in

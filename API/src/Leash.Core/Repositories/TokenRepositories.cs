@@ -188,4 +188,19 @@ public sealed class SettingsRepository(NpgsqlDataSource db) : ISettingsRepositor
 
         return rows.ToDictionary(r => r.Key, r => r.Value);
     }
+
+    public async Task UpsertAsync(
+        string key, string jsonValue, string updatedBy, DateTimeOffset at,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        await session.Connection.ExecuteAsync(new CommandDefinition(
+            """
+            INSERT INTO system_settings (key, value, "updatedAt", "updatedBy")
+            VALUES (@key, CAST(@jsonValue AS jsonb), @at, @updatedBy)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = EXCLUDED."updatedAt",
+                                            "updatedBy" = EXCLUDED."updatedBy"
+            """,
+            new { key, jsonValue, updatedBy, at }, session.Transaction, cancellationToken: ct));
+    }
 }

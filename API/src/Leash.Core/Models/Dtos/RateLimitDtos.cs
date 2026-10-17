@@ -66,6 +66,11 @@ public static class RateLimits
         "Too many refresh attempts. Sign in again.");
 
     /// <summary>Starting a membership checkout: creates a customer and a session at the provider.</summary>
+    /// <summary>Writes from the admin console, per member of staff.</summary>
+    public static readonly RateLimitRule AdminWrite = new(
+        "admin-write", 120, TimeSpan.FromHours(1),
+        "Too many administrative changes in a short time.");
+
     public static readonly RateLimitRule Checkout = new(
         "checkout", 10, TimeSpan.FromHours(1),
         "Too many checkout attempts. Try again shortly.");

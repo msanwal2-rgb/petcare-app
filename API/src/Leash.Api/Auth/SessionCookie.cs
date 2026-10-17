@@ -18,8 +18,12 @@ public sealed class SessionCookie
 {
     public Task SignInAsync(HttpContext http, string userId)
     {
+        var issuedAt = Ids.Now();
         var identity = new ClaimsIdentity(
-            [new Claim(AuthClaims.Subject, userId)],
+            [
+                new Claim(AuthClaims.Subject, userId),
+                new Claim(AuthClaims.IssuedAtMs, issuedAt.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            ],
             AuthSchemes.Cookie,
             // The cookie carries the user id and nothing else. Roles and status
             // are read from the database on every request, so a stale claim
@@ -34,7 +38,7 @@ public sealed class SessionCookie
             new AuthenticationProperties
             {
                 IsPersistent = true,
-                IssuedUtc = Ids.Now(),
+                IssuedUtc = issuedAt,
             });
     }
 }

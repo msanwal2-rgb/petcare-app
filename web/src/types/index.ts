@@ -262,9 +262,8 @@ export interface AdminUserSummary {
 
 export interface AdminUserPage {
   items: AdminUserSummary[];
+  nextCursor: string | null;
   total: number;
-  limit: number;
-  offset: number;
 }
 
 export interface AdminOrderSummary {
@@ -323,7 +322,6 @@ export interface AdminStats {
     awaitingFulfilment: number;
   };
   catalog: { active: number; outOfStock: number };
-  assistant: { conversations: number; messagesLast7Days: number };
 }
 
 export interface AdminRefundRow {
@@ -359,9 +357,8 @@ export interface AdminPaymentRow {
 
 export interface AdminPaymentPage {
   items: AdminPaymentRow[];
+  nextCursor: string | null;
   total: number;
-  limit: number;
-  offset: number;
   /** Totals over the filtered set, so they describe what is on screen. */
   capturedCents: number;
   refundedCents: number;
@@ -384,9 +381,8 @@ export interface AdminSubscriptionRow {
 
 export interface AdminSubscriptionPage {
   items: AdminSubscriptionRow[];
+  nextCursor: string | null;
   total: number;
-  limit: number;
-  offset: number;
   activeCount: number;
   /** Normalised to a month, so annual and monthly plans are comparable. */
   mrrCents: number;
@@ -410,9 +406,8 @@ export interface AdminProfessionalRow {
 
 export interface AdminProfessionalPage {
   items: AdminProfessionalRow[];
+  nextCursor: string | null;
   total: number;
-  limit: number;
-  offset: number;
   awaitingReview: number;
 }
 
@@ -931,7 +926,9 @@ export type NotificationKind =
   | "adoption_approved"
   | "adoption_rejected"
   | "adoption_completed"
-  | "adoption_reversed";
+  | "adoption_reversed"
+  /** Staff verified a caretaker, vet or shelter. The reference reused membership_started. */
+  | "profile_verified";
 
 export interface Notification {
   id: string;

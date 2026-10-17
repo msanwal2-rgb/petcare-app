@@ -125,7 +125,7 @@ public static class AuthSetup
 
                     var reason = await validator.ValidateAsync(
                         context.Principal?.UserId(),
-                        context.Properties.IssuedUtc,
+                        AuthClaims.IssuedAt(context.Principal, context.Properties.IssuedUtc),
                         context.HttpContext.RequestAborted);
 
                     if (reason is null) return;
@@ -164,11 +164,11 @@ public static class AuthSetup
                     var validator = context.HttpContext.RequestServices
                         .GetRequiredService<ISessionValidator>();
 
-                    var issuedAt =
+                    var issuedAt = AuthClaims.IssuedAt(context.Principal,
                         context.Principal?.FindFirst("iat")?.Value is { } raw
                         && long.TryParse(raw, out var seconds)
                             ? DateTimeOffset.FromUnixTimeSeconds(seconds)
-                            : (DateTimeOffset?)null;
+                            : null);
 
                     var reason = await validator.ValidateAsync(
                         context.Principal?.UserId(), issuedAt,

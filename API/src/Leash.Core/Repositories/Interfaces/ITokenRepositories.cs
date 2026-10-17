@@ -118,4 +118,9 @@ public interface ISettingsRepository
 {
     Task<IReadOnlyDictionary<string, string>> GetAllAsync(
         ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>Write one setting as JSON, recording who and when.</summary>
+    Task UpsertAsync(
+        string key, string jsonValue, string updatedBy, DateTimeOffset at,
+        ITransactionScope? scope = null, CancellationToken ct = default);
 }

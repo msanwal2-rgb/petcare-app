@@ -73,6 +73,8 @@ public static class DependencyInjection
         services.AddSingleton<INotificationRepository, NotificationRepository>();
         services.AddSingleton<ISubscriptionRepository, SubscriptionRepository>();
         services.AddSingleton<IWebhookEventRepository, WebhookEventRepository>();
+        services.AddSingleton<IAdminRepository, AdminRepository>();
+        services.AddSingleton<IAuditRepository, AuditRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -120,6 +122,16 @@ public static class DependencyInjection
         services.AddSingleton<Payments.IWebhookEventStore, Payments.WebhookEventStore>();
         services.AddSingleton<Payments.IStripeWebhookHandler, Payments.StripeWebhookHandler>();
         services.AddSingleton<Payments.IStripeWebhookIntake, Payments.StripeWebhookIntake>();
+
+        // ── The admin console (M9) ──────────────────────────────────────
+        // Every service checks the caller's staff role itself (D1) through
+        // StaffGate, and writes its audit row through IAuditLog (D3).
+        services.AddSingleton<StaffGate>();
+        services.AddSingleton<IAuditLog, AuditLog>();
+        services.AddSingleton<IAdminUserService, AdminUserService>();
+        services.AddSingleton<IAdminProfessionalService, AdminProfessionalService>();
+        services.AddSingleton<IAdminFinanceService, AdminFinanceService>();
+        services.AddSingleton<IAdminConsoleService, AdminConsoleService>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

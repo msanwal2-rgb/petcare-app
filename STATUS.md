@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-17**, end of M7 (payments and membership).
+Last updated: **2026-10-17**, end of M9 (admin console).
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -27,7 +27,8 @@ Last updated: **2026-10-17**, end of M7 (payments and membership).
 | — | **UI parity pass** | ✅ Done — every M1–M6 screen ported from the reference; 34 components added. See §3-0 |
 | **M8** | Notifications | ✅ Done — 2 endpoints, an outbox and its drain, the bell; 45 tests. See §3-M8 |
 | **M7** | Payments & membership | ✅ Done — 7 endpoints, the ledger, Stripe + demo providers, the webhook; 148 tests. See §3-M7 |
-| M9 | Admin console | ⬜ **Next** |
+| **M9** | Admin console | ✅ Done — 14 endpoints, 8 screens, the audit log; 108 tests. See §3-M9 |
+| — | Release hardening | ⬜ **Next** |
 | M10 | Adoption | ⬜ Stretch |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
@@ -53,7 +54,7 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, calls the API on :5001 (public/config.js)
 
 # check it
-cd API && dotnet test        # 732 passing, ~4m
+cd API && dotnet test        # 840 passing, ~5m
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -66,7 +67,7 @@ demo password.
 
 ### Database
 
-32 tables (four change scripts since the bootstrap). 29 from the original schema (32 minus the three assistant tables),
+32 tables (five change scripts since the bootstrap). 29 from the original schema (32 minus the three assistant tables),
 plus `schema_version`, `refresh_tokens` and `notification_outbox`.
 
 | Script | What |
@@ -78,6 +79,7 @@ plus `schema_version`, `refresh_tokens` and `notification_outbox`.
 | `db/changes/002_refresh_tokens.sql` | The `refresh_tokens` table for mobile auth |
 | `db/changes/003_vet_clinic_phone.sql` | `vet_profiles."clinicPhone"` — the practice's public line. Empty by default, deliberately not backfilled from `users.phone` |
 | `db/changes/004_notification_outbox.sql` | `notification_outbox` (one row per out-of-band channel per notification, claimed under a lease) and `notifications.seq`, an identity tie-break for "newest first". Applied to `petapp_dev` and `leash_review` |
+| `db/changes/005_audit_log_seq.sql` | `admin_audit_log.seq`, an identity tie-break for the newest-first log, plus an index on `("createdAt" DESC, seq DESC)`. Applied to `petapp_dev` and `leash_review` |
 | `db/reference/R001_*.sql` | Plans, settings, catalogue — every environment |
 | `db/devseed/D001_*.sql` | 25 users, 12 pets, bookings, orders — **dev/test only** |
 
@@ -132,6 +134,13 @@ GET    /membership               POST /membership/checkout
 POST   /membership/cancel        POST /membership/resume
 POST   /membership/portal        POST /membership/sync
 POST   /webhooks/stripe                                    → unauthenticated; the signature is the gate
+
+GET    /admin/stats                                        → any staff
+GET    /admin/users   /admin/users/{id}    PATCH /admin/users/{id}    DELETE /admin/users/{id}   → support (staff roles, delete: admin)
+GET    /admin/professionals      PATCH /admin/professionals/{id}        → support
+GET    /admin/payments           POST  /admin/payments/{id}/refund     → finance
+GET    /admin/subscriptions      PATCH /admin/subscriptions/{id}        → finance
+GET    /admin/audit              GET /admin/settings   PATCH /admin/settings   → admin
 ```
 
 Plus two background jobs in `Leash.Api/Jobs/`: `FulfilmentWorker` — hourly by
@@ -164,6 +173,7 @@ in `AddLeashCore`:
 | `IPaymentLedger`, `IEntitlementService`, `ISubscriptionReconciler`, `IMembershipService` | `IPaymentRepository` (payments + refunds), `ISubscriptionRepository` |
 | `IWebhookEventStore`, `IStripeWebhookHandler`, `IStripeWebhookIntake` | `IWebhookEventRepository` |
 | `IPaymentProvider`, `ISubscriptionProvider` — demo or Stripe, chosen by `Payments:Provider` | |
+| `IAdminUserService`, `IAdminProfessionalService`, `IAdminFinanceService`, `IAdminConsoleService`, `IAuditLog`, `StaffGate` | `IAdminRepository`, `IAuditRepository` |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -213,7 +223,7 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 732 passing
+### Tests — 840 passing
 
 | File | Covers |
 |---|---|
@@ -236,12 +246,59 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `EntitlementTests` | Port of `tests/entitlements.test.ts` — who is a member, dunning grace, free shipping in the quote and at checkout, the consult discount snapshotted, priority booking on appointments **and** bookings |
 | `MembershipServiceTests` | The membership routes the reference had no suite for: demo checkout through the reconciler, cancel/resume, portal, M2 and M14 failing closed, M15 customer reuse with a fake Stripe |
 | `PaymentEndpointTests` | §9.4 over HTTP: buy Plus → free shipping and the 20% consult discount; the webhook refuses everything without a secret, rejects bad signatures, and processes one event delivered twice exactly once; the lead-time 409 carries the member window |
+| `AdminServiceTests` | Port of `tests/admin.test.ts` — staff roles, search (every sort walked one row at a time, wildcards escaped), detail, every account action, staff-role changes and the last admin (including two admins demoting each other at once), soft delete, the audit log, settings, stats — plus professionals and finance, which the reference had no suite for |
+| `AdminEndpointTests` | The console over HTTP: anonymous 401, customer 403 with an explanation (D2), the role matrix, Journey 7 (suspend → next request 401) and Journey 8 (refund → ledger and customer view), malformed actions, the audit row's actor and IP, settings reaching `/config`, V11 from the vet's side |
 | `BookingEndpointTests` | What is guarded and what is deliberately public, 409-vs-403, and the §6.4 acceptance walk |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-M9. M9 — the admin console (2026-10-17)
+
+REQUIREMENTS §10.2: fourteen endpoints under `/api/v1/admin`, the reference's
+`AdminShell` and its eight screens, the audit log, and `tests/admin.test.ts`
+ported (108 tests across `AdminServiceTests` and `AdminEndpointTests`).
+`users.test.ts` was already covered by `UserEndpointTests`. One schema change:
+`db/changes/005` (`admin_audit_log.seq`).
+
+| | |
+|---|---|
+| **D1 — every call re-checks the role** | In the **service**, not the controller: each `IAdmin*Service` method starts with `StaffGate.RequireAsync(caller, role)`. The controller has `[Authorize]` (signed in) and decides nothing, so a route added later cannot forget a check that isn't there. Users/professionals: `support`; staff roles and deletion: `admin`; payments/subscriptions: `finance`; audit/settings: `admin`; overview: **any** staff role |
+| **D2 — 403 that explains** | "This needs the "finance" staff role, which your account does not have." Never a 404 |
+| **D3 — audit** | `IAuditLog.RecordAsync` is the only writer, and every mutation passes its own transaction, so the entry commits **with** the action (the reference wrote it best-effort afterwards). Actor, target, summary, metadata, IP (`X-Forwarded-For` first, else the connection — recorded, never trusted). Listed newest first, keyset on `(createdAt, seq)` |
+| **D4 — not your own** | Nobody edits their own staff roles, suspends themselves or deletes themselves (403) |
+| **The last admin** | Demoting, suspending or deleting an admin runs under a row lock on the active admins, re-reading the caller's own authority under it. Two admins demoting each other at once: one succeeds, the other is refused — tested. The reference counted without a lock, and its "last admin" refusal was only reachable through an actor its route would have refused anyway |
+| **D5 — sessions** | Suspend and force sign-out bump `sessionsValidFrom` **and** revoke every refresh token in the same transaction. Journey 7 over HTTP: the suspended user's next request is a 401 |
+| **Soft delete** | The row stays; name, email (a unique `deleted+{id}@removed.invalid`), phone, avatar, password hash, Google id, address, roles, staff roles and the Stripe customer id are scrubbed; sessions revoked |
+| **V11** | Staff — and only staff — set a caretaker's background check or a vet's or shelter's verification. Verifying notifies the professional with a new kind, `profile_verified` (the reference reused `membership_started`) |
+| **Finance** | The ledger with captured/refunded totals over the filter, refunds through `IPaymentLedger` (partial or full; a provider timeout is "queued", not "failed"); memberships with active count and MRR; cancel at period end or now (now: the provider is told to end it, not merely to stop renewing — the reference only set cancel-at-period-end at Stripe while marking the row ended), **resume** (spec; the reference had none), extend grace |
+| **Settings** | `signupsOpen`, `maintenanceBanner`, `demoLoginVisible`, `freeShippingThresholdCents`. Only keys that actually change are stored and audited |
+| **Throttle** | 120 admin writes an hour per member of staff, as the reference |
+| **Lists** | Keyset everywhere with `total`; the screens keep "Previous · n / N · Next" through `useCursorPager` |
+
+### Found on the way: an M1 session bug
+
+**Signing back in straight after a forced sign-out was refused.** ASP.NET
+serialises a cookie's `IssuedUtc` to whole seconds (RFC 1123) and a JWT's `iat`
+is whole seconds, while `sessionsValidFrom` is written to the millisecond — so
+a session issued in the same second as a revocation read as older than it. The
+same hit "reset password, then sign in" inside one second. Both credentials now
+carry the exact issue time as an `iat_ms` claim (`AuthClaims.IssuedAt`), and
+the validator reads that, falling back to the coarse value for credentials
+minted before the change.
+
+**Walked** (headless Chrome, `petapp_dev`): Tom (support + finance) saw
+Overview / Users / Professionals / Payments / Memberships; suspended Daniel with
+a reason → Daniel's open session went from 200 to 401 → reactivated; verified a
+professional; refunded $5.00 of Maya's o1 → her order read `partially_refunded`;
+was shown "Staff only" on the audit page. Priya (admin) read the audit log
+(every action above, with actor) and set a maintenance banner that Maya then
+saw on the home page. Rosa (ops) saw Overview and Fulfilment only. Maya saw
+"Staff only". No console errors; the only failed calls were those expected 403s.
 
 ---
 
@@ -390,6 +447,9 @@ no failed API calls beyond the expected signed-out `401 /me`.
 | Pet page | The owner's "Remove" link stays | Owner's decision, 2026-10-10 |
 | Notification bell | Opening the panel marks read **only the unread items it shows** (`POST /notifications { ids }`), not everything | REQUIREMENTS N7 — the reference cleared notifications that arrived after the panel was fetched, and every one beyond the thirty it showed |
 | Shelter dashboard | A placeholder | M10 |
+| Admin lists | "Previous · 2 / 5 · Next" kept, over cursor pages (`useCursorPager`) | §2.5; the reference paged by offset. The total still drives the page count |
+| Admin overview | No "Support assistant" panel; visible to **any** staff role | The assistant is out of scope (§14); the spec says any staff, the reference gated it on `support` so ops-only staff had no landing tab |
+| Admin memberships | A "Resume" button on a membership set to end | REQUIREMENTS §10.2 lists resume; the reference had cancel and extend-grace only |
 | `/plus`, `/account/membership` | Joining works on the demo provider: the membership starts at once and the page lands on `/account/membership?checkout=success` | The reference had no demo subscription provider and answered 503, so Leash Plus could not be seen working without Stripe keys. The demo settles through the same reconciler as the webhook (M3). M14's 503 is kept for Stripe without a price |
 | `/account/membership` | "Manage billing" on the demo provider is a 503 toast | There is no billing portal to open; not pretended |
 | Booking and appointment detail | "Cancel" inside the last 12 hours asks to confirm | C14, owner's decisions 2026-10-10 (bookings) and 2026-10-17 (appointments too). UI only; the server rule is unchanged |
@@ -809,7 +869,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 |---|---|
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 19 are ported in full (M8 added `notifications`; M7 `webhooks`, `stripe-signature`, `entitlements` and the second half of `orders`). They are the specification — port each module's as you build it |
+| | `tests/` in the reference project has 28 Vitest suites. 20 are ported in full (M8 added `notifications`; M7 `webhooks`, `stripe-signature`, `entitlements` and the second half of `orders`; M9 `admin`), and `users` is covered by `UserEndpointTests`. Not ported: `adoption-transfer` (M10), the five `assistant-*` suites (out of scope), and `validation` — eight Zod-schema cases; the equivalent FluentValidation rules exist but not every one is pinned by a test. They are the specification — port each module's as you build it |
 | | **M5 and M6 have no endpoint suites.** Every other module has one (`PetEndpointTests`, `BookingEndpointTests`, …) covering what a service test structurally cannot: that `[Authorize]` is on each action, that a 401 carries the envelope, that 409-vs-403 survives the controller. Both service layers are covered in full; their 22 routes are checked only by the hand-run curl walks recorded in `HANDOFF.md`. **`StoreEndpointTests` matters most** — S9 and the price-tampering refusal are the store's two security properties, and both are HTTP-shaped |
 | ⚠ | **Refills spent on a cancelled order are not given back.** Checkout spends them per unit; cancellation restocks the goods but cannot return the refills, because nothing records *which* prescription a line drew on — that wants an `order_items."prescriptionId"` column (a schema change). The direction is safe — it under-authorises, never over — but an owner who cancels has to ask their vet to renew. Decide before real customers do it |
 | ❓ | **Confirm "one refill per unit".** The owner's decision says "decrement when an Rx line is bought" without saying whether a line of three bags spends one refill or three. Implemented as three, because one-per-line lets a single refill cover a 99-bag line. One constant to change in `PrescriptionCover` if the intent was the other |

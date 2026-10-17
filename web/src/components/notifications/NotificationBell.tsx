@@ -37,6 +37,7 @@ const ICON: Record<NotificationKind, typeof CheckIcon> = {
   adoption_rejected: AlertIcon,
   adoption_completed: HeartIcon,
   adoption_reversed: AlertIcon,
+  profile_verified: ShieldCheckIcon,
 };
 
 /**

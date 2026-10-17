@@ -34,6 +34,14 @@ import SupportPage from "./pages/SupportPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import PlusPage from "./pages/PlusPage";
 import MembershipPage from "./pages/MembershipPage";
+import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminUserDetailPage from "./pages/admin/AdminUserDetailPage";
+import AdminProfessionalsPage from "./pages/admin/AdminProfessionalsPage";
+import AdminPaymentsPage from "./pages/admin/AdminPaymentsPage";
+import AdminSubscriptionsPage from "./pages/admin/AdminSubscriptionsPage";
+import AdminAuditPage from "./pages/admin/AdminAuditPage";
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 /**
@@ -270,19 +278,18 @@ export const router = createBrowserRouter([
           />
         ),
       },
-      {
-        // The header offers "Admin" to staff; the console is M9's.
-        path: "dashboard/admin/*",
-        element: (
-          <RequireAuth>
-            <ComingSoonPage
-              milestone="M9 · admin console"
-              title="The admin console is on the way"
-              description="User management, professional verification, payments and settings arrive with M9."
-            />
-          </RequireAuth>
-        ),
-      },
+      // ── The admin console (M9) ──
+      // The guard only asks for a session. Which sections a member of staff
+      // sees is AdminShell's courtesy; what they may do is every endpoint's
+      // own check (REQUIREMENTS.md D1).
+      { path: "dashboard/admin", element: <RequireAuth><AdminOverviewPage /></RequireAuth> },
+      { path: "dashboard/admin/users", element: <RequireAuth><AdminUsersPage /></RequireAuth> },
+      { path: "dashboard/admin/users/:id", element: <RequireAuth><AdminUserDetailPage /></RequireAuth> },
+      { path: "dashboard/admin/professionals", element: <RequireAuth><AdminProfessionalsPage /></RequireAuth> },
+      { path: "dashboard/admin/payments", element: <RequireAuth><AdminPaymentsPage /></RequireAuth> },
+      { path: "dashboard/admin/subscriptions", element: <RequireAuth><AdminSubscriptionsPage /></RequireAuth> },
+      { path: "dashboard/admin/audit", element: <RequireAuth><AdminAuditPage /></RequireAuth> },
+      { path: "dashboard/admin/settings", element: <RequireAuth><AdminSettingsPage /></RequireAuth> },
 
       { path: "*", element: <NotFoundPage /> },
     ],

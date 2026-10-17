@@ -27,14 +27,14 @@ detailed source; this is the plan-level view.**
 | 31–34 | UI parity pass — see below | ✅ Done 2026-10-10 |
 | 35–36 | M8 Notifications | ✅ Done 2026-10-17 |
 | 37–39 | M7 Payments & membership | ✅ Done 2026-10-17 |
-| **40–42** | **M9 Admin console** | ⬜ **Next** |
-| 43–44 | Release hardening + **first deploy** | ⬜ |
+| 40–42 | M9 Admin console | ✅ Done 2026-10-17 |
+| **43–44** | **Release hardening + redeploy** | ⬜ **Next** |
 | stretch | M10 Adoption | ⬜ |
 
-**37 plan-days of scope done; 2 skipped; 5 remain, plus the stretch.** The
+**40 plan-days of scope done; 2 skipped; 2 remain, plus the stretch.** The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
-732 xUnit tests passing; 19 of the reference's 28 Vitest suites ported in full. The IIS deployment
+840 xUnit tests passing; 20 of the reference's 28 Vitest suites ported in full. The IIS deployment
 (`deploy/README.md`, two sites, `config.js` + `Cors:Origins`) landed out of
 band on 2026-10-17; release hardening (days 43–44) builds on it rather than
 replacing it.

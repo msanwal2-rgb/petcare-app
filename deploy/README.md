@@ -99,7 +99,7 @@ createdb -U leash -h localhost leash_review
 Database changes are not applied automatically. When a new
 `db/changes/NNN_*.sql` arrives, run it once with `psql`. Check what a database
 already has with `SELECT script FROM schema_version;` — each script refuses
-to run twice. `leash_review` is at `004_notification_outbox` (2026-10-17).
+to run twice. `leash_review` is at `005_audit_log_seq` (2026-10-17).
 
 **Never forward port 5432 on your router.** PostgreSQL accepts connections
 from any address with the dev password.

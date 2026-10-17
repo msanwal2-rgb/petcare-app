@@ -180,6 +180,13 @@ public sealed class StripeSubscriptionProvider(IStripeClient client) : ISubscrip
             return true;
         });
 
+    public Task CancelNowAsync(string reference, CancellationToken ct = default)
+        => StripeCalls.Wrap(async () =>
+        {
+            await new SubscriptionService(client).CancelAsync(reference, cancellationToken: ct);
+            return true;
+        });
+
     public Task<ProviderSubscription?> GetSubscriptionAsync(string reference, CancellationToken ct = default)
         => StripeCalls.Wrap(async () =>
         {

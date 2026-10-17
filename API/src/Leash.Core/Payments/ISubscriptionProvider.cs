@@ -59,6 +59,9 @@ public interface ISubscriptionProvider
 
     Task SetCancelAtPeriodEndAsync(string reference, bool value, CancellationToken ct = default);
 
+    /// <summary>End the subscription now, not at the period end — staff only, for somebody who has asked out today.</summary>
+    Task CancelNowAsync(string reference, CancellationToken ct = default);
+
     /// <summary>Null when the provider keeps no state to ask (the demo — ours is the record).</summary>
     Task<ProviderSubscription?> GetSubscriptionAsync(string reference, CancellationToken ct = default);
 
@@ -104,6 +107,8 @@ public sealed class DemoSubscriptionProvider : ISubscriptionProvider
     /// <summary>Nothing to tell: the subscription row is the only record there is.</summary>
     public Task SetCancelAtPeriodEndAsync(string reference, bool value, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    public Task CancelNowAsync(string reference, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task<ProviderSubscription?> GetSubscriptionAsync(string reference, CancellationToken ct = default)
         => Task.FromResult<ProviderSubscription?>(null);

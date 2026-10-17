@@ -184,6 +184,11 @@ public sealed class TokenService : ITokenService
         // a few milliseconds off.
         token.Payload["iat"] = issuedAt.ToUnixTimeSeconds();
 
+        // iat is whole seconds by definition, and the watermark has milliseconds:
+        // a token issued in the same second as a revocation would read as
+        // older than it. The exact instant rides alongside (see AuthClaims).
+        token.Payload["iat_ms"] = issuedAt.ToUnixTimeMilliseconds();
+
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
