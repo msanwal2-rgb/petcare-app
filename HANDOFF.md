@@ -1,6 +1,6 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **release hardening**, 2026-10-17.
+For whoever picks this up next. Written at the end of **M10, adoption**, 2026-10-18 — the last module in the plan.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -12,7 +12,7 @@ not repeat the permanent docs — read them in this order:
 | `REQUIREMENTS.md` | The durable spec. §9 is M7. |
 | `BUILD_PLAN.md` | Order of work, the decisions, the risks. §0 is where the plan stands. |
 | `API_CONTRACTS.md` | Every endpoint of the reference implementation. |
-| `NEXT_PROMPT.md` | The brief for the remaining modules, in order. It restarts the work: skip what STATUS marks done. |
+| `NEXT_PROMPT.md` | What is left now that every module is built: the owner's open decisions and the deploy runbook. |
 
 ---
 
@@ -32,16 +32,17 @@ rewritten without them on purpose.
 
 ## 2. Where the build is
 
-**10 of 11 modules** (M0–M9; M10 is the stretch), the landing page, the UI parity pass, and
-an IIS deployment (`deploy/README.md`).
+**All 11 modules** (M0–M10), the landing page, the UI parity pass, release
+hardening, and an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 889 passing, ~5 min
-cd web && npm run build && npx oxlint src
+cd API && dotnet test        # 970 passing, ~5 min
+cd web && npm run build && npx oxlint src --deny-warnings
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
 
-All three green at the end of M9. Change scripts run to `005`; **006 is next**.
+All three green at the end of M10. M10 needed no schema change, so change
+scripts still run to `005`; **006 is next**.
 `petapp_dev` and `leash_review` are both at 005 (`leash_review` is updated by
 hand — deploy/README.md). `psql` and `pg_dump` are at
 `C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
@@ -62,12 +63,8 @@ at the repository root: `.\deploy\publish-iis.ps1`. It keeps the server's
 `config.js` (currently a Cloudflare tunnel address) and
 `appsettings.Production.json`. `leash_review` already has scripts 001–005.
 
-**Then M10, adoption** (stretch). `NEXT_PROMPT.md` has the brief:
-`tests/adoption-transfer.test.ts` first; the transfer sets `ownerId` and
-`ownedSince` in **one statement** (STATUS §3d). M7 and M9 left it ready: the
-ledger has `PaymentKinds.AdoptionFee` and `payments."adoptionApplicationId"`,
-`NotificationKinds` has every `adoption_*` kind, and the professionals screen
-already verifies shelters.
+There is no next module. M10 was the last; `NEXT_PROMPT.md` lists what is
+left, which is operational plus a handful of owner decisions.
 
 **Watch the first CI run.** `.github/workflows/ci.yml` has never run on GitHub;
 every command in it passes locally. The likeliest surprise is the PGDG apt
@@ -76,6 +73,11 @@ step.
 ### Owner decisions still open
 
 - **One refill per unit** (STATUS §4) — leave it as built.
+- **R7 — who may override the live-engagement refusal** (STATUS §3-M10): built
+  as the reference, the shelter.
+- **Four adoption screen gaps the reference has** (STATUS §3-M10): no listing
+  management or reversal UI, the applicant cannot see a paid fee, the
+  Approve/Decline buttons, "Not yet listed". Left as ported until told.
 
 ---
 
@@ -95,16 +97,19 @@ step.
 | **Marking notifications read takes the ids that were shown** | N7. `{}` is a 400, never "all" |
 | **The demo provider sells Leash Plus** | Deliberate (STATUS §3-M7). It settles through the same reconciler as the webhook; do not "fix" it back to the reference's 503 |
 | **C14 warns on bookings and vet appointments** | Owner, 2026-10-10 and 2026-10-17. UI only |
+| **Only `TransferPetAsync` moves a pet's owner** | And it moves `ownedSince` in the same statement. Never add an owner field to the pet PATCH |
+| **Reversing an adoption does not refund** | As the reference. Rejecting or withdrawing an *approved* application does |
 
 ---
 
 ## 5. What is still between here and a release
 
-Release hardening is done (STATUS §3-H): CI, no vulnerable packages, endpoint
-suites for every module, a split bundle, a two-site publish script, and the
-deploy README covering payments settings and multiple instances. What remains
-is operational: run the redeploy (§3), watch CI's first run, and — before real
-money — configure Stripe and Resend (`deploy/README.md` §4).
+Every module is built and release hardening is done (STATUS §3-H): CI, no
+vulnerable packages, endpoint suites for every module, a split bundle, a
+two-site publish script, and the deploy README covering payments settings and
+multiple instances. What remains is operational: run the redeploy (§3), watch
+CI's first run, and — before real money — configure Stripe and Resend
+(`deploy/README.md` §4). `NEXT_PROMPT.md` is the runbook.
 
 ---
 
@@ -152,6 +157,22 @@ New in M6:
 - **`petapp_dev` now has smoke-test orders in it** from the HTTP walks below.
   Re-seed it if a clean demo matters.
 
+
+New in M10:
+
+- **Staff accounts don't have the demo password.** `AdoptionEndpointTests`
+  copies the demo hash onto u23 as `AdminEndpointTests` does; forgetting it
+  shows up as a 401 at sign-in, not at the endpoint under test.
+- **Two concurrent completions both pass the preconditions.** They are reads
+  outside the transaction. Only the conditional `UPDATE pets … WHERE "ownerId"
+  = @from` decides, and the loser rolls back everything after it, notices
+  included. Keep anything new that must happen once *after* that statement.
+- **A forced completion cancels bookings and appointments as the shelter**,
+  through `IBookingService`/`IAppointmentService`. That works because the
+  shelter is the owner of record on them; an engagement booked by somebody
+  else would be refused, and the completion with it.
+- **The directory search returns available listings only, for everyone** —
+  including the shelter reading its own. The dashboard's counts come from it.
 
 New in M9:
 
@@ -201,6 +222,21 @@ New in M8:
 ---
 
 ## 7. What was checked by hand
+
+- **M10** (2026-10-18, headless Chrome against `petapp_dev`): a visitor browsed
+  `/adopt` (2 waiting; "good with cats" → 1, in the URL), an animal and a
+  shelter page. Maya applied for Pepper; Austin Pets Alive started a review and
+  approved her (listing → pending); Maya paid $25 (ledger `paid`); the shelter
+  saw "Fee paid" and completed — Pepper became Maya's, Sofia's rival
+  application was closed, and Maya opened Pepper's record from the
+  application page. Tom paid $150 for Juniper, who was in a live foster
+  booking; Hill Country pressed Complete, was shown the confirm, accepted, and
+  the booking was cancelled through its machine. Hill Country edited its
+  profile. Support staff reversed Pepper's adoption over the API; a shelter
+  trying the same got 403; Maya's bell showed the reversal. No console errors;
+  the only failed calls were the expected 409 and 403. **`petapp_dev`'s adoption
+  rows, the two pets and the shelter profiles were restored to the seed
+  afterwards**; the notifications from the walk remain.
 
 - **M9** (2026-10-17, headless Chrome against `petapp_dev`): Tom suspended and
   reactivated Daniel (his open session 200 → 401), verified a professional,

@@ -27,6 +27,14 @@ public interface IReputationService
         string vetId, ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>
+    /// The shelter arm (M10). An application counts as answered once the
+    /// shelter has picked it up; a withdrawal counts as neither. Shelters have a
+    /// response rate only — no rating and no review count (R9).
+    /// </summary>
+    Task RefreshShelterResponseRateAsync(
+        string shelterId, ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Fold a new rating into the caretaker behind <paramref name="userId"/>.
     /// A no-op for a user with no caretaker profile.
     /// </summary>

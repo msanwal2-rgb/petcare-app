@@ -128,4 +128,58 @@ public static class Notices
             $"/store/orders/{orderId}"),
         _ => null,
     };
+
+    // ── Adoption (M10) ────────────────────────────────────────────────────
+    // The reference's APPLICATION_NOTICES and the transfer's notices, word for
+    // word. One href differs: the reference linked an application to
+    // /adoptions/applications/{id}, which no page served; the application page
+    // is /adoptions/{id} (N9).
+
+    /// <summary>To the shelter. The applicant watches their own application page.</summary>
+    public static NotifyInput ApplicationReceived(string petName) => new(
+        NotificationKinds.AdoptionApplicationReceived,
+        $"New application for {petName}",
+        "Someone would like to adopt. Their answers are in your queue.",
+        "/dashboard");
+
+    /// <summary>What the applicant hears when the shelter moves their application. A withdrawal is theirs and silent.</summary>
+    public static NotifyInput? ForApplication(string applicationId, string status, string petName) => status switch
+    {
+        ApplicationStatuses.UnderReview => new(
+            NotificationKinds.AdoptionUnderReview,
+            $"Your application for {petName} is being reviewed",
+            "The shelter has picked it up. They'll be in touch.",
+            $"/adoptions/{applicationId}"),
+        ApplicationStatuses.Approved => new(
+            NotificationKinds.AdoptionApproved,
+            $"You've been approved to adopt {petName}",
+            "One step left — settle the adoption fee and arrange collection.",
+            $"/adoptions/{applicationId}"),
+        ApplicationStatuses.Rejected => new(
+            NotificationKinds.AdoptionRejected,
+            $"Your application for {petName} wasn't successful",
+            "The shelter has left a note explaining why.",
+            $"/adoptions/{applicationId}"),
+        _ => null,
+    };
+
+    public static NotifyInput AdoptionCompleted(string petId, string petName, string shelterName) => new(
+        NotificationKinds.AdoptionCompleted,
+        $"{petName} is yours",
+        $"{shelterName} has completed the adoption. {petName}'s health record has come with them.",
+        $"/dashboard/pets/{petId}");
+
+    /// <summary>To everyone else who applied for an animal that has just gone home.</summary>
+    public static NotifyInput AdoptionClosed(string petName) => new(
+        NotificationKinds.AdoptionRejected,
+        $"{petName} has found a home",
+        "Your application has been closed. There are other animals waiting.",
+        "/adopt");
+
+    /// <summary>The body is the staff member's reason — user-controlled text, escaped by the email renderer (N5).</summary>
+    public static NotifyInput AdoptionReversed(string petName, string shelterName, string reason) => new(
+        NotificationKinds.AdoptionReversed,
+        $"{petName} has returned to {shelterName}",
+        reason,
+        "/adopt");
 }

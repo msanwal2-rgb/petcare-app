@@ -30,7 +30,8 @@ public sealed class ReputationService(
     IBookingRepository bookings,
     ICaretakerRepository caretakers,
     IAppointmentRepository appointments,
-    IVetRepository vets) : IReputationService
+    IVetRepository vets,
+    IShelterRepository shelters) : IReputationService
 {
     /// <summary>
     /// A request counts as answered once the caretaker has acted on it.
@@ -55,6 +56,17 @@ public sealed class ReputationService(
     [
         AppointmentStatuses.Confirmed, AppointmentStatuses.Declined,
         AppointmentStatuses.InProgress, AppointmentStatuses.Completed,
+    ];
+
+    /// <summary>
+    /// The same rule for a shelter's queue. Picking an application up for
+    /// review is answering it; so is saying no. A withdrawal is the applicant's
+    /// doing and counts as neither, for the reason cancellations do below.
+    /// </summary>
+    private static readonly string[] ApplicationsAnswered =
+    [
+        ApplicationStatuses.UnderReview, ApplicationStatuses.Approved,
+        ApplicationStatuses.Rejected, ApplicationStatuses.Completed,
     ];
 
     /// <summary>
@@ -103,6 +115,18 @@ public sealed class ReputationService(
             vetId, rating: null, reviewCount: null,
             responseRatePct: ResponseRateFrom(counts.Answered, counts.Waiting),
             scope, ct);
+    }
+
+    /// <summary>
+    /// The shelter arm. Called whenever an application arrives or moves.
+    /// </summary>
+    public async Task RefreshShelterResponseRateAsync(
+        string shelterId, ITransactionScope? scope = null, CancellationToken ct = default)
+    {
+        var (answered, waiting) = await shelters.CountApplicationsAsync(
+            shelterId, ApplicationsAnswered, ApplicationStatuses.Submitted, scope, ct);
+
+        await shelters.SetResponseRateAsync(shelterId, ResponseRateFrom(answered, waiting), scope, ct);
     }
 
     /// <summary>

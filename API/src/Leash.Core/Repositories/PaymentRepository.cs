@@ -12,7 +12,7 @@ public sealed class PaymentRepository(NpgsqlDataSource db) : IPaymentRepository
 {
     private const string Columns = """
         id AS "Id", "userId" AS "UserId", kind AS "Kind", "orderId" AS "OrderId",
-        "subscriptionId" AS "SubscriptionId",
+        "subscriptionId" AS "SubscriptionId", "adoptionApplicationId" AS "AdoptionApplicationId",
         provider AS "Provider", "providerRef" AS "ProviderRef",
         "providerCustomerId" AS "ProviderCustomerId", status AS "Status",
         "amountCents" AS "AmountCents", "amountRefundedCents" AS "AmountRefundedCents",
@@ -36,12 +36,12 @@ public sealed class PaymentRepository(NpgsqlDataSource db) : IPaymentRepository
         await session.Connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO payments (
-                id, "userId", kind, "orderId", "subscriptionId", provider, "providerRef",
+                id, "userId", kind, "orderId", "subscriptionId", "adoptionApplicationId", provider, "providerRef",
                 "providerCustomerId", status, "amountCents", "amountRefundedCents", currency,
                 "methodBrand", "methodLast4", "failureCode", "failureMessage", "lastEventAt",
                 "createdAt", "updatedAt", "succeededAt")
             VALUES (
-                @Id, @UserId, @Kind, @OrderId, @SubscriptionId, @Provider, @ProviderRef,
+                @Id, @UserId, @Kind, @OrderId, @SubscriptionId, @AdoptionApplicationId, @Provider, @ProviderRef,
                 @ProviderCustomerId, @Status, @AmountCents, @AmountRefundedCents, @Currency,
                 @MethodBrand, @MethodLast4, @FailureCode, @FailureMessage, @LastEventAt,
                 @CreatedAt, @UpdatedAt, @SucceededAt)
@@ -90,6 +90,10 @@ public sealed class PaymentRepository(NpgsqlDataSource db) : IPaymentRepository
                 new { orderId, failed = PaymentStatuses.Failed },
                 session.Transaction, cancellationToken: ct));
     }
+
+    public Task<PaymentEntity?> GetForAdoptionAsync(
+        string applicationId, ITransactionScope? scope = null, CancellationToken ct = default)
+        => OneAsync("\"adoptionApplicationId\" = @key", applicationId, forUpdate: false, scope, ct);
 
     public async Task<PaymentEntity?> GetLatestForOrderAsync(
         string orderId, ITransactionScope? scope = null, CancellationToken ct = default)

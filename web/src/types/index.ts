@@ -75,13 +75,6 @@ export interface ShelterProfile {
   createdAt: string;
 }
 
-export interface ShelterWithUser extends ShelterProfile {
-  user: PublicUser;
-  distanceMiles?: number;
-  /** How many animals they currently have available. */
-  availableCount: number;
-}
-
 /* ── Adoption ─────────────────────────────────────────────────── */
 
 export type ListingStatus =
@@ -131,20 +124,6 @@ export interface AdoptionListing {
   createdAt: string;
 }
 
-/** A listing with the animal it is about, which is what a card renders. */
-export interface AdoptionListingWithPet extends AdoptionListing {
-  pet: Pet;
-  shelterName: string;
-  distanceMiles?: number;
-}
-
-export interface AdoptionListingPage {
-  items: AdoptionListingWithPet[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
 export interface AdoptionApplication {
   id: string;
   listingId: string;
@@ -171,13 +150,6 @@ export interface AdoptionApplication {
   decidedAt: string | null;
   completedAt: string | null;
   createdAt: string;
-}
-
-/** An application as the shelter reviewing it sees it. */
-export interface AdoptionApplicationWithApplicant extends AdoptionApplication {
-  applicant: PublicUser;
-  /** Set once a fee has been charged; null for a waived one. */
-  paymentStatus: PaymentStatus | null;
 }
 
 /* ── Membership ───────────────────────────────────────────────── */

@@ -30,6 +30,7 @@ public sealed class AdminController(
     IAdminFinanceService finance,
     IAdminConsoleService console,
     IAuditLog audit,
+    IAdoptionTransferService adoptions,
     IRateLimitService rateLimits) : ControllerBase
 {
     // ── Overview — any staff ─────────────────────────────────────────────
@@ -81,6 +82,21 @@ public sealed class AdminController(
         if (await ThrottleAsync(ct) is { } limited) return limited;
         var refusal = await professionals.SetVerificationAsync(Actor(), id, request, ct);
         return refusal is null ? Ok(new { ok = true }) : Refused(refusal);
+    }
+
+    // ── Adoptions — support ──────────────────────────────────────────────
+
+    /// <summary>
+    /// POST /admin/adoptions/{id}/reverse <c>{ reason }</c> → <c>{ pet }</c>. Puts a
+    /// completed adoption back (R8), audited as <c>adoption.reverse</c>. Does not
+    /// refund — that is a conversation between a shelter and a person.
+    /// </summary>
+    [HttpPost("adoptions/{id}/reverse")]
+    public async Task<IActionResult> ReverseAdoption(
+        string id, [FromBody] ReverseAdoptionRequest request, CancellationToken ct)
+    {
+        if (await ThrottleAsync(ct) is { } limited) return limited;
+        return Respond(await adoptions.ReverseAsync(Actor(), id, request.Reason.Trim(), ct));
     }
 
     // ── Finance — finance ────────────────────────────────────────────────

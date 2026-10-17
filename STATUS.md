@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-17**, end of release hardening.
+Last updated: **2026-10-18**, end of M10. **Every module in the plan is built**; what remains is deploying it — see §4 and `NEXT_PROMPT.md`.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -29,7 +29,7 @@ Last updated: **2026-10-17**, end of release hardening.
 | **M7** | Payments & membership | ✅ Done — 7 endpoints, the ledger, Stripe + demo providers, the webhook; 148 tests. See §3-M7 |
 | **M9** | Admin console | ✅ Done — 14 endpoints, 8 screens, the audit log; 108 tests. See §3-M9 |
 | — | Release hardening | ✅ Done — CI, a vulnerability gate, M5/M6 endpoint suites, code splitting, the two-site publish script. **The redeploy itself needs an elevated shell** — see §3-H |
-| M10 | Adoption | ⬜ **Next** (stretch) |
+| **M10** | Adoption | ✅ Done — 16 endpoints, 5 screens and the shelter dashboard; 81 tests, including the full port of `adoption-transfer`. See §3-M10 |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
 touches data.**
@@ -194,7 +194,7 @@ The route tree is the reference project's `app/` directory, path for path
 /                    the landing page — hero search (city picker), pillars, featured caretakers
 /login  /signup  /forgot-password  /reset-password  /verify-email
 /onboarding          role selection                       [guarded]
-/dashboard           one role-aware page: owner · caretaker · vet ("Viewing as")  [guarded]
+/dashboard           one role-aware page: owner · caretaker · vet · shelter ("Viewing as")  [guarded]
 /dashboard/pets/new  add a pet                            [guarded]
 /dashboard/pets/:id  Details / Health record tabs          [guarded]
 /dashboard/caretaker-profile   the caretaker's listing    [guarded]
@@ -211,7 +211,13 @@ The route tree is the reference project's `app/` directory, path for path
 /store  /store/:slug  /store/cart
 /store/checkout  /store/orders  /store/orders/:id         [guarded]
 /pet-health  /support                                     content pages
-/adopt  /plus  /dashboard/admin/*                         named placeholders (M10, M7, M9)
+/adopt               the adoption directory, longest-waiting first
+/adopt/:id           an animal, and the application form
+/adoptions/:id       an application: progress, the fee, withdraw
+/shelters/:id        a shelter's public page
+/dashboard/shelter-profile     the shelter's own profile  [guarded]
+/plus  /account/membership     Leash Plus (M7)
+/dashboard/admin/*  the staff console (M9)               [guarded; roles in the API]
 ```
 
 Retired URLs redirect, carrying their query string: `/dashboard/pets`,
@@ -223,10 +229,13 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 889 passing
+### Tests — 970 passing
 
 | File | Covers |
 |---|---|
+| `AdoptionTransferTests` | **Port of `tests/adoption-transfer.test.ts`, every case** — the specification for R6: preconditions, live engagements and the forced handover, the one-statement transfer (owner and `ownedSince` together), the record staying with the animal, severed grants both ways, rivals closed, one of two concurrent completions winning, reversal, the post-approval refund. Plus: reversal is audited, never refunds, needs support staff |
+| `AdoptionServiceTests` | The rules in the reference's `listings.ts`, `applications.ts`, `payment.ts` and `shelters.ts`, which it had no suite for: the directory (available only, definite-yes filters, radius in the total, cursor), drafts, listing an animal and its machine, applying and its refusals, who decides what, one approval per animal, the fee through the ledger, the response rate |
+| `AdoptionEndpointTests` | Adoption over HTTP: what is public, every private route 401, the nested wire shapes, 400/403/404/409 per refusal, the `live_engagements` payload, reversal needs support staff, and one adoption walked end to end — apply, review, approve, pay, complete, reverse |
 | `AccessServiceTests` | Port of `tests/access.test.ts` — the nine predicates, and what a transfer of ownership ends |
 | `PetServiceTests` | Port of `tests/pets.test.ts` — CRUD, the closed transfer backdoor, delete, recommendations, life stage and allergen matching |
 | `MedicalRecordServiceTests` | Port of `tests/medical-records.test.ts` — the timeline, who may author what, and the one active-prescription rule |
@@ -256,6 +265,75 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-M10. M10 — adoption (2026-10-18)
+
+Shelters list animals; people apply; the shelter approves one; the applicant
+pays the fee through the ledger; the shelter completes the adoption and the
+animal moves to its new owner **with its whole health record**. Staff can put
+it back.
+
+| | |
+|---|---|
+| **Endpoints** | `GET /shelters/search`, `GET /shelters/{id}`, `GET`/`PATCH /users/{id}/shelter-profile`; `GET`/`POST /adoptions/listings`, `GET`/`PATCH /adoptions/listings/{id}`, `PATCH …/{id}/status`; `GET`/`POST /adoptions/applications` (`?as=shelter` for the queue), `GET …/{id}`, `PATCH …/{id}/status`, `POST …/{id}/payment`, `POST …/{id}/complete`; `POST /admin/adoptions/{id}/reverse` |
+| **Screens** | `/adopt`, `/adopt/:id` (with the application form), `/adoptions/:id`, `/shelters/:id`, `/dashboard/shelter-profile`, and the shelter view of `/dashboard` — each a port of the reference screen. The `/adopt` placeholder and `ComingSoonPage` are gone |
+| **R6 — the transfer** | `IAdoptionRepository.TransferPetAsync` is **the only code that moves `pets."ownerId"`**, and it moves `ownedSince` in the same statement, conditional on the old owner still owning the animal. That one write severs every caretaker and vet the previous household engaged (M2's predicates read `ownedSince`), and the records never move — they are keyed on the pet. Two concurrent completions: exactly one wins (tested). Reversal uses the same statement the other way |
+| **R5 — the fee** | `POST …/payment` creates an intent keyed by the application id and a `payments` row (`kind = adoption_fee`, `adoptionApplicationId`); the demo provider settles inline through `ApplyIntentStateAsync`, Stripe through the webhook — **no new branch in the ledger or the webhook**. Applicant only, approved only; a $0 fee has no payment at all; a second call reuses the intent; a double click loses to the unique column and gets the same intent back |
+| **Refunds** | Rejecting or withdrawing an *approved* application relists the animal and refunds a paid fee through `IPaymentLedger` (after the commit — the ledger calls the provider). **Reversal never refunds** — as the reference: whether the fee comes back is between a shelter and a person |
+| **R7 — live engagements** | Completing is refused (409, `code: "live_engagements"`, with `bookingIds` and `appointmentIds`) while any booking or vet appointment for the animal is requested, accepted/confirmed or in progress. The dashboard names that, asks, and retries with `force: true`, which cancels each one **through its own status machine** as the shelter (the owner of record), so the other party is told. See the interpretation below |
+| **R8 — reversal** | Support staff (admin passes), throttled like every admin write, **audited as `adoption.reverse` in the same transaction**, the adopter notified. The application becomes `rejected` with the reason as its note; the listing goes back to `available` |
+| **R9** | Shelters have `responseRatePct` only, written by `ReputationService.RefreshShelterResponseRateAsync`: an application is answered once it is under review, approved, rejected or completed; a withdrawal counts as neither |
+| **The machines** | Listings: draft → available → pending → adopted, with withdrawn, and adopted/withdrawn → available to relist. Applications: submitted → under review → approved → completed, with rejected and withdrawn. The shelter decides; the applicant may only withdraw; `completed` is reachable **only** by completing — a status write of `completed` is a 400. One approval per listing. Approving takes the animal off the market (`pending`) |
+| **Notices** | The reference's six adoption kinds, word for word, written **inside** each move's transaction (N1) |
+| **No schema change** | The tables were in the master from the start. `PaymentEntity` and its repository gained `adoptionApplicationId` |
+
+### R7 — how "an explicit staff override" was read
+
+REQUIREMENTS R7 says completion is refused while an open boarding booking
+exists, "with an explicit staff override". The build does what the reference
+does: **the shelter is the one who overrides**, explicitly, after being shown
+what is in the way — and the refusal covers any live booking *or* vet
+appointment, not only boarding. A support-staff-only override would block most
+real adoptions, because a fostered animal in this data model *is* a pet under a
+long boarding booking. **Confirm or change** — see §4.
+
+### Differences from the reference
+
+| | |
+|---|---|
+| **Wire shapes nest** | `{ listing, pet, shelterName, distanceMiles }`, `{ profile, user, availableCount, distanceMiles }`, `{ application, applicant, paymentStatus }` — the shape vets and caretakers already have. The flat reference types were removed from `types/index.ts`; the nested ones live in `api/adoptions.ts` and `api/shelters.ts` |
+| **Every list is a cursor page** (§2.5) | The directory is `{ items, nextCursor, total }` (was offset paging) and the screens use "Show more"; shelter search and both application lists are cursor pages too (the reference returned bare arrays) |
+| **The radius filters in SQL** | So `total` counts what the filters describe. The reference filtered after fetching a page, which shrank pages and over-counted. The directory stays longest-waiting first with a location too — the reference re-sorted *each page* by distance, which is no order at all across pages |
+| **Draft listings are the shelter's** | `GET /adoptions/listings/{id}` serves a draft only to its own shelter, and a draft cannot be applied for. The reference served any listing by id |
+| **Approving needs an available listing** | The reference set `pending` unconditionally, even over a withdrawn listing. Here approval moves `available → pending` conditionally and is a 409 otherwise |
+| **Notices commit with the move** | The reference notified after its commit (N1). The application notices link to `/adoptions/{id}`; the reference's `/adoptions/applications/{id}` had no page behind it (N9) |
+| **Race guards** | Applying locks the listing row, so one person cannot open two applications at once; listing an animal twice at once loses to the unique index with the same 409 |
+| **`GET /users/{id}/shelter-profile` is a 404 when there is none** | Was `200 null`. Matches `/users/{id}/vet-profile`; the client reads both with `getJsonOrNull` |
+| **Creating a listing** | `city`/`state`/`lat`/`lng` are optional and default to the shelter's address. The reference's schema required them while its service defaulted them |
+| **Shelter search** | Active accounts only, as vets and caretakers. Sorted by available count, then response rate, then id |
+| **The dashboard** | Recognises the live-engagement refusal by its `code`, not by matching words in the message |
+| **The fee on a real card** | The reference's button assumed the demo provider. With Stripe configured, `/adoptions/:id` shows the checkout card form for the returned client secret |
+| **Near** | The city picker of the vet and caretaker searches, filters in the URL |
+
+### Kept as the reference has them — for you to decide
+
+Each would change what a screen does, so none was touched (the brief allows
+only §12 fixes). All are in §4.
+
+1. **No screen creates or publishes a listing**, or reverses an adoption. The
+   API does both (tested); the reference had no UI for either. A shelter's
+   animals reach the directory only through the seed or the API.
+2. **The applicant cannot see that their fee is paid.** The application has no
+   payment field for the applicant, so the "Pay" panel stays after paying, and a
+   second press says "already paid". The shelter's queue does show "Fee paid".
+3. **"Approve" shows on a new application**, where only "Start review" is legal;
+   pressing it is a 409. And "Decline" is hidden once approved, so a shelter
+   cannot let an approved applicant go from the dashboard (the API allows it,
+   with the refund).
+4. **"Not yet listed"** on the shelter dashboard lists an animal whose listing is
+   pending, because the directory search it reads returns available animals only.
 
 ---
 
@@ -889,7 +967,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 |---|---|
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 20 are ported in full (M8 added `notifications`; M7 `webhooks`, `stripe-signature`, `entitlements` and the second half of `orders`; M9 `admin`), and `users` is covered by `UserEndpointTests`. Not ported: `adoption-transfer` (M10), the five `assistant-*` suites (out of scope), and `validation` — eight Zod-schema cases; the equivalent FluentValidation rules exist but not every one is pinned by a test. They are the specification — port each module's as you build it |
+| | `tests/` in the reference project has 28 Vitest suites. 21 are ported in full (M8 added `notifications`; M7 `webhooks`, `stripe-signature`, `entitlements` and the second half of `orders`; M9 `admin`; M10 `adoption-transfer`), and `users` is covered by `UserEndpointTests`. Not ported: the five `assistant-*` suites (out of scope), and `validation` — eight Zod-schema cases; the equivalent FluentValidation rules exist but not every one is pinned by a test. They are the specification — port each module's as you build it |
 | | ~~M5 and M6 have no endpoint suites.~~ **Done in release hardening**: `VetEndpointTests` and `StoreEndpointTests`, including S9 and the price-tampering refusal over HTTP |
 | ⚠ | **Refills spent on a cancelled order are not given back.** Checkout spends them per unit; cancellation restocks the goods but cannot return the refills, because nothing records *which* prescription a line drew on — that wants an `order_items."prescriptionId"` column (a schema change). The direction is safe — it under-authorises, never over — but an owner who cancels has to ask their vet to renew. Decide before real customers do it |
 | ❓ | **Confirm "one refill per unit".** The owner's decision says "decrement when an Rx line is bought" without saying whether a line of three bags spends one refill or three. Implemented as three, because one-per-line lets a single refill cover a 99-bag line. One constant to change in `PrescriptionCover` if the intent was the other |
@@ -914,6 +992,9 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past" |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
 
+| ❓ | **R7 — who may override the live-engagement refusal.** Built as the reference: the shelter, explicitly, after the dashboard names what is in the way; and any live booking or vet appointment refuses, not only boarding. If R7's "staff override" meant support staff only, it is a check in `AdoptionTransferService.CompleteAsync` and a button in the console. §3-M10 has the reasoning |
+| ❓ | **Four reference-screen gaps in adoption, left as the reference has them** (§3-M10): no screen to create, publish or edit a listing, or to reverse an adoption (the API does all of it); the applicant's page cannot show that the fee is paid (would need `paymentStatus` on the applicant's view of an application — an API change); "Approve" offered on a brand-new application (always a 409) and "Decline" hidden once approved; "Not yet listed" includes animals whose listing is pending. Say which to fix |
+| | The adoption fee has been taken through the demo provider only. On Stripe it goes through the same intent, webhook and ledger path as an order, which is tested with fakes, not against Stripe |
 ---
 
 ## 5. Decisions already made — don't re-litigate

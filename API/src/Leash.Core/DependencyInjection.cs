@@ -75,6 +75,8 @@ public static class DependencyInjection
         services.AddSingleton<IWebhookEventRepository, WebhookEventRepository>();
         services.AddSingleton<IAdminRepository, AdminRepository>();
         services.AddSingleton<IAuditRepository, AuditRepository>();
+        services.AddSingleton<IShelterRepository, ShelterRepository>();
+        services.AddSingleton<IAdoptionRepository, AdoptionRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -132,6 +134,13 @@ public static class DependencyInjection
         services.AddSingleton<IAdminProfessionalService, AdminProfessionalService>();
         services.AddSingleton<IAdminFinanceService, AdminFinanceService>();
         services.AddSingleton<IAdminConsoleService, AdminConsoleService>();
+
+        // ── Adoption (M10) ───────────────────────────────────────────────
+        // The transfer is the one service that moves a pet between owners.
+        services.AddSingleton<IShelterService, ShelterService>();
+        services.AddSingleton<IAdoptionListingService, AdoptionListingService>();
+        services.AddSingleton<IAdoptionApplicationService, AdoptionApplicationService>();
+        services.AddSingleton<IAdoptionTransferService, AdoptionTransferService>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

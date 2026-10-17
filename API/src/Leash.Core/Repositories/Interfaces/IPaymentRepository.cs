@@ -34,6 +34,13 @@ public interface IPaymentRepository
     Task<PaymentEntity?> GetCurrentForOrderAsync(
         string orderId, ITransactionScope? scope = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// An adoption fee's payment. At most one: the column is unique, so a retry
+    /// reuses the intent rather than charging twice for one animal.
+    /// </summary>
+    Task<PaymentEntity?> GetForAdoptionAsync(
+        string applicationId, ITransactionScope? scope = null, CancellationToken ct = default);
+
     /// <summary>The order's newest payment whatever its state — what a sync asks the provider about.</summary>
     Task<PaymentEntity?> GetLatestForOrderAsync(
         string orderId, ITransactionScope? scope = null, CancellationToken ct = default);

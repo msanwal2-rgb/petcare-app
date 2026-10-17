@@ -33,7 +33,11 @@ import {
   OpsOrdersPage,
   PetHealthPage,
   SupportPage,
-  ComingSoonPage,
+  AdoptPage,
+  AdoptionListingPage,
+  AdoptionApplicationPage,
+  ShelterPage,
+  ShelterProfilePage,
   PlusPage,
   MembershipPage,
   AdminOverviewPage,
@@ -268,19 +272,22 @@ export const router = createBrowserRouter([
       { path: "appointment/new", element: <Moved to="/vets/book" /> },
       { path: "appointment/:id", element: <Moved to="/appointments/:id" /> },
 
-      // ── Later milestones ──
-      // Registered as named placeholders so the header's nav does not 404 on
-      // its own links, and so the information architecture is visible now.
+      // ── Adoption (M10) ──
+      // The directory, an animal and the shelter pages are public; an
+      // application page asks for a session itself, as the reference's did.
+      { path: "adopt", element: <AdoptPage /> },
+      { path: "adopt/:id", element: <AdoptionListingPage /> },
+      { path: "adoptions/:id", element: <AdoptionApplicationPage /> },
+      { path: "shelters/:id", element: <ShelterPage /> },
       {
-        path: "adopt",
+        path: "dashboard/shelter-profile",
         element: (
-          <ComingSoonPage
-            milestone="M10 · adoption"
-            title="Adoption is on the way"
-            description="Shelter listings, applications, and the health record that transfers with the animal arrive with M10."
-          />
+          <RequireAuth>
+            <ShelterProfilePage />
+          </RequireAuth>
         ),
       },
+
       // ── The admin console (M9) ──
       // The guard only asks for a session. Which sections a member of staff
       // sees is AdminShell's courtesy; what they may do is every endpoint's

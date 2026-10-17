@@ -3,6 +3,7 @@ import { useSession } from "@/store/session";
 import { OwnerDashboard } from "@/components/dashboard/OwnerDashboard";
 import { CaretakerDashboard } from "@/components/dashboard/CaretakerDashboard";
 import { VetDashboard } from "@/components/dashboard/VetDashboard";
+import { ShelterDashboard } from "@/components/dashboard/ShelterDashboard";
 import { AuthRequired } from "@/components/AuthRequired";
 import { EmptyState } from "@/components/EmptyState";
 import { RoleToggle } from "@/components/RoleToggle";
@@ -11,9 +12,6 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 /**
  * The reference's `app/dashboard/page.tsx`: one page that switches by role.
- *
- * The shelter view is the one gap — `ShelterDashboard` arrives with adoption
- * in M10, so a shelter account sees a named placeholder rather than nothing.
  */
 export default function DashboardPage() {
   const { currentUser, activeRole, hasHydrated } = useSession();
@@ -80,12 +78,7 @@ export default function DashboardPage() {
       {view === "owner" && <OwnerDashboard user={currentUser} />}
       {view === "caretaker" && <CaretakerDashboard user={currentUser} />}
       {view === "vet" && <VetDashboard user={currentUser} />}
-      {view === "shelter" && (
-        <EmptyState
-          title="Shelter tools are on the way"
-          description="Listings, applications and the health record that transfers with the animal arrive with M10."
-        />
-      )}
+      {view === "shelter" && <ShelterDashboard user={currentUser} />}
     </div>
   );
 }

@@ -119,6 +119,7 @@ public class PaymentEntity
     public string Kind { get; set; } = "";
     public string? OrderId { get; set; }
     public string? SubscriptionId { get; set; }
+    public string? AdoptionApplicationId { get; set; }
     public string ProviderCustomerId { get; set; } = "";
     public string MethodBrand { get; set; } = "";
     public string MethodLast4 { get; set; } = "";

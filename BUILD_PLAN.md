@@ -9,7 +9,7 @@ parity with the existing application minus the AI assistant.
 
 ---
 
-## 0. Where the plan stands — revised 2026-10-17
+## 0. Where the plan stands — revised 2026-10-18
 
 The calendar in §6 is the original. This section records what actually
 happened against it, and the revisions the owner made. **`STATUS.md` is the
@@ -29,12 +29,12 @@ detailed source; this is the plan-level view.**
 | 37–39 | M7 Payments & membership | ✅ Done 2026-10-17 |
 | 40–42 | M9 Admin console | ✅ Done 2026-10-17 |
 | 43–44 | Release hardening | ✅ Done 2026-10-17 — the redeploy waits on an elevated shell (STATUS §3-H) |
-| **stretch** | **M10 Adoption** | ⬜ **Next** |
+| stretch | M10 Adoption | ✅ Done 2026-10-18 — `adoption-transfer` ported in full (STATUS §3-M10) |
 
-**42 plan-days of scope done; 2 skipped; the stretch remains.** The
+**Every module is built: 42 plan-days of scope and the M10 stretch; 2 days skipped.** What remains is operational — the redeploy from an elevated shell, the first CI run on GitHub, and Stripe/Resend before real money (`NEXT_PROMPT.md`). The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
-889 xUnit tests passing; 20 of the reference's 28 Vitest suites ported in full. CI exists (`.github/workflows/ci.yml`). The IIS deployment
+970 xUnit tests passing; 21 of the reference's 28 Vitest suites ported in full (the rest are the out-of-scope assistant and the Zod `validation` cases). CI exists (`.github/workflows/ci.yml`). The IIS deployment
 (`deploy/README.md`, two sites, `config.js` + `Cors:Origins`) landed out of
 band on 2026-10-17; release hardening (days 43–44) builds on it rather than
 replacing it.
