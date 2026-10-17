@@ -5,6 +5,7 @@ using Leash.Core.Payments;
 using Leash.Core.Persistence;
 using Leash.Core.Repositories.Interfaces;
 using Leash.Core.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace Leash.Core.Services;
 
@@ -16,9 +17,11 @@ public sealed class OrderLifecycle(
     IOrderRepository orders,
     ICatalogRepository catalog,
     IPaymentRepository payments,
+    IPaymentLedger ledger,
     IPaymentProvider provider,
     INotifier notifier,
-    IUnitOfWork unitOfWork) : IOrderLifecycle
+    IUnitOfWork unitOfWork,
+    ILogger<OrderLifecycle> log) : IOrderLifecycle
 {
     /// <summary>
     /// What may follow what (REQUIREMENTS.md §11.3).
@@ -57,9 +60,11 @@ public sealed class OrderLifecycle(
         [OrderStatuses.Refunded] = ("Refunded", "The payment has been returned."),
     };
 
-    /// <summary>A payment in one of these has money we hold, and leaving the order refunds it.</summary>
-    private static readonly string[] Refundable =
-        [PaymentStatuses.Paid, PaymentStatuses.PartiallyRefunded, PaymentStatuses.Authorized];
+    /// <summary>A payment in one of these has taken no money yet; leaving the order cancels its intent.</summary>
+    private static readonly string[] NotYetTaken =
+    [
+        PaymentStatuses.Unpaid, PaymentStatuses.Pending, PaymentStatuses.RequiresAction, PaymentStatuses.Failed,
+    ];
 
     public static OrderEventEntity EventFor(
         string orderId, string status, DateTimeOffset at, string? location = null)
@@ -95,8 +100,9 @@ public sealed class OrderLifecycle(
     ///
     /// The refund happens <i>after</i> the status commits, because it is a call
     /// to a third party and a database transaction must not be held open across
-    /// one. With the demo provider it cannot fail. With a real one it can, and
-    /// M7's retryable refund ledger is what closes that gap — see STATUS.md.
+    /// one. That is safe because <see cref="IPaymentLedger.RequestRefundAsync"/>
+    /// writes its pending row before it calls anybody: a provider that times out
+    /// leaves a refund the housekeeping job retries, not money nobody knows is owed.
     /// </summary>
     public async Task<(OrderDto? Order, OrderFailure? Failure)> MoveAsync(
         string orderId, string to, OrderMove? move = null, CancellationToken ct = default)
@@ -145,67 +151,88 @@ public sealed class OrderLifecycle(
             await scope.CommitAsync(ct);
         }
 
-        if (leaving) await RefundAsync(orderId, ct);
+        if (leaving) await ReleasePaymentAsync(orderId, to, move.InitiatedBy, ct);
 
         return (await LoadAsync(orderId, ct: ct), null);
     }
 
     /// <summary>
-    /// Return whatever is left of a settled payment. A no-op when there is no
-    /// payment or nothing was ever taken — an unpaid checkout that is cancelled
-    /// owes nobody anything.
+    /// What leaving an order does to its money.
+    ///
+    /// Money taken goes back, through the ledger — a full refund of whatever is
+    /// left, recorded against whoever moved the order. Money not yet taken is
+    /// stopped: an asynchronous provider's intent is cancelled, so a customer
+    /// still sitting in a card challenge cannot pay for an order that no longer
+    /// exists. Best-effort; if the cancel does not land and the payment
+    /// succeeds anyway, <see cref="SettleAsync"/> refunds it.
     /// </summary>
-    private async Task RefundAsync(string orderId, CancellationToken ct)
+    private async Task ReleasePaymentAsync(string orderId, string to, string? initiatedBy, CancellationToken ct)
     {
-        var payment = await payments.GetCurrentForOrderAsync(orderId, ct: ct);
-        if (payment is null || !Refundable.Contains(payment.Status)) return;
+        var payment = await payments.GetCurrentForOrderAsync(orderId, ct: ct)
+                      ?? await payments.GetLatestForOrderAsync(orderId, ct: ct);
+        if (payment is null) return;
 
-        var owed = payment.AmountCents - payment.AmountRefundedCents;
-        if (owed <= 0) return;
+        if (PaymentTransitions.Refundable.Contains(payment.Status))
+        {
+            var outcome = await ledger.RequestRefundAsync(new RefundRequest(
+                PaymentId: payment.Id,
+                Reason: to == OrderStatuses.Cancelled ? RefundReasons.OrderCancelled : RefundReasons.RequestedByCustomer,
+                InitiatedBy: initiatedBy ?? "system"), ct);
 
-        var result = await provider.RefundAsync(
-            payment.ProviderRef, owed, idempotencyKey: $"refund_{payment.Id}", ct);
+            if (!outcome.Ok && outcome.Failure is not RefundFailure.AlreadyRefunding)
+                log.LogWarning("Order {OrderId} left for {Status} but its refund did not complete: {Failure}",
+                    orderId, to, outcome.Failure);
+            return;
+        }
 
-        if (!result.Succeeded) return;
-
-        await using var scope = await unitOfWork.BeginAsync(ct);
-
-        await payments.SetStatusAsync(
-            payment.Id, PaymentStatuses.Refunded, payment.AmountCents,
-            succeededAt: null, updatedAt: Ids.Now(), scope, ct);
-
-        await orders.SetPaymentAsync(
-            orderId, PaymentStatuses.Refunded, paymentRef: null, releaseHold: true, scope, ct);
-
-        await scope.CommitAsync(ct);
+        if (provider.Asynchronous && NotYetTaken.Contains(payment.Status))
+        {
+            try
+            {
+                await provider.CancelIntentAsync(payment.ProviderRef, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                log.LogWarning(e, "Could not cancel intent {Ref} for order {OrderId}", payment.ProviderRef, orderId);
+            }
+        }
     }
 
     public async Task SettleAsync(string orderId, CancellationToken ct = default)
     {
+        // The ledger is the truth; this only acts on what it already says.
         var payment = await payments.GetCurrentForOrderAsync(orderId, ct: ct);
-        if (payment is null) return;
+        if (payment?.Status != PaymentStatuses.Paid) return;
+
+        var order = await orders.GetByIdAsync(orderId, ct: ct);
+        if (order is null) return;
+
+        // Paid for an order that is already gone — its hold expired while the
+        // customer was in a card challenge, or it was cancelled meanwhile. The
+        // stock was released, so the money goes back rather than sitting
+        // against a dead order. The reference had no answer for this.
+        if (order.Status is OrderStatuses.Cancelled or OrderStatuses.Refunded)
+        {
+            log.LogWarning("Payment {PaymentId} settled after order {OrderId} was {Status}; refunding",
+                payment.Id, orderId, order.Status);
+            await ledger.RequestRefundAsync(new RefundRequest(
+                PaymentId: payment.Id, Reason: RefundReasons.OrderCancelled, InitiatedBy: "system",
+                Note: $"Paid after the order was {order.Status}"), ct);
+            return;
+        }
 
         await using (var scope = await unitOfWork.BeginAsync(ct))
         {
-            if (payment.Status != PaymentStatuses.Paid)
-            {
-                await payments.SetStatusAsync(
-                    payment.Id, PaymentStatuses.Paid, payment.AmountRefundedCents,
-                    succeededAt: Ids.Now(), updatedAt: Ids.Now(), scope, ct);
-            }
-
             // The hold has done its job; the goods are sold.
             await orders.SetPaymentAsync(
                 orderId, PaymentStatuses.Paid, payment.ProviderRef, releaseHold: true, scope, ct);
-
             await scope.CommitAsync(ct);
         }
 
         // Only from pending_payment. An order already further along — settled
         // by an earlier call, or moved on by fulfilment — stays where it is,
         // which is what makes a duplicate settlement harmless.
-        var order = await orders.GetByIdAsync(orderId, ct: ct);
-        if (order?.Status == OrderStatuses.PendingPayment)
+        if (order.Status == OrderStatuses.PendingPayment)
             await MoveAsync(orderId, OrderStatuses.Paid, ct: ct);
     }
 

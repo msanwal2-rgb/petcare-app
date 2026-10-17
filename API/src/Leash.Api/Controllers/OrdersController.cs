@@ -28,7 +28,7 @@ namespace Leash.Api.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Authorize]
-public sealed class OrdersController(IOrderService orders) : ControllerBase
+public sealed class OrdersController(IOrderService orders, IRateLimitService rateLimits) : ControllerBase
 {
     /// <summary>
     /// Price a basket. A POST because it carries a body, not because it
@@ -106,6 +106,12 @@ public sealed class OrdersController(IOrderService orders) : ControllerBase
     [HttpPost("orders/{id}/payment/sync")]
     public async Task<IActionResult> SyncPayment(string id, CancellationToken ct)
     {
+        // Throttled: every call reaches the payment provider, and the order
+        // page calls it on arrival from a checkout redirect.
+        var verdict = await rateLimits.ConsumeAsync(RateLimits.ProviderSync, $"uid:{User.RequireUserId()}", ct);
+        if (!verdict.Allowed)
+            return ApiResults.TooManyRequests(verdict.Message ?? "Too many requests", verdict.Limit);
+
         var (placed, failure) = await orders.SyncPaymentAsync(User.RequireUserId(), id, ct);
 
         return failure switch

@@ -29,16 +29,27 @@ public sealed class CoreHost : IAsyncDisposable
 
     public RecordingMailer Mailer { get; } = new();
 
-    public CoreHost(string connectionString)
+    /// <param name="configure">
+    /// Runs after <see cref="DependencyInjection.AddLeashCore"/>, so a test can
+    /// replace a registration — the payment suites install an asynchronous
+    /// fake provider this way.
+    /// </param>
+    /// <param name="settings">Extra configuration, e.g. <c>Payments:Provider</c>.</param>
+    public CoreHost(
+        string connectionString,
+        Action<IServiceCollection>? configure = null,
+        IDictionary<string, string?>? settings = null)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Default"] = connectionString,
-                ["Auth:Secret"] = TestSecret,
-                ["App:Origin"] = TestOrigin,
-            })
-            .Build();
+        var values = new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:Default"] = connectionString,
+            ["Auth:Secret"] = TestSecret,
+            ["App:Origin"] = TestOrigin,
+        };
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+            values[key] = value;
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
         var services = new ServiceCollection();
         services.AddSingleton<IConfiguration>(config);
@@ -49,6 +60,7 @@ public sealed class CoreHost : IAsyncDisposable
 
         // After AddLeashCore, so this registration wins.
         services.AddSingleton<IMailer>(Mailer);
+        configure?.Invoke(services);
 
         _provider = services.BuildServiceProvider();
     }

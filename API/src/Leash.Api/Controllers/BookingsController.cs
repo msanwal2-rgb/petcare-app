@@ -21,6 +21,7 @@ namespace Leash.Api.Controllers;
 [Authorize]
 public sealed class BookingsController(
     IBookingService bookings,
+    IEntitlementService entitlements,
     IMessageService messages,
     IReviewService reviews) : ControllerBase
 {
@@ -41,6 +42,9 @@ public sealed class BookingsController(
         [FromBody] CreateBookingRequest input, CancellationToken ct)
     {
         var (booking, failure) = await bookings.CreateAsync(User.RequireUserId(), input, ct);
+
+        if (failure == BookingFailure.LeadTime)
+            return await LeadTimeRefusal.For(entitlements, User.RequireUserId(), "Bookings", ct);
 
         return failure is null
             ? CreatedAtAction(nameof(Get), new { id = booking!.Id }, booking)

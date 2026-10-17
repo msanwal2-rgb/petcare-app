@@ -38,8 +38,20 @@ public sealed class LeashApp : WebApplicationFactory<Program>
     public const string TestSecret = "test-only-secret-3f8a1c0d5e7b9a2c4d6f8e0a1b3c5d7e";
     public const string TestOrigin = "http://test.local";
 
-    public LeashApp(string connectionString)
+    /// <summary>The webhook signing secret <see cref="LeashApp(string, string?)"/> sets when asked.</summary>
+    public const string TestWebhookSecret = "whsec_test_endpoint_secret";
+
+    /// <param name="webhookSecret">
+    /// <c>Payments:Stripe:WebhookSecret</c>. Unset by default, which is the
+    /// state that must refuse every webhook (REQUIREMENTS.md M6).
+    /// </param>
+    public LeashApp(string connectionString, string? webhookSecret = null)
     {
+        // Set (or cleared) every time: environment variables are process-wide,
+        // and a secret left behind by one test would quietly open the webhook
+        // for the next.
+        Environment.SetEnvironmentVariable("Payments__Stripe__WebhookSecret", webhookSecret);
+
         // Set in the constructor, which runs before the host is built — the host
         // is created lazily on first access to Services or CreateClient.
         Environment.SetEnvironmentVariable("ConnectionStrings__Default", connectionString);

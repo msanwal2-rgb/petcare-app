@@ -26,16 +26,15 @@ detailed source; this is the plan-level view.**
 | 21–30 | M6 Store & orders | ✅ Done |
 | 31–34 | UI parity pass — see below | ✅ Done 2026-10-10 |
 | 35–36 | M8 Notifications | ✅ Done 2026-10-17 |
-| **37–39** | **M7 Payments & membership** | ⬜ **Next** |
-| 40–42 | M9 Admin console | ⬜ |
+| 37–39 | M7 Payments & membership | ✅ Done 2026-10-17 |
+| **40–42** | **M9 Admin console** | ⬜ **Next** |
 | 43–44 | Release hardening + **first deploy** | ⬜ |
 | stretch | M10 Adoption | ⬜ |
 
-**34 plan-days of scope done; 2 skipped; 8 remain, plus the stretch.** The
+**37 plan-days of scope done; 2 skipped; 5 remain, plus the stretch.** The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
-584 xUnit tests passing; 16 of the reference's 28 Vitest suites ported (one in
-half — `orders.test.ts` lines 434–868 belong to M7). The IIS deployment
+732 xUnit tests passing; 19 of the reference's 28 Vitest suites ported in full. The IIS deployment
 (`deploy/README.md`, two sites, `config.js` + `Cors:Origins`) landed out of
 band on 2026-10-17; release hardening (days 43–44) builds on it rather than
 replacing it.
@@ -130,7 +129,7 @@ shelter screens (M10) — arrive with their modules and are **out of scope** her
 | | Item | Why it matters |
 |---|---|---|
 | ⚠ | **Endpoint suites for M5 and M6** (`VetEndpointTests`, `StoreEndpointTests`) | Every other module has one. S9 and price-tampering are HTTP-shaped and currently checked only by hand-run curl walks |
-| ⚠ | **Port `orders.test.ts` 434–868, `webhooks.test.ts`, `stripe-signature.test.ts` before writing M7** | §7 and §11 already require this; M7 is the highest-risk week |
+| | ~~Port `orders.test.ts` 434–868, `webhooks.test.ts`, `stripe-signature.test.ts` before writing M7~~ | **Done** — ported first, with `entitlements.test.ts`; see STATUS §3-M7 |
 | ❓ | **Owner to confirm "one refill per unit"** | M6 implemented P9 that way; one constant if the intent was per line |
 | | Refills are not restored when an order is cancelled | Needs `order_items."prescriptionId"` — a schema change |
 | | Route-level code splitting | Bundle is 847 kB in one chunk after the parity pass, growing ~70 kB a module |

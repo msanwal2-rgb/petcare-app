@@ -17,6 +17,7 @@ public sealed class BookingService(
     IAccessService access,
     IReputationService reputation,
     INotifier notifier,
+    IEntitlementService entitlements,
     IUnitOfWork unitOfWork) : IBookingService
 {
     /// <summary>
@@ -117,9 +118,10 @@ public sealed class BookingService(
         if (input.EndDateTime <= input.StartDateTime)
             return (null, BookingFailure.BadDates);
 
-        // REQUIREMENTS.md C13, and see LeadTime for why the member arm is
-        // hard-coded false until M7 brings entitlements.
-        if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member: false))
+        // REQUIREMENTS.md C13: a Leash Plus member may ask two hours out,
+        // everybody else a day. Read from the database, never the request.
+        var member = await entitlements.HasEntitlementAsync(callerId, Entitlements.PriorityBooking, ct: ct);
+        if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member))
             return (null, BookingFailure.LeadTime);
 
         await using var scope = await unitOfWork.BeginAsync(ct);

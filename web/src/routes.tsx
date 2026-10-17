@@ -32,6 +32,8 @@ import OpsOrdersPage from "./pages/OpsOrdersPage";
 import PetHealthPage from "./pages/PetHealthPage";
 import SupportPage from "./pages/SupportPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
+import PlusPage from "./pages/PlusPage";
+import MembershipPage from "./pages/MembershipPage";
 import NotFoundPage from "./pages/NotFoundPage";
 
 /**
@@ -232,6 +234,19 @@ export const router = createBrowserRouter([
       { path: "pet-health", element: <PetHealthPage /> },
       { path: "support", element: <SupportPage /> },
 
+      // ── Leash Plus (M7) ──
+      // The marketing page is public — signed out it offers "Sign in to join".
+      // The membership page is the reference's /account/*, behind the guard.
+      { path: "plus", element: <PlusPage /> },
+      {
+        path: "account/membership",
+        element: (
+          <RequireAuth>
+            <MembershipPage />
+          </RequireAuth>
+        ),
+      },
+
       // ── Retired URLs ──
       // Earlier builds of this app used these. Each redirects to where its
       // content lives now, so no bookmark or emailed link 404s.
@@ -252,17 +267,6 @@ export const router = createBrowserRouter([
             milestone="M10 · adoption"
             title="Adoption is on the way"
             description="Shelter listings, applications, and the health record that transfers with the animal arrive with M10."
-          />
-        ),
-      },
-      {
-        // The cart offers free shipping "with Leash Plus"; membership is M7's.
-        path: "plus",
-        element: (
-          <ComingSoonPage
-            milestone="M7 · membership"
-            title="Leash Plus is on the way"
-            description="Free delivery on everything, a discount on every vet consultation, and same-day booking arrive with M7."
           />
         ),
       },

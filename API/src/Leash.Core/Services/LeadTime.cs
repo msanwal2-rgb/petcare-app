@@ -15,12 +15,9 @@ namespace Leash.Core.Services;
 /// numbers, and two copies of "24" that M7 has to find are exactly the kind of
 /// drift the reference implementation had elsewhere.
 ///
-/// <b>The member arm is not wired up yet</b> — entitlements arrive with M7 — so
-/// every caller currently passes <c>member: false</c>. This is the one place M7
-/// changes: when entitlements exist, the two services ask whether the caller
-/// holds <c>priority_booking</c> and pass the answer in. Until then everybody
-/// gets the standard window, which is the safe direction: it refuses bookings a
-/// member would be allowed to make rather than allowing ones nobody should.
+/// Both services ask <c>IEntitlementService</c> whether the caller holds
+/// <c>priority_booking</c> — read from the database in the same request, never
+/// from the client — and pass the answer in.
 /// </summary>
 public static class LeadTime
 {

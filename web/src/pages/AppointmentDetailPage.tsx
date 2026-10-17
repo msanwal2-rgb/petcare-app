@@ -1,3 +1,4 @@
+import { confirmCancellation } from "@/lib/cancellation";
 import { Link, useParams } from "react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -218,7 +219,11 @@ export default function AppointmentDetailPage() {
             <Button
               variant="ghost"
               disabled={busy}
-              onClick={() => move("cancelled", "Appointment cancelled")}
+              onClick={() => {
+                // C14: a warning inside the last twelve hours, never a refusal.
+                if (!confirmCancellation(appointment.startDateTime, isVet ? "Your client" : "The clinic")) return;
+                move("cancelled", "Appointment cancelled");
+              }}
             >
               Cancel appointment
             </Button>

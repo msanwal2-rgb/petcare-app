@@ -20,6 +20,7 @@ public sealed class AppointmentService(
     IAccessService access,
     IReputationService reputation,
     INotifier notifier,
+    IEntitlementService entitlements,
     IUnitOfWork unitOfWork) : IAppointmentService
 {
     /// <summary>
@@ -128,11 +129,16 @@ public sealed class AppointmentService(
         if (input.EndDateTime <= input.StartDateTime)
             return (null, AppointmentFailure.BadDates);
 
-        // REQUIREMENTS.md C13. See LeadTime for why the member arm is
-        // hard-coded false until M7 brings entitlements — and note that the
-        // same falsehood decides `priority` below, so the recorded flag and the
-        // rule that was actually applied cannot disagree.
-        const bool member = false;
+        // REQUIREMENTS.md C13 and V5, from one read of the caller's membership:
+        // the same answer decides the lead time, the `priority` flag and the
+        // discount, so the recorded flag and the rule actually applied cannot
+        // disagree. Read here, from the database — never from the request.
+        var membership = await entitlements.GetMembershipAsync(callerId, ct: ct);
+        var member = membership.Entitlements.Contains(Entitlements.PriorityBooking);
+        var discountPct = membership.Entitlements.Contains(Entitlements.VetConsultDiscount)
+            ? membership.ConsultDiscountPct
+            : 0;
+
         if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member))
             return (null, AppointmentFailure.LeadTime);
 
@@ -156,9 +162,9 @@ public sealed class AppointmentService(
         if (!vet.ConsultModes.Contains(input.Mode))
             return (null, AppointmentFailure.ModeNotOffered);
 
-        // M7 replaces the zero with the plan's vet_consult_discount when the
-        // caller holds one (REQUIREMENTS.md V5).
-        var (baseFeeCents, discountPct, feeCents) = ConsultFee(vet.ConsultFeeCents, 0);
+        // V4: three numbers, snapshotted. A membership that lapses next month
+        // does not rewrite what this appointment was quoted.
+        var (baseFeeCents, appliedPct, feeCents) = ConsultFee(vet.ConsultFeeCents, discountPct);
 
         var appointment = new VetAppointmentEntity
         {
@@ -175,7 +181,7 @@ public sealed class AppointmentService(
             Notes = input.Notes ?? "",
             CreatedAt = Ids.Now(),
             BaseFeeCents = baseFeeCents,
-            DiscountPct = discountPct,
+            DiscountPct = appliedPct,
             Priority = member,
             FeeCents = feeCents,
         };

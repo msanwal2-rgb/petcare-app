@@ -64,6 +64,20 @@ public static class RateLimits
     public static readonly RateLimitRule Refresh = new(
         "auth:refresh", 60, TimeSpan.FromHours(1),
         "Too many refresh attempts. Sign in again.");
+
+    /// <summary>Starting a membership checkout: creates a customer and a session at the provider.</summary>
+    public static readonly RateLimitRule Checkout = new(
+        "checkout", 10, TimeSpan.FromHours(1),
+        "Too many checkout attempts. Try again shortly.");
+
+    /// <summary>
+    /// Asking the payment provider where something stands. The membership and
+    /// order pages poll it while a payment settles, and every call reaches
+    /// the provider.
+    /// </summary>
+    public static readonly RateLimitRule ProviderSync = new(
+        "provider-sync", 60, TimeSpan.FromHours(1),
+        "Too many refreshes. Try again in a few minutes.");
 }
 
 /// <summary>

@@ -1,3 +1,4 @@
+import { confirmCancellation } from "@/lib/cancellation";
 import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import { useState, type ReactNode } from "react";
@@ -296,7 +297,11 @@ export default function BookingDetailPage() {
           {["requested", "accepted", "in_progress"].includes(booking.status) && (
               <Button
                 variant="outline"
-                onClick={() => setStatus("cancelled", "Booking cancelled.")}
+                onClick={() => {
+                  // C14: a warning inside the last twelve hours, never a refusal.
+                  if (!confirmCancellation(booking.startDateTime, isCaretaker ? "Your client" : "Your caretaker")) return;
+                  setStatus("cancelled", "Booking cancelled.");
+                }}
                 disabled={busy}
               >
                 Cancel booking

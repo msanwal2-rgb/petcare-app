@@ -1,6 +1,7 @@
 using FluentValidation;
 using Leash.Core.Configuration;
 using Leash.Core.Email;
+using Leash.Core.Payments;
 using Leash.Core.Persistence;
 using Leash.Core.Repositories;
 using Leash.Core.Repositories.Interfaces;
@@ -70,6 +71,8 @@ public static class DependencyInjection
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<IPaymentRepository, PaymentRepository>();
         services.AddSingleton<INotificationRepository, NotificationRepository>();
+        services.AddSingleton<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddSingleton<IWebhookEventRepository, WebhookEventRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -108,12 +111,15 @@ public static class DependencyInjection
         services.AddSingleton<Notifications.INotificationChannel, Notifications.EmailChannel>();
         services.AddSingleton<Notifications.INotificationChannel, Notifications.PushChannel>();
 
-        // ── Payments ─────────────────────────────────────────────────────
-        // The demo provider settles synchronously and is what the seeded
-        // ledger already uses. M7 replaces this one line with the Stripe
-        // provider when its keys are configured, and the order code does not
-        // change shape — it already creates the order before the intent.
-        services.AddSingleton<Payments.IPaymentProvider, Payments.DemoPaymentProvider>();
+        // ── Payments and membership (M7) ────────────────────────────────
+        services.AddLeashPayments(config);
+        services.AddSingleton<IPaymentLedger, PaymentLedger>();
+        services.AddSingleton<IEntitlementService, EntitlementService>();
+        services.AddSingleton<ISubscriptionReconciler, SubscriptionReconciler>();
+        services.AddSingleton<IMembershipService, MembershipService>();
+        services.AddSingleton<Payments.IWebhookEventStore, Payments.WebhookEventStore>();
+        services.AddSingleton<Payments.IStripeWebhookHandler, Payments.StripeWebhookHandler>();
+        services.AddSingleton<Payments.IStripeWebhookIntake, Payments.StripeWebhookIntake>();
 
         // ── Supporting ───────────────────────────────────────────────────
         services.AddSingleton<AppOrigin>();

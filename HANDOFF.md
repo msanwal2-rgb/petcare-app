@@ -1,6 +1,6 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **M8 (notifications)**,
+For whoever picks this up next. Written at the end of **M7 (payments and membership)**,
 2026-10-17.
 
 This file is the short version and the things that are true *right now*. It does
@@ -33,16 +33,16 @@ rewritten without them on purpose.
 
 ## 2. Where the build is
 
-**8 of 11 modules** (M0–M6 and M8), the landing page, the UI parity pass, and
+**9 of 11 modules** (M0–M8), the landing page, the UI parity pass, and
 an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 584 passing, ~3 min
+cd API && dotnet test        # 732 passing, ~4 min
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
 
-All three green at the end of M8. Change scripts run to `004`; **005 is next**.
+All three green at the end of M7. Change scripts run to `004` (M7 needed none); **005 is next**.
 `petapp_dev` and `leash_review` are both at 004 (`leash_review` is updated by
 hand — deploy/README.md). `psql` and `pg_dump` are at
 `C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
@@ -55,39 +55,33 @@ working cross-origin; do not revert this.
 
 ---
 
-## 3. What to do next — M7, payments and membership
+## 3. What to do next — M9, the admin console
 
-`NEXT_PROMPT.md` has the full brief; `REQUIREMENTS.md` §9 is the spec.
-`BUILD_PLAN.md` calls it *"the highest-risk days of the project"*. **Port
-`tests/orders.test.ts` lines 434–868, `tests/webhooks.test.ts`,
-`tests/stripe-signature.test.ts` and `tests/entitlements.test.ts` before
-writing the implementation.**
+`NEXT_PROMPT.md` has the brief; `REQUIREMENTS.md` §10.2 is the spec. Port
+`components/admin/AdminShell.tsx`, `app/dashboard/admin/*` and
+`app/api/admin/*`, and `tests/admin.test.ts` (plus `users.test.ts` if not
+covered). Every action re-checks the staff role server-side (D1), answers a
+non-staff caller 403 with an explanation (D2), and writes `admin_audit_log`
+(D3) — the table exists, nothing writes it yet.
 
-What M6 left for M7, all at the safe default and all marked in code:
+What M7 leaves ready for M9:
 
-| Seam | Where | What M7 does |
-|---|---|---|
-| The payment provider | `Payments/IPaymentProvider.cs`, registered in `AddLeashCore` | Choose `demo` or `stripe` by configuration; `stripe` without a key fails at startup (M2). `OrderService` already creates the order before the intent |
-| Retryable refunds | `OrderLifecycle.RefundAsync` | Write a pending refund row **before** calling the provider. Today the refund runs after the status commits; the demo cannot fail, Stripe can |
-| Free shipping (S5, S6) | `OrderService.PriceAsync`, `const bool freeShipping = false` | Read Leash Plus entitlements. The quote's `membership`, `shippingWaivedByMembership` and `membershipSavingsCents` already exist |
-| Consult discount (V5) | `AppointmentService.CreateAsync`, `ConsultFee(…, 0)` | Pass the plan's `vet_consult_discount` |
-| Priority booking (C13) | `Services/LeadTime.cs`, `member: false` at both call sites | Ask whether the caller holds `priority_booking` |
-| The payment state machine | — | The reference's `PAYMENT_TRANSITIONS`; M6 writes only `unpaid`, `paid`, `refunded` |
-| Notifications | `INotifier`, `Services/Notices.cs` | M8 is done: `order_payment_failed` and the four `membership_*` kinds are declared in `NotificationKinds` and want a `Notices` entry and a call **inside** the webhook reconciler's transaction |
-
-What the parity pass left for M7 in `web/`:
-
-| Where | What M7 does |
+| M9 needs | Already there |
 |---|---|
-| `pages/CheckoutPage.tsx` | The reference's third step ("Pay") with `PaymentForm`. The `STEPS` label is already there; the step is skipped while the demo provider settles synchronously |
-| `pages/OrderDetailPage.tsx` | `?paid=1` already calls `syncPayment` on arrival. "Retry payment" for `pending_payment` becomes "finish paying" |
-| `/plus`, `/account/membership` | `/plus` is a named placeholder (the cart links to it); `/account/membership` is not registered yet |
-| `pages/BookingDetailPage.tsx` | **C14**: when a caretaker booking starts within 12 hours, "Cancel booking" warns and asks to confirm — UI only, no server rule. **Ask the owner whether vet appointments get the same warning** |
+| Refunds from the payments screen (`finance`) | `IPaymentLedger.RequestRefundAsync(new RefundRequest(PaymentId, AmountCents, Reason, InitiatedBy: staffId, Note))` — partial or full, pending row first, `RefundFailure` says why not. `ProviderUnavailable` means "queued for retry", not "failed" |
+| A payment's refund history | `IPaymentRepository.ListRefundsAsync(paymentId)` |
+| Subscriptions list / cancel / resume (`finance`) | `ISubscriptionProvider.SetCancelAtPeriodEndAsync` + `ISubscriptionRepository.SetCancelAtPeriodEndAsync` — what `MembershipService.CancelAsync` does for the member; staff need the same for another user, audited |
+| Verification status (V11, `support`) | `vet_profiles`/`caretaker_profiles`/`shelter_profiles."verificationStatus"` — absent from every self-service DTO on purpose |
+| Suspend / force sign-out (D5, A15) | Bump `sessionsValidFrom` **and** revoke refresh tokens in one transaction (ARCHITECTURE §4) |
+| Settings | `ISettingsService` already reads `signupsOpen`, `maintenanceBanner`, `demoLoginVisible` for `/config` |
+
+The header's Admin link and the `/dashboard/admin/*` placeholder route exist;
+the placeholder goes. Staff accounts u21 (ops), u22 (admin), u23
+(support + finance) sign in with `STAFF_PASSWORD` from the root `.env.local`.
 
 ### Owner decisions still open
 
 - **One refill per unit** (STATUS §4) — leave it as built.
-- **C14 for vet appointments** — ask before building it on the appointment page.
 
 ---
 
@@ -105,6 +99,8 @@ What the parity pass left for M7 in `web/`:
 | **Completing a visit requires a summary** | There is no status button for `completed` |
 | **Ops moves of an order check authority before legality** | The opposite of bookings and appointments, on purpose |
 | **Marking notifications read takes the ids that were shown** | N7. `{}` is a 400, never "all" |
+| **The demo provider sells Leash Plus** | Deliberate (STATUS §3-M7). It settles through the same reconciler as the webhook; do not "fix" it back to the reference's 503 |
+| **C14 warns on bookings and vet appointments** | Owner, 2026-10-10 and 2026-10-17. UI only |
 
 ---
 
@@ -119,6 +115,11 @@ suites**, the **fulfilment job on one instance** (document
 `Fulfilment__Enabled=false` for the others — the outbox drain is safe
 everywhere), **route-level code splitting**, and a redeploy with every change
 script applied to `leash_review`.
+
+**`deploy/publish-iis.ps1` still builds the old single-site layout** (the SPA
+into the API's `wwwroot`) and would ship `web/public/config.js` with the
+development API address. It needs the two-site shape `deploy/README.md`
+describes, and must not overwrite the frontend site's edited `config.js`.
 
 ---
 
@@ -167,6 +168,23 @@ New in M6:
   Re-seed it if a clean demo matters.
 
 
+New in M7:
+
+- **`SubscriptionStatuses` exists in both our enums and Stripe.net.** Files that
+  `using Stripe;` alias ours (`using SubscriptionStatuses = Leash.Core.Models.Enums.SubscriptionStatuses;`).
+- **Webhook fixtures are real Stripe JSON.** `StripeEvents.Json` in
+  `WebhookTests.cs` builds them and Stripe.net parses them; every object needs
+  its `"object"` field (`"payment_intent"`, `"charge"`, …) or it will not
+  deserialise into the typed class the handler switches on.
+- **Test event timestamps are in 2027** (`created: 1_800_000_000`). A payment
+  touched by one has a `lastEventAt` in the future, so a later sync (event time =
+  now) is refused as stale. Harmless in the suite; remember it when debugging.
+- **`LeashApp(cs, webhookSecret)` sets the secret through an environment
+  variable**, and every `LeashApp` resets it — a secret left behind would open
+  the webhook for the next test.
+- **`CoreHost(cs, configure)`** replaces registrations after `AddLeashCore`;
+  that is how `FakeStripe` and `FakeSubscriptions` get in.
+
 New in M8:
 
 - **Notify inside the transaction you already have.** `INotifier.NotifyAsync`
@@ -186,6 +204,14 @@ New in M8:
 ---
 
 ## 7. What was checked by hand
+
+- **M7** (2026-10-17, headless Chrome against `petapp_dev`, API with a local
+  webhook secret): Maya joined Leash Plus on the demo provider → free shipping in
+  quote and cart, a vet appointment at $68 against the clinic's $85, a
+  caretaker booking 3 hours out accepted, the C14 warning dismissed then
+  confirmed, cancel → resume. A signed `invoice.paid` posted twice: one ledger
+  row, `processed, attempts 1`. **This mutated `petapp_dev`**: Maya is a Leash
+  Plus member now, with one more appointment and a cancelled booking.
 
 - **M8** (2026-10-17, headless Chrome against `petapp_dev`): Liam accepted b1
   from the booking page → Maya's bell "1 unread" → the panel showed "Your

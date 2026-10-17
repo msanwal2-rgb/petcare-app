@@ -59,6 +59,56 @@ public static class Notices
             _ => null,
         };
 
+    /// <summary>A declined card, not a cancellation: the intent stays retryable.</summary>
+    public static NotifyInput OrderPaymentFailed(string orderId) => new(
+        NotificationKinds.OrderPaymentFailed,
+        "Your payment didn't go through",
+        "Your order is held for a short while — you can try a different card.",
+        $"/store/orders/{orderId}");
+
+    /// <summary>
+    /// What a member hears when their subscription changes state. Silent on a
+    /// successful renewal — nobody wants a monthly "we charged you" in their
+    /// bell, and Stripe emails the receipt.
+    /// </summary>
+    public static NotifyInput? ForMembership(string? from, string to)
+    {
+        if (from == to) return null;
+
+        return to switch
+        {
+            SubscriptionStatuses.Active when from is null or SubscriptionStatuses.Incomplete => new(
+                NotificationKinds.MembershipStarted,
+                "Welcome to Leash Plus",
+                "Free delivery, a discount on every vet consultation, and same-day booking.",
+                "/account/membership"),
+            SubscriptionStatuses.PastDue => new(
+                NotificationKinds.MembershipPaymentFailed,
+                "We couldn't renew your membership",
+                $"Your card was declined. Your benefits continue for {Entitlements.DunningGraceDays} days while we retry — update your card to keep them.",
+                "/account/membership"),
+            SubscriptionStatuses.Canceled => new(
+                NotificationKinds.MembershipEnded,
+                "Your Leash Plus membership has ended",
+                "Free delivery and the consultation discount no longer apply. You can rejoin any time.",
+                "/plus"),
+            _ => null,
+        };
+    }
+
+    public static NotifyInput MembershipCancelled(DateTimeOffset endsAt) => new(
+        NotificationKinds.MembershipCancelled,
+        "Your membership will end",
+        $"Leash Plus stays active until {endsAt:yyyy-MM-dd}. You can change your mind before then.",
+        "/account/membership");
+
+    /// <summary>The one thing no subscription event conveys: the bank wants the member to act.</summary>
+    public static NotifyInput MembershipActionRequired() => new(
+        NotificationKinds.MembershipPaymentFailed,
+        "Your bank needs to confirm your membership payment",
+        "Open your billing settings to approve it.",
+        "/account/membership");
+
     public static NotifyInput? ForOrder(string orderId, string status) => status switch
     {
         OrderStatuses.Shipped => new(

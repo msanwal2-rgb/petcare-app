@@ -22,6 +22,7 @@ namespace Leash.Api.Controllers;
 [Authorize]
 public sealed class AppointmentsController(
     IAppointmentService appointments,
+    IEntitlementService entitlements,
     IReviewService reviews) : ControllerBase
 {
     /// <summary>
@@ -51,6 +52,9 @@ public sealed class AppointmentsController(
     {
         var (appointment, failure) = await appointments.CreateAsync(
             User.RequireUserId(), input, ct);
+
+        if (failure == AppointmentFailure.LeadTime)
+            return await LeadTimeRefusal.For(entitlements, User.RequireUserId(), "Appointments", ct);
 
         return failure is null
             ? CreatedAtAction(nameof(Get), new { id = appointment!.Id }, appointment)

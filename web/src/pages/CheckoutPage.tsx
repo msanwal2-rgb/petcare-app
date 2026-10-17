@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import type { ShippingAddress } from "@/types";
 import { createOrder, quote as quoteCart, syncPayment } from "@/api/orders";
 import { ApiError } from "@/api/_client";
-
+import { PaymentForm } from "@/components/store/PaymentForm";
+import { STRIPE_KEY } from "@/lib/payments";
 import { listMyPets } from "@/api/pets";
 import { listMyBookings } from "@/api/bookings";
 import { getCaretaker } from "@/api/caretakers";
@@ -21,10 +22,9 @@ import { AlertIcon, HomeIcon } from "@/components/ui/icons";
 import { cn, formatCents, formatRange } from "@/lib/utils";
 
 /**
- * "Pay" is its own step once a card is genuinely collected — M7, with
- * `PaymentForm`. Until then the demo provider settles the order the instant it
- * is created, so that step is skipped, exactly as the reference skipped it
- * without a Stripe key.
+ * "Pay" is its own step now that a card is genuinely collected. With the demo
+ * provider the order settles the instant it is created, so that step is skipped
+ * and the flow is the two it always was.
  */
 const STEPS = ["Address", "Review", "Pay"];
 
@@ -64,6 +64,12 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   /** Set after a 502: the order exists, and only its payment needs retrying. */
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  /** Set once an order exists and is waiting for the customer to confirm a card. */
+  const [pending, setPending] = useState<{
+    orderId: string;
+    clientSecret: string;
+    amountCents: number;
+  } | null>(null);
 
   const { data: pets } = useAsync(
     () => (currentUser ? listMyPets() : Promise.resolve([])),
@@ -161,17 +167,33 @@ export default function CheckoutPage() {
   async function submit() {
     setPlacing(true);
     try {
-      if (pendingOrderId) {
-        const placed = await syncPayment(pendingOrderId);
-        finish(placed.id);
+      const order = pendingOrderId
+        ? await syncPayment(pendingOrderId)
+        : await createOrder({
+            items: cartToLines(lines),
+            shippingAddress: address,
+            deliveryInstructions: instructions.trim(),
+            petId: petId ?? undefined,
+          });
+
+      // A synchronous provider (the demo) has already settled, and the order
+      // comes back paid. A real one hands back a client secret and the customer
+      // has a card to enter.
+      if (order.payment?.clientSecret) {
+        setPending({
+          orderId: order.id,
+          clientSecret: order.payment.clientSecret,
+          amountCents: order.totalCents,
+        });
+        // The basket is cleared here rather than after payment: the order now
+        // exists and holds the stock, so leaving the cart full would let them
+        // place a second one for the same items.
+        clear();
+        setStep(2);
+        setPlacing(false);
         return;
       }
-      const order = await createOrder({
-        items: cartToLines(lines),
-        shippingAddress: address,
-        deliveryInstructions: instructions.trim(),
-        petId: petId ?? undefined,
-      });
+
       finish(order.id);
     } catch (e) {
       if (e instanceof ApiError && e.status === 502 && typeof e.details?.orderId === "string") {
@@ -397,11 +419,13 @@ export default function CheckoutPage() {
                 </ul>
               </div>
 
-              <p className="rounded-xl bg-fog px-4 py-3 text-xs text-charcoal/70">
-                <strong className="text-ink">Demo payment.</strong> No card is
-                collected and no money moves. The order, its charges and its
-                delivery tracking are otherwise real.
-              </p>
+              {!STRIPE_KEY && (
+                <p className="rounded-xl bg-fog px-4 py-3 text-xs text-charcoal/70">
+                  <strong className="text-ink">Demo payment.</strong> No card is
+                  collected and no money moves. The order, its charges and its
+                  delivery tracking are otherwise real.
+                </p>
+              )}
 
               <div className="flex justify-between">
                 <Button variant="ghost" onClick={() => setStep(0)}>
@@ -412,12 +436,40 @@ export default function CheckoutPage() {
                     ? "Placing order…"
                     : pendingOrderId
                       ? "Retry payment"
-                      : `Pay ${formatCents(quote.totalCents)}`}
+                      : STRIPE_KEY
+                        ? "Continue to payment"
+                        : `Pay ${formatCents(quote.totalCents)}`}
                 </Button>
               </div>
             </div>
           )}
 
+          {step === 2 && pending && STRIPE_KEY && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold text-ink">Payment</h2>
+              <PaymentForm
+                clientSecret={pending.clientSecret}
+                publishableKey={STRIPE_KEY}
+                amountCents={pending.amountCents}
+                returnUrl={`${window.location.origin}/store/orders/${pending.orderId}?paid=1`}
+                onPaid={() => {
+                  toast.success("Payment received", {
+                    description: "We'll start picking your order.",
+                  });
+                  navigate(`/store/orders/${pending.orderId}?paid=1`);
+                }}
+                onBack={() => setStep(1)}
+              />
+              <p className="text-xs text-charcoal/55">
+                Your order is held for 15 minutes while you pay. If you leave
+                now you can finish from your{" "}
+                <Link to="/store/orders" className="underline hover:text-ink">
+                  order list
+                </Link>
+                .
+              </p>
+            </div>
+          )}
         </div>
 
         <aside className="lg:sticky lg:top-24 lg:self-start">

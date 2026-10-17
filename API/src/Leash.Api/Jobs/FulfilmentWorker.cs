@@ -4,7 +4,9 @@ using Leash.Core.Services.Interfaces;
 namespace Leash.Api.Jobs;
 
 /// <summary>
-/// Runs <see cref="IFulfilmentService"/> on an interval (REQUIREMENTS.md S16).
+/// Runs <see cref="IFulfilmentService"/> on an interval (REQUIREMENTS.md S16), and
+/// the payments housekeeping beside it: retrying refunds the provider never
+/// acknowledged, and purging old webhook payloads.
 ///
 /// ── Why the interval barely matters ──
 ///
@@ -70,6 +72,22 @@ public sealed class FulfilmentWorker(
                     log.LogInformation(
                         "Fulfilment: scanned {Scanned}, advanced {Advanced}, released {Released} abandoned checkouts",
                         report.Scanned, report.Advanced.Count, report.AbandonedReleased.Count);
+                }
+
+                // Payments housekeeping rides on the same tick: it is the same
+                // one-instance, idempotent kind of work. Refunds the provider never
+                // acknowledged are re-sent under their original key, and settled
+                // webhook payloads — email addresses, card last-fours — are dropped
+                // once nobody will replay them.
+                var retried = await services.GetRequiredService<Core.Services.Interfaces.IPaymentLedger>()
+                    .RetryUnacknowledgedRefundsAsync(Ids.Now(), TimeSpan.FromMinutes(10), stoppingToken);
+                var purged = await services.GetRequiredService<Core.Payments.IWebhookEventStore>()
+                    .PurgeOldEventsAsync(Ids.Now(), retentionDays: 90, stoppingToken);
+
+                if (retried > 0 || purged > 0)
+                {
+                    log.LogInformation("Payments: retried {Retried} unacknowledged refunds, purged {Purged} webhook events",
+                        retried, purged);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

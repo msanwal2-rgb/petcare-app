@@ -18,7 +18,7 @@
 
 declare global {
   interface Window {
-    LEASH_CONFIG?: { apiBaseUrl?: string };
+    LEASH_CONFIG?: { apiBaseUrl?: string; stripePublishableKey?: string };
   }
 }
 

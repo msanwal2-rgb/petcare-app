@@ -440,6 +440,9 @@ production (double underscore for nesting: `ConnectionStrings__Default`).
 | `Cors:Origins` | The SPA's address(es) when it is a separate site. Unset ⇒ nothing cross-origin |
 | `Fulfilment:Enabled` / `:IntervalMinutes` | The order fulfilment job. **One instance only** |
 | `Notifications:Outbox:Enabled` / `:IntervalSeconds` | The notification email drain (default on, 15 s). Safe on every instance |
+| `Payments:Provider` | `demo` (default) or `stripe`. **`stripe` without `Payments:Stripe:SecretKey` refuses to start**; an unknown value refuses to start |
+| `Payments:Stripe:SecretKey` | Stripe secret key. Environment variable only |
+| `Payments:Stripe:WebhookSecret` | The webhook endpoint's signing secret. **Unset ⇒ every webhook is a 403** |
 
 Anything damaging if published goes in an environment variable, not in a file.
 

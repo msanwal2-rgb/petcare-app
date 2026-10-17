@@ -32,6 +32,9 @@ public sealed class OrderService(
     IAccessService access,
     ISettingsService settings,
     IPaymentProvider provider,
+    IPaymentLedger ledger,
+    IEntitlementService entitlements,
+    ISubscriptionRepository customers,
     IOrderLifecycle lifecycle,
     IUnitOfWork unitOfWork) : IOrderService
 {
@@ -47,7 +50,7 @@ public sealed class OrderService(
         if (input.PetId is not null && !await access.OwnsPetAsync(callerId, input.PetId, ct: ct))
             return (null, OrderFailure.NotYourPet);
 
-        return (await PriceAsync(input.Items, input.PetId, scope: null, ct), null);
+        return (await PriceAsync(callerId, input.Items, input.PetId, scope: null, ct), null);
     }
 
     /// <summary>
@@ -100,7 +103,7 @@ public sealed class OrderService(
             var productIds = input.Items.Select(i => i.ProductId).Distinct().ToArray();
             await lifecycle.ReleaseExpiredAsync(productIds, placedAt, scope, ct);
 
-            quote = await PriceAsync(input.Items, input.PetId, scope, ct);
+            quote = await PriceAsync(callerId, input.Items, input.PetId, scope, ct);
             if (quote.Problems.Length > 0 || quote.Lines.Length == 0)
                 return new(null, OrderFailure.Unavailable, Quote: quote);
 
@@ -155,7 +158,7 @@ public sealed class OrderService(
                 ReservationExpiresAt = placedAt + Delivery.ReservationTtl,
 
                 // Snapshotted: a membership that lapses next month must not
-                // rewrite what this order cost. M7 is what puts anything here.
+                // rewrite what this order cost.
                 BenefitsApplied = quote.ShippingWaivedByMembership ? ["free_shipping"] : [],
             };
 
@@ -265,7 +268,9 @@ public sealed class OrderService(
         var order = await orders.GetByIdAsync(orderId, ct: ct);
         if (order is null || order.UserId != callerId) return (null, OrderFailure.NotFound);
 
-        var payment = await payments.GetCurrentForOrderAsync(orderId, ct: ct);
+        // The newest attempt, failed or not: a declined card leaves an intent
+        // Stripe keeps alive, and that is the one to ask about.
+        var payment = await payments.GetLatestForOrderAsync(orderId, ct: ct);
         PaymentHandoffDto? handoff;
 
         if (payment is null)
@@ -281,13 +286,23 @@ public sealed class OrderService(
         }
         else
         {
-            var intent = await provider.GetIntentAsync(payment.ProviderRef, ct);
-            if (intent.Status == IntentStatuses.Succeeded
-                && order.Status == OrderStatuses.PendingPayment)
+            // The same reconciler the webhook uses (M3), so a page that asks
+            // before the webhook lands changes nothing the webhook would not.
+            // A provider that cannot be reached is not an error here: the
+            // webhook may still arrive, and the order is returned as it stands.
+            try
             {
-                await lifecycle.SettleAsync(orderId, ct);
+                var intent = await provider.GetIntentAsync(payment.ProviderRef, ct);
+                var applied = await ledger.ApplyIntentStateAsync(intent, ct: ct);
+                if (applied.Status == PaymentStatuses.Paid) await lifecycle.SettleAsync(orderId, ct);
+            }
+            catch (PaymentProviderException)
+            {
+                // Fall through with what we know.
             }
 
+            // The client secret went out once, at checkout, and is not sent
+            // again (REQUIREMENTS.md M5).
             handoff = new PaymentHandoffDto(payment.ProviderRef, null, payment.Provider);
         }
 
@@ -307,7 +322,7 @@ public sealed class OrderService(
     /// that is sold out anyway sends them to their vet for nothing.
     /// </summary>
     private async Task<CartQuoteDto> PriceAsync(
-        IReadOnlyList<CartLineInput> lines, string? petId,
+        string userId, IReadOnlyList<CartLineInput> lines, string? petId,
         ITransactionScope? scope, CancellationToken ct)
     {
         var products = (await catalog.GetByIdsAsync(
@@ -386,9 +401,11 @@ public sealed class OrderService(
         var subtotal = quoted.Sum(l => l.LineTotalCents);
         var threshold = (await settings.GetAsync(ct)).FreeShippingThresholdCents;
 
-        // M7 reads Leash Plus here. Until then nobody is a member — the safe
-        // direction, charging shipping rather than waiving it for a non-member.
-        const bool freeShipping = false;
+        // S5, M11: Leash Plus, read from the database for this caller in this
+        // request — never from the client and never from the session. There is
+        // no membership field on the request to lie in.
+        var membership = await entitlements.GetMembershipAsync(userId, scope: scope, ct: ct);
+        var freeShipping = membership.Entitlements.Contains(Entitlements.FreeShipping);
 
         // Nothing in the basket costs nothing to ship. Without this an empty
         // cart — or one whose every line was refused — quotes $5.99.
@@ -405,7 +422,7 @@ public sealed class OrderService(
             subtotal + shipping + tax,
             [.. problems],
             [.. warnings],
-            new QuoteMembershipDto(Active: false, PlanKey: null),
+            new QuoteMembershipDto(membership.Active, membership.PlanKey),
             ShippingWaivedByMembership: freeShipping && withoutMembership > 0,
             MembershipSavingsCents: Math.Max(0, withoutMembership - shipping),
             AmountToFreeShippingCents: empty
@@ -465,18 +482,23 @@ public sealed class OrderService(
     /// provider is synchronous. Null when the provider could not start a
     /// payment — the order stays at <c>pending_payment</c>, holding its stock.
     ///
-    /// A synchronous provider settles through exactly the same path an
-    /// asynchronous one's webhook will in M7, so the demo cannot quietly diverge
-    /// from production.
+    /// A synchronous provider settles through exactly the path an asynchronous
+    /// one's webhook takes — <see cref="IPaymentLedger.ApplyIntentStateAsync"/>
+    /// then <see cref="IOrderLifecycle.SettleAsync"/> (REQUIREMENTS.md M3) — so
+    /// the demo cannot quietly diverge from production.
     /// </summary>
     private async Task<PaymentHandoffDto?> StartPaymentAsync(
         string userId, string orderId, int totalCents, CancellationToken ct)
     {
+        // M15: a returning customer is the same customer at the provider. Only
+        // a real provider has customers; the demo would be handed nothing.
+        var customerRef = provider.Asynchronous ? await customers.GetCustomerIdAsync(userId, ct: ct) : null;
+
         PaymentIntent intent;
         try
         {
             intent = await provider.CreateIntentAsync(
-                totalCents, Currency, orderId, userId, idempotencyKey: orderId, ct);
+                new IntentRequest(totalCents, Currency, orderId, userId, IdempotencyKey: orderId, customerRef), ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -491,10 +513,11 @@ public sealed class OrderService(
             {
                 Id = Ids.New("pay"),
                 UserId = userId,
-                Kind = "order",
+                Kind = PaymentKinds.Order,
                 OrderId = orderId,
                 Provider = provider.Name,
                 ProviderRef = intent.Ref,
+                ProviderCustomerId = customerRef ?? "",
                 Status = PaymentStatuses.Unpaid,
                 AmountCents = totalCents,
                 AmountRefundedCents = 0,
@@ -510,9 +533,13 @@ public sealed class OrderService(
             await scope.CommitAsync(ct);
         }
 
-        if (!provider.Asynchronous && intent.Status == IntentStatuses.Succeeded)
-            await lifecycle.SettleAsync(orderId, ct);
+        if (!provider.Asynchronous)
+        {
+            var applied = await ledger.ApplyIntentStateAsync(intent, ct: ct);
+            if (applied.Status == PaymentStatuses.Paid) await lifecycle.SettleAsync(orderId, ct);
+        }
 
+        // The client secret leaves in this one response and is never stored (M5).
         return new PaymentHandoffDto(intent.Ref, intent.ClientSecret, provider.Name);
     }
 

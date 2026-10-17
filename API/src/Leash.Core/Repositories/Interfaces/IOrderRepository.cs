@@ -92,22 +92,3 @@ public interface IOrderRepository
         IReadOnlyCollection<string>? productIds, DateTimeOffset now,
         ITransactionScope? scope = null, CancellationToken ct = default);
 }
-
-/// <summary>
-/// <c>payments</c> — the ledger. M6 writes one row per order through the demo
-/// provider; M7 grows this into the full ledger with its own transition table.
-/// </summary>
-public interface IPaymentRepository
-{
-    Task CreateAsync(
-        PaymentEntity payment, ITransactionScope? scope = null, CancellationToken ct = default);
-
-    /// <summary>The order's most recent payment, if it has one.</summary>
-    Task<PaymentEntity?> GetCurrentForOrderAsync(
-        string orderId, ITransactionScope? scope = null, CancellationToken ct = default);
-
-    Task SetStatusAsync(
-        string id, string status, int amountRefundedCents,
-        DateTimeOffset? succeededAt, DateTimeOffset updatedAt,
-        ITransactionScope? scope = null, CancellationToken ct = default);
-}

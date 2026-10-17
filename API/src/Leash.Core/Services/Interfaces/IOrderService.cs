@@ -127,7 +127,9 @@ public sealed record OrderMove(
     /// Force a restock — a physical return that has actually come back.
     /// Null means the default: restock if the goods never left the building.
     /// </summary>
-    bool? Restock = null);
+    bool? Restock = null,
+    /// <summary>Who is recorded against the refund a move to cancelled or refunded issues: a staff id, or <c>system</c>.</summary>
+    string? InitiatedBy = null);
 
 /// <summary>
 /// The order state machine (REQUIREMENTS.md §11.3), with <b>no caller</b>.
@@ -150,9 +152,11 @@ public interface IOrderLifecycle
         string orderId, string to, OrderMove? move = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Mark a payment succeeded and move its order from <c>pending_payment</c>
-    /// to <c>paid</c>. Safe to call twice: an order already past
-    /// <c>pending_payment</c> is left where it is.
+    /// Settle an order whose payment the ledger already records as paid: mirror
+    /// it, release the hold, and move <c>pending_payment</c> to <c>paid</c>. Does
+    /// nothing while the payment is not paid. Safe to call twice: an order already
+    /// past <c>pending_payment</c> is left where it is. An order that was
+    /// cancelled before its money arrived is refunded instead.
     /// </summary>
     Task SettleAsync(string orderId, CancellationToken ct = default);
 

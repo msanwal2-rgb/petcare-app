@@ -107,12 +107,10 @@ public class OrderEventEntity
 }
 
 /// <summary>
-/// The <c>payments</c> row — the ledger.
-///
-/// M6 writes one per order through the demo provider, so the rows M7 inherits
-/// are real rather than retrofitted. M7 owns everything that makes this a
-/// proper ledger: the transition table, webhook reconciliation, partial and
-/// retryable refunds, disputes.
+/// The <c>payments</c> row — the ledger (REQUIREMENTS.md M4). One per
+/// attempt to take money: an order's intent, a membership invoice, an adoption
+/// fee. Its status is written only by <c>PaymentLedger</c>, through the
+/// transition table. The client secret is never a column (M5).
 /// </summary>
 public class PaymentEntity
 {
@@ -120,6 +118,13 @@ public class PaymentEntity
     public string UserId { get; set; } = "";
     public string Kind { get; set; } = "";
     public string? OrderId { get; set; }
+    public string? SubscriptionId { get; set; }
+    public string ProviderCustomerId { get; set; } = "";
+    public string MethodBrand { get; set; } = "";
+    public string MethodLast4 { get; set; } = "";
+    public string FailureCode { get; set; } = "";
+    public string FailureMessage { get; set; } = "";
+    public DateTimeOffset? LastEventAt { get; set; }
     public string Provider { get; set; } = "";
     public string ProviderRef { get; set; } = "";
     public string Status { get; set; } = "";
