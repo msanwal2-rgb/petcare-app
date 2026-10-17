@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddSingleton<IReviewRepository, ReviewRepository>();
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<IPaymentRepository, PaymentRepository>();
+        services.AddSingleton<INotificationRepository, NotificationRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -95,6 +96,17 @@ public static class DependencyInjection
         services.AddSingleton<IOrderLifecycle, OrderLifecycle>();
         services.AddSingleton<IOrderService, OrderService>();
         services.AddSingleton<IFulfilmentService, FulfilmentService>();
+
+        // ── Notifications ────────────────────────────────────────────────
+        // INotifier is the one gate (N1) and is handed only to the status
+        // machines; controllers get INotificationService. Each out-of-band
+        // channel is one registration — the notifier enqueues for every enabled
+        // one, and the outbox drain delivers through whichever the row names.
+        services.AddSingleton<INotifier, Notifier>();
+        services.AddSingleton<INotificationService, NotificationService>();
+        services.AddSingleton<INotificationOutbox, NotificationOutbox>();
+        services.AddSingleton<Notifications.INotificationChannel, Notifications.EmailChannel>();
+        services.AddSingleton<Notifications.INotificationChannel, Notifications.PushChannel>();
 
         // ── Payments ─────────────────────────────────────────────────────
         // The demo provider settles synchronously and is what the seeded

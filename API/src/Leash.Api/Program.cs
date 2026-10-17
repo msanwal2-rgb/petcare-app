@@ -50,6 +50,10 @@ builder.Services.AddControllers(options =>
 // one instance.
 builder.Services.AddHostedService<Leash.Api.Jobs.FulfilmentWorker>();
 
+// Delivers the email half of every notification from the outbox (N6). Safe
+// on every instance — see Jobs/NotificationOutboxWorker.cs.
+builder.Services.AddHostedService<Leash.Api.Jobs.NotificationOutboxWorker>();
+
 // ── CORS ─────────────────────────────────────────────────────────────────
 // Only for a deployment where the SPA is a separate site from this API (e.g.
 // the frontend on :8081, this on :8080). List the SPA's address(es):

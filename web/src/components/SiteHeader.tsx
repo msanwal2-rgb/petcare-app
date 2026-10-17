@@ -8,6 +8,7 @@ import { ButtonLink } from "./ui/Button";
 import { RoleToggle } from "./RoleToggle";
 import { Avatar } from "./Avatar";
 import { CartButton } from "./store/CartButton";
+import { NotificationBell } from "./notifications/NotificationBell";
 import { DevAccountSwitcher } from "./DevAccountSwitcher";
 import { MenuIcon, XIcon } from "./ui/icons";
 import { DURATION, EASE_GLIDE, EASE_OUT, layoutGlide } from "@/lib/motion";
@@ -145,6 +146,7 @@ export function SiteHeader() {
         <div className="hidden items-center gap-3 md:flex">
           {/* Outside the session branch: the cart is client-side and works
               signed out, so it should not wait on — or flicker with — auth. */}
+          <NotificationBell />
           <CartButton />
           {!hasHydrated ? (
             // Reserved width, so the bar does not jump when the session resolves.
@@ -189,6 +191,7 @@ export function SiteHeader() {
         </div>
 
         <div className="flex items-center gap-1 md:hidden">
+          <NotificationBell />
           <CartButton />
           <button
             onClick={() => setMobileOpen((v) => !v)}

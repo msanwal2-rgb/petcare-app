@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-10**, end of the UI parity pass.
+Last updated: **2026-10-17**, end of M8 (notifications).
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -25,8 +25,8 @@ Last updated: **2026-10-10**, end of the UI parity pass.
 | — | Landing page | ✅ Done — the reference's `app/page.tsx`, ported |
 | **M6** | Store & orders | ✅ Done — 10 endpoints, 116 tests, a fulfilment job |
 | — | **UI parity pass** | ✅ Done — every M1–M6 screen ported from the reference; 34 components added. See §3-0 |
-| M8 | Notifications | ⬜ **Next** |
-| M7 | Payments | ⬜ (after M8) |
+| **M8** | Notifications | ✅ Done — 2 endpoints, an outbox and its drain, the bell; 45 tests. See §3-M8 |
+| M7 | Payments | ⬜ **Next** |
 | M9 | Admin console | ⬜ |
 | M10 | Adoption | ⬜ Stretch |
 
@@ -50,10 +50,10 @@ touches data.**
 ```bash
 # run it
 cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
-cd web && npm run dev                                      # :5173, proxies /api
+cd web && npm run dev                                      # :5173, calls the API on :5001 (public/config.js)
 
 # check it
-cd API && dotnet test        # 539 passing, ~3m
+cd API && dotnet test        # 584 passing, ~3m
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -66,8 +66,8 @@ demo password.
 
 ### Database
 
-31 tables (three change scripts since the bootstrap). 29 from the original schema (32 minus the three assistant tables),
-plus `schema_version` and `refresh_tokens`.
+32 tables (four change scripts since the bootstrap). 29 from the original schema (32 minus the three assistant tables),
+plus `schema_version`, `refresh_tokens` and `notification_outbox`.
 
 | Script | What |
 |---|---|
@@ -77,6 +77,7 @@ plus `schema_version` and `refresh_tokens`.
 | `db/changes/001_sessions_valid_from_timestamptz.sql` | `users."sessionsValidFrom"` text → `timestamptz`. The bootstrap regex missed it (ends in "From", not "At") |
 | `db/changes/002_refresh_tokens.sql` | The `refresh_tokens` table for mobile auth |
 | `db/changes/003_vet_clinic_phone.sql` | `vet_profiles."clinicPhone"` — the practice's public line. Empty by default, deliberately not backfilled from `users.phone` |
+| `db/changes/004_notification_outbox.sql` | `notification_outbox` (one row per out-of-band channel per notification, claimed under a lease) and `notifications.seq`, an identity tie-break for "newest first". Applied to `petapp_dev` and `leash_review` |
 | `db/reference/R001_*.sql` | Plans, settings, catalogue — every environment |
 | `db/devseed/D001_*.sql` | 25 users, 12 pets, bookings, orders — **dev/test only** |
 
@@ -124,10 +125,14 @@ GET    /orders                   POST /orders             GET /orders/{id}
 POST   /orders/{id}/cancel       POST /orders/{id}/payment/sync
 PATCH  /orders/{id}/status                                 → ops
 GET    /ops/orders                                         → ops
+
+GET    /notifications             POST /notifications      { ids } — marks exactly those
 ```
 
-Plus one background job in `Leash.Api/Jobs/FulfilmentWorker.cs` — hourly by
-default, `Fulfilment:Enabled` / `Fulfilment:IntervalMinutes`.
+Plus two background jobs in `Leash.Api/Jobs/`: `FulfilmentWorker` — hourly by
+default, `Fulfilment:Enabled` / `Fulfilment:IntervalMinutes`, one instance only —
+and `NotificationOutboxWorker` — every 15 s, `Notifications:Outbox:Enabled` /
+`Notifications:Outbox:IntervalSeconds`, safe on every instance.
 
 Services and repositories in `Leash.Core`, all behind interfaces, all registered
 in `AddLeashCore`:
@@ -150,6 +155,8 @@ in `AddLeashCore`:
 | `IOrderService`, `IOrderLifecycle`, `IFulfilmentService` | `IOrderRepository`, `IPaymentRepository` |
 | `IPaymentProvider` (`DemoPaymentProvider` until M7) | |
 | `IMessageService`, `IReviewService`, `IReputationService` | `IMessageRepository`, `IReviewRepository` |
+| `INotifier` (status machines only), `INotificationService`, `INotificationOutbox` | `INotificationRepository` |
+| `INotificationChannel` — `EmailChannel`, `PushChannel` (disabled) | |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -199,7 +206,7 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 539 passing
+### Tests — 584 passing
 
 | File | Covers |
 |---|---|
@@ -213,13 +220,58 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AppointmentServiceTests` | Port of `tests/appointments.test.ts` plus the vet half of `reputation.test.ts` — the §11.2 tables, the visit summary, V8 on both write paths, the one-directional review, consultation pricing |
 | `VetServiceTests` | Port of `tests/vets.test.ts`, rewritten around SQL search: filters, distance to the clinic, cursor paging, and what a vet may not set about themselves |
 | `CatalogServiceTests` | The catalogue half of `tests/products.test.ts`, rewritten around keyset paging: every sort walked one row at a time, filters, wildcard escaping |
-| `OrderServiceTests` | The M6 half of `tests/orders.test.ts` (lines 1–433) and all of `tests/fulfillment.test.ts` bar the M8 notification case — quoting, S9, oversell, abandoned holds, the status machine, the cancel window, the job. Plus the S9 cases the reference has no counterpart for |
+| `OrderServiceTests` | The M6 half of `tests/orders.test.ts` (lines 1–433) and all of `tests/fulfillment.test.ts`, including the M8 notification case — quoting, S9, oversell, abandoned holds, the status machine, the cancel window, the job. Plus the S9 cases the reference has no counterpart for |
+| `NotificationServiceTests` | Port of `tests/notifications.test.ts` — the gate, what each machine announces, href deep links — plus the outbox (claim, lease, backoff, give-up, racing drains), N5 escaping and N7 marking. One reference case inverted: "clears everything when given no id" was the N7 defect |
+| `NotificationEndpointTests` | The bell over HTTP: guarded, scoped to the caller, `{ ids }` required (400 on `{}`), and the M8 acceptance walk — a caretaker accepts and the owner's bell says so |
 | `BookingEndpointTests` | What is guarded and what is deliberately public, 409-vs-403, and the §6.4 acceptance walk |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-M8. M8 — notifications (2026-10-17)
+
+REQUIREMENTS §10.1, end to end: `GET`/`POST /notifications`, the
+reference's `NotificationBell` mounted in both header bars, the email half
+through an outbox, and `tests/notifications.test.ts` ported (45 tests across
+`NotificationServiceTests`, `NotificationEndpointTests` and the fulfilment
+case in `OrderServiceTests`). The support page's promise of shipping
+notifications is now true.
+
+| | |
+|---|---|
+| **N1 — one gate** | `INotifier.NotifyAsync`. Handed to `BookingService`, `AppointmentService` and `OrderLifecycle` and to **no controller** — the same split as `IOrderLifecycle`/`IOrderService`. Controllers get `INotificationService` (list, mark read) |
+| **Inside the move's transaction** | Each status machine passes its own scope, so the notice commits if and only if the move does. A refused move (an owner accepting their own booking) leaves no bell and owes no email. The reference notified after commit; a crash between the two lost the notice. A ghost recipient is zero rows (`INSERT … WHERE EXISTS`), not an error that would abort the caller's transaction |
+| **What is announced** | The reference's three tables word for word, in `Services/Notices.cs`: booking accepted/declined; appointment confirmed/declined/completed; order shipped/out for delivery/delivered — to the owner/customer, never to whoever moved it. Cancellations, picking, packing and "in progress" stay silent |
+| **One place per service** | `BookingService.UpdateStatusAsync`; `AppointmentService.AnnounceAsync`, which both the status path and the visit-summary path end in (the summary is the only way to `completed`); `OrderLifecycle.MoveAsync`, which the ops console, the fulfilment job and settlement all go through |
+| **N9 — href** | `/booking/{id}`, `/appointments/{id}`, `/store/orders/{id}` — the SPA's own routes |
+| **N6 — the outbox** | `db/changes/004`. One `notification_outbox` row per enabled out-of-band channel, written with the notification. `NotificationOutboxWorker` drains it every 15 s: claim with `FOR UPDATE SKIP LOCKED` under a 5-minute lease, deliver, record conditionally on the lease. Failures back off 1 m → 5 m → 30 m → 2 h → 6 h, then `failed` with `lastError`. Suspended/deleted recipients are `skipped`. At-least-once; the outbox id goes to Resend as `Idempotency-Key` so a retried send lands once. **Safe on every instance**, unlike the fulfilment job |
+| **N3 — channels** | `INotificationChannel` (`Notifications/NotificationChannels.cs`). In-app is the row itself; `EmailChannel` via `IMailer`; `PushChannel` registered and **disabled** — no outbox rows are written for it, and delivering one would throw rather than report a push that never happened |
+| **N5 — escaping** | `NotificationEmail.Render` HTML-encodes every interpolated value: first name, title, body (which quotes the owner's `appointment.reason`), and the link. Pinned with a `<a href="https://evil…">` reason and a `<b>` name. The plain-text part is text and is not escaped |
+| **N7 — read only what was seen** | `POST /notifications { ids }` marks exactly those of the caller's ids that are unread; `{}`, `{ids: []}` and the reference's `{id}` are a 400, never "everything". The bell sends the unread ids it rendered. Somebody else's id matches nothing |
+| **Ordering** | `notifications.seq` (identity) breaks `createdAt` ties — a catch-up fulfilment run writes three notices in one millisecond, and ids are random (ARCHITECTURE §9.11). The list is keyset-paged on `(createdAt, seq)` with `nextCursor`, 30 a page, like every other list |
+
+**Walked** (headless Chrome, `petapp_dev`): Liam accepted b1 from the booking
+page → Maya's bell read "1 unread" → opening it showed "Your booking was
+accepted" and cleared the count → clicking it landed on `/booking/b1`. Maya
+bought dental chews; Rosa (ops) walked the order from "Start picking" to "Mark
+delivered" in the console → Maya's bell read "3 unread", newest first
+(delivered, out for delivery, on its way). The API log shows the outbox
+sending all four emails. Phone width: one bell, in the mobile bar. No console
+errors, no failed API calls.
+
+**Contract departures** — `GET /notifications` adds `nextCursor`; `POST` takes
+`{ ids: string[] }` (required, 1–100) instead of `{ id? }`. `web/src/api/notifications.ts`
+matches. The bell itself is the reference's file with §6 applied and the N7
+change in `openPanel`.
+
+**Not done, deliberately:** the bell fetches once per sign-in, as the
+reference did — a notification that arrives while the app is open shows after
+a reload (the header does not remount on navigation). No polling was added
+(no API change to make a screen fit).
 
 ---
 
@@ -255,6 +307,7 @@ no failed API calls beyond the expected signed-out `401 /me`.
 | Vet profile | The emergency panel's number is the clinic's own line (`clinic.phone`), not the vet's personal phone; the vet's profile form has a "Clinic phone" field the reference lacked | Owner's decision (§4) — the reference leaked the whole user record |
 | Caretaker and vet profiles | Signed out, review bylines show the author's name | `GET /users?ids=` is now public (§4); in the reference it needed a session too |
 | Pet page | The owner's "Remove" link stays | Owner's decision, 2026-10-10 |
+| Notification bell | Opening the panel marks read **only the unread items it shows** (`POST /notifications { ids }`), not everything | REQUIREMENTS N7 — the reference cleared notifications that arrived after the panel was fetched, and every one beyond the thirty it showed |
 | Shelter dashboard | A placeholder | M10 |
 
 ### Fixed on the way
@@ -671,7 +724,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 |---|---|
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
-| | `tests/` in the reference project has 28 Vitest suites. 15 are ported, one of them in half: `orders.test.ts` lines 434–868 are M7's and should be ported **before** M7 is written. They are the specification — port each module's as you build it |
+| | `tests/` in the reference project has 28 Vitest suites. 16 are ported (`notifications.test.ts` in M8), one of them in half: `orders.test.ts` lines 434–868 are M7's and should be ported **before** M7 is written. They are the specification — port each module's as you build it |
 | | **M5 and M6 have no endpoint suites.** Every other module has one (`PetEndpointTests`, `BookingEndpointTests`, …) covering what a service test structurally cannot: that `[Authorize]` is on each action, that a 401 carries the envelope, that 409-vs-403 survives the controller. Both service layers are covered in full; their 22 routes are checked only by the hand-run curl walks recorded in `HANDOFF.md`. **`StoreEndpointTests` matters most** — S9 and the price-tampering refusal are the store's two security properties, and both are HTTP-shaped |
 | ⚠ | **Refills spent on a cancelled order are not given back.** Checkout spends them per unit; cancellation restocks the goods but cannot return the refills, because nothing records *which* prescription a line drew on — that wants an `order_items."prescriptionId"` column (a schema change). The direction is safe — it under-authorises, never over — but an owner who cancels has to ask their vet to renew. Decide before real customers do it |
 | ❓ | **Confirm "one refill per unit".** The owner's decision says "decrement when an Rx line is bought" without saying whether a line of three bags spends one refill or three. Implemented as three, because one-per-line lets a single refill cover a 99-bag line. One constant to change in `PrescriptionCover` if the intent was the other |
@@ -680,7 +733,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | **V5 is unwired in the same way.** `AppointmentService.CreateAsync` passes a hard-coded `0` for the consultation discount, so `discountPct` is always 0 and `feeCents` always equals `baseFeeCents`. The three columns are written and the arithmetic is tested; M7 supplies the plan's `vet_consult_discount` at that one call site. Zero is the safe direction — it charges full price rather than discounting for non-members |
 | | ~~M6 must decrement `refillsLeft` when an Rx line is bought.~~ **Done in M6**, in the order's transaction alongside the stock — see §3. REQUIREMENTS P9 is closed on both sides |
 | ⚠ | **M7 owns three things M6 left at the safe default.** The quote's `freeShipping` is hard-coded false (S5, S6), appointment `discountPct` is 0 (V5), and lead time is the standard 24 h for everyone (C13). All three call sites are marked. Plus: refunds must become retryable — M6 refunds after the status commits, which is fine for the demo provider and not for one that can fail |
-| | **Notifications for order milestones** (shipped, out for delivery, delivered) are M8's. `OrderLifecycle.MoveAsync` is the one place to raise them; the fulfilment suite's "notifies the customer" case is waiting for it |
+| | ~~Notifications for order milestones are M8's.~~ **Done in M8** — `OrderLifecycle.MoveAsync` raises them inside the move's transaction; the fulfilment suite's "notifies the customer" case is ported |
 | ⚠ | **Run the fulfilment job on one instance.** Concurrent runs are *safe* — every move is conditional on the status read — but duplicate the work. On more than one machine set `Fulfilment__Enabled=false` on all but one, or make it a scheduled job. A deploy decision |
 | | Catalogue text search is `ILIKE` — a sequential scan, fine at 25 products. At catalogue scale it wants a `pg_trgm` index (a schema change) |
 | ⚠ | **A pet that has died cannot be removed.** Deleting is blocked once the animal has vet visits or health records, because all three FKs onto `pets` cascade and an owner must not delete records their vet authored. Needs a soft delete (`deletedAt`) and a decision about what a bereaved owner still sees — `STATUS.md` §3 has the reasoning |

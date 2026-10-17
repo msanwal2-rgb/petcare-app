@@ -9,7 +9,7 @@ parity with the existing application minus the AI assistant.
 
 ---
 
-## 0. Where the plan stands — revised 2026-10-10
+## 0. Where the plan stands — revised 2026-10-17
 
 The calendar in §6 is the original. This section records what actually
 happened against it, and the revisions the owner made. **`STATUS.md` is the
@@ -25,17 +25,20 @@ detailed source; this is the plan-level view.**
 | — | Landing page (`app/page.tsx`) | ✅ Done — **was never scheduled**; added 2026-10-09 |
 | 21–30 | M6 Store & orders | ✅ Done |
 | 31–34 | UI parity pass — see below | ✅ Done 2026-10-10 |
-| **35–36** | **M8 Notifications** | ⬜ **Next** |
-| 37–39 | M7 Payments & membership | ⬜ |
+| 35–36 | M8 Notifications | ✅ Done 2026-10-17 |
+| **37–39** | **M7 Payments & membership** | ⬜ **Next** |
 | 40–42 | M9 Admin console | ⬜ |
 | 43–44 | Release hardening + **first deploy** | ⬜ |
 | stretch | M10 Adoption | ⬜ |
 
-**32 plan-days of scope done; 2 skipped; 10 remain, plus the stretch.** The
+**34 plan-days of scope done; 2 skipped; 8 remain, plus the stretch.** The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
-539 xUnit tests passing; 15 of the reference's 28 Vitest suites ported (one in
-half — `orders.test.ts` lines 434–868 belong to M7).
+584 xUnit tests passing; 16 of the reference's 28 Vitest suites ported (one in
+half — `orders.test.ts` lines 434–868 belong to M7). The IIS deployment
+(`deploy/README.md`, two sites, `config.js` + `Cors:Origins`) landed out of
+band on 2026-10-17; release hardening (days 43–44) builds on it rather than
+replacing it.
 
 ### The revisions, and what they cost
 

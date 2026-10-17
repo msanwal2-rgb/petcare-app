@@ -62,6 +62,10 @@ public sealed class LeashApp : WebApplicationFactory<Program>
         // underneath a test asserting it is processing. Tests drive it directly
         // through IFulfilmentService with an injected clock instead.
         Environment.SetEnvironmentVariable("Fulfilment__Enabled", "false");
+
+        // Likewise the outbox drain: tests that assert on email drive
+        // INotificationOutbox themselves, at the service level.
+        Environment.SetEnvironmentVariable("Notifications__Outbox__Enabled", "false");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

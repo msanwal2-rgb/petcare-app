@@ -78,13 +78,26 @@ public sealed class CoreHost : IAsyncDisposable
 /// </summary>
 public sealed class RecordingMailer : IMailer
 {
-    public List<MailMessage> Sent { get; } = [];
+    private readonly List<MailMessage> _sent = [];
+
+    /// <summary>A snapshot — the outbox tests drain from two tasks at once.</summary>
+    public List<MailMessage> Sent
+    {
+        get { lock (_sent) return [.. _sent]; }
+    }
+
+    /// <summary>When set, every send throws with this message — a provider outage.</summary>
+    public string? FailWith { get; set; }
 
     public Task SendAsync(MailMessage message, CancellationToken ct = default)
     {
-        Sent.Add(message);
+        if (FailWith is not null) throw new InvalidOperationException(FailWith);
+        lock (_sent) _sent.Add(message);
         return Task.CompletedTask;
     }
 
-    public void Clear() => Sent.Clear();
+    public void Clear()
+    {
+        lock (_sent) _sent.Clear();
+    }
 }

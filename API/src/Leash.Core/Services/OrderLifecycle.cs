@@ -17,6 +17,7 @@ public sealed class OrderLifecycle(
     ICatalogRepository catalog,
     IPaymentRepository payments,
     IPaymentProvider provider,
+    INotifier notifier,
     IUnitOfWork unitOfWork) : IOrderLifecycle
 {
     /// <summary>
@@ -133,13 +134,18 @@ public sealed class OrderLifecycle(
             }
 
             await orders.AddEventAsync(EventFor(orderId, to, at, move.Location), scope, ct);
+
+            // The delivery milestones (REQUIREMENTS.md S16, N2), to the customer —
+            // never to whoever moved the order. In the move's transaction, so the
+            // ops console, the fulfilment job and settlement all announce through
+            // this one line, and a move that loses its race announces nothing.
+            if (Notices.ForOrder(orderId, to) is { } notice)
+                await notifier.NotifyAsync(order.UserId, notice, scope, ct);
+
             await scope.CommitAsync(ct);
         }
 
         if (leaving) await RefundAsync(orderId, ct);
-
-        // Notifications for the delivery milestones are M8's (REQUIREMENTS.md
-        // §10.1) — this is the one place they will be raised from.
 
         return (await LoadAsync(orderId, ct: ct), null);
     }

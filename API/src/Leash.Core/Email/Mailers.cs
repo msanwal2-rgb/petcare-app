@@ -53,6 +53,11 @@ public sealed class ResendMailer(HttpClient http, IConfiguration config) : IMail
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
 
+        // Resend drops a second request with the same key, which is what makes
+        // the outbox's at-least-once delivery read as exactly-once in an inbox.
+        if (message.IdempotencyKey is not null)
+            request.Headers.Add("Idempotency-Key", message.IdempotencyKey);
+
         using var response = await http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
         {

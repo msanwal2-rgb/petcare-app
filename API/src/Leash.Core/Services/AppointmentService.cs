@@ -19,6 +19,7 @@ public sealed class AppointmentService(
     IMedicalRecordRepository records,
     IAccessService access,
     IReputationService reputation,
+    INotifier notifier,
     IUnitOfWork unitOfWork) : IAppointmentService
 {
     /// <summary>
@@ -225,6 +226,7 @@ public sealed class AppointmentService(
         if (updated is null) return (null, AppointmentFailure.NotFound);
 
         await reputation.RefreshVetResponseRateAsync(updated.VetId, scope, ct);
+        await AnnounceAsync(updated, scope, ct);
 
         await scope.CommitAsync(ct);
         return (updated.ToDto(), null);
@@ -341,9 +343,23 @@ public sealed class AppointmentService(
         if (completed is null) return (null, AppointmentFailure.NotFound);
 
         await reputation.RefreshVetResponseRateAsync(completed.VetId, scope, ct);
+        await AnnounceAsync(completed, scope, ct);
 
         await scope.CommitAsync(ct);
         return (new VisitSummaryResult(completed.ToDto(), [.. written]), null);
+    }
+
+    /// <summary>
+    /// Tell the owner what the vet did, inside the move's transaction. The one
+    /// place this service notifies from: both <see cref="UpdateStatusAsync"/>
+    /// and <see cref="CompleteWithSummaryAsync"/> end here, so the summary path
+    /// cannot forget the "summary is ready" notice the status path sends.
+    /// </summary>
+    private async Task AnnounceAsync(
+        VetAppointmentEntity appointment, ITransactionScope scope, CancellationToken ct)
+    {
+        if (Notices.ForAppointment(appointment.Id, appointment.Status, appointment.Reason) is { } notice)
+            await notifier.NotifyAsync(appointment.OwnerId, notice, scope, ct);
     }
 
     /// <summary>

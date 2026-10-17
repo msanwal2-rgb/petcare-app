@@ -2,7 +2,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 namespace Leash.Core.Email;
 
-public sealed record MailMessage(string To, string Subject, string Html, string Text);
+/// <summary>
+/// One email. <paramref name="IdempotencyKey"/> is passed to the provider when
+/// set, so a retried send of the same message is delivered once.
+/// </summary>
+public sealed record MailMessage(
+    string To, string Subject, string Html, string Text, string? IdempotencyKey = null);
 
 public interface IMailer
 {

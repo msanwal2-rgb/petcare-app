@@ -347,10 +347,13 @@ web/src/
 └── types/        copied verbatim from the reference project
 ```
 
-- **Relative paths only** (`/api/v1/pets`). Vite proxies `/api` to `:5001` in
-  development; in production ASP.NET serves the SPA from `wwwroot`. Either way
-  it is one origin, so the cookie is first-party — no CORS, no
-  `credentials: "include"`.
+- **The API is a separate origin** (since 2026-10-17, `deploy/README.md`).
+  `web/public/config.js` sets `apiBaseUrl` — `:5001` in development, the IIS
+  backend site when deployed — and `api/_client.ts` prefixes every call with
+  it and sends `credentials: "include"`. The API allows the SPA in
+  `Cors:Origins`. There is no Vite proxy. A new endpoint needs nothing extra
+  to work cross-origin; a new *header* the client sends would need to be
+  allowed (the policy allows any header today).
 - **`@/` resolves to `src/`** — declared in *both* `vite.config.ts` and
   `tsconfig.app.json`. Both are needed (`tsc -b` runs first in `npm run build`).
 - **Pages call `src/api/*`, never `fetch`.** That rule is what kept the reference
@@ -433,6 +436,10 @@ production (double underscore for nesting: `ConnectionStrings__Default`).
 | `App:Origin` | Where emailed links point. **Configuration, never the `Host` header** — otherwise `Host: attacker.example` yields a valid reset link on an attacker's domain |
 | `Email:ResendApiKey` | Unset ⇒ the mailer logs instead of sending |
 | `Email:DevMode` | Returns action links in responses. **Forced off outside Development**, whatever it says |
+| `Email:From` | Sender for Resend. Default `Leash <onboarding@resend.dev>` |
+| `Cors:Origins` | The SPA's address(es) when it is a separate site. Unset ⇒ nothing cross-origin |
+| `Fulfilment:Enabled` / `:IntervalMinutes` | The order fulfilment job. **One instance only** |
+| `Notifications:Outbox:Enabled` / `:IntervalSeconds` | The notification email drain (default on, 15 s). Safe on every instance |
 
 Anything damaging if published goes in an environment variable, not in a file.
 

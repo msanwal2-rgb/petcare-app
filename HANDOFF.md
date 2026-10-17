@@ -1,7 +1,7 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of the **UI parity pass**,
-2026-10-10.
+For whoever picks this up next. Written at the end of **M8 (notifications)**,
+2026-10-17.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -11,104 +11,83 @@ not repeat the permanent docs — read them in this order:
 | `STATUS.md` | What is done, what is next, what is open, what is decided. **Start here.** |
 | `ARCHITECTURE.md` | How the code is organised and how to add a feature. **Read before writing code.** |
 | `REQUIREMENTS.md` | The durable spec. §9 is M7. |
-| `BUILD_PLAN.md` | Order of work, the decisions, the risks. §6 week 7 is M8 + M7. |
+| `BUILD_PLAN.md` | Order of work, the decisions, the risks. §0 is where the plan stands. |
 | `API_CONTRACTS.md` | Every endpoint of the reference implementation. |
+| `NEXT_PROMPT.md` | The brief for the remaining modules, in order. It restarts the work: skip what STATUS marks done. |
 
 ---
 
 ## 1. Where the history is
 
-Everything is committed; the working tree is clean. `origin/main_newDev` is at
-`6f8608a`; the parity-pass commits are local until you push.
-
-```
-6c1e030  Clinic phone on vet profiles; public GET /users?ids=  (db/changes/003)
-eff89bf  UI parity pass: every M1–M6 screen ported from the reference, + docs
-6f8608a  M5 + landing page + M6
-c585829  m4 completed
-41f57ef  m3 completed with refill left and pet delete not possible if have history
-ce34802  m2 completed
-9ff75e2  commited auth steps
-```
+Everything is committed; the working tree is clean. Commits after
+`727490f` (the IIS deployment) are local until the owner pushes — the owner
+pushes, never the session.
 
 Two local-only backup refs from the pre-M0 authorship rewrite still exist —
 `backup/main_newDev-pre-rewrite` and `backup/main_newDev-pre-name-rewrite`.
 Never pushed. Delete them when the old hashes no longer need to be recoverable.
+**No `Co-Authored-By` or other Claude trailer** on any commit — the history was
+rewritten without them on purpose.
 
 ---
 
-## 2. Where the build actually is
+## 2. Where the build is
 
-**7 of 11 modules, the landing page, and the UI parity pass.** M0–M6 are done
-and verified, and every screen they built is now a port of the reference
-screen. The week-4 checkpoint and first deploy were **skipped by the owner's
-decision** (STATUS §5) — see §5 below for what that leaves.
+**8 of 11 modules** (M0–M6 and M8), the landing page, the UI parity pass, and
+an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 539 passing, ~3 min
+cd API && dotnet test        # 584 passing, ~3 min
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
 
-**All three were green at the end of the parity pass**, after its follow-up
-added the first schema change since M4: `db/changes/003_vet_clinic_phone.sql`,
-applied to `petapp_dev` with the seed's clinic numbers. `psql` and `pg_dump`
-are at `C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
+All three green at the end of M8. Change scripts run to `004`; **005 is next**.
+`petapp_dev` and `leash_review` are both at 004 (`leash_review` is updated by
+hand — deploy/README.md). `psql` and `pg_dump` are at
+`C:\Program Files\PostgreSQL\18\bin` and are not on PATH.
+
+The architecture since `727490f`: **two sites**. The SPA reads the API's
+address from `web/public/config.js`; the API allows the SPA in `Cors:Origins`;
+every call sends `credentials: "include"`. In development Vite on :5173 calls
+the API on :5001 directly — there is no `/api` proxy. Keep new endpoints
+working cross-origin; do not revert this.
 
 ---
 
-## 3. What to do next — M8, then M7
+## 3. What to do next — M7, payments and membership
 
-`NEXT_PROMPT.md` is the brief. The rule that changes from here on:
-
-> **Every module ports the reference screens first and adapts them to the API
-> second.** Copy the reference component, apply ARCHITECTURE.md §6, swap the
-> `lib/api/*` calls for `web/src/api/*`. If it looks different afterwards,
-> the port is not finished. The parity pass exists because M1–M6 did the
-> opposite.
-
-**M8 first** (`NotificationBell`, `GET /notifications`), because orders
-generate notifications and the hook is one place: `OrderLifecycle.MoveAsync`.
-Two §12 defects are M8's: the notification email interpolates user text into
-HTML unescaped, and the email is fired without `await`. The support page
-already promises "a notification when it ships, when it is out for delivery,
-and when it arrives" — M8 makes that true.
-
-### Then M7, payments and membership
-
-`REQUIREMENTS.md` §9 is the spec. `BUILD_PLAN.md` calls week 7 *"the
-highest-risk days of the project"* and says to port `tests/webhooks.test.ts` and
-`tests/stripe-signature.test.ts` **before** writing the implementation. Add to
-that list the second half of `tests/orders.test.ts` (lines 434–868) — M6 ported
-only the first half, deliberately.
+`NEXT_PROMPT.md` has the full brief; `REQUIREMENTS.md` §9 is the spec.
+`BUILD_PLAN.md` calls it *"the highest-risk days of the project"*. **Port
+`tests/orders.test.ts` lines 434–868, `tests/webhooks.test.ts`,
+`tests/stripe-signature.test.ts` and `tests/entitlements.test.ts` before
+writing the implementation.**
 
 What M6 left for M7, all at the safe default and all marked in code:
 
 | Seam | Where | What M7 does |
 |---|---|---|
-| The payment provider | `Payments/IPaymentProvider.cs`, registered in `AddLeashCore` | Register the Stripe implementation in place of `DemoPaymentProvider`. `OrderService` already creates the order before the intent — the ordering a real card needs — so it should not change shape |
+| The payment provider | `Payments/IPaymentProvider.cs`, registered in `AddLeashCore` | Choose `demo` or `stripe` by configuration; `stripe` without a key fails at startup (M2). `OrderService` already creates the order before the intent |
 | Retryable refunds | `OrderLifecycle.RefundAsync` | Write a pending refund row **before** calling the provider. Today the refund runs after the status commits; the demo cannot fail, Stripe can |
-| Free shipping (S5, S6) | `OrderService.PriceAsync`, `const bool freeShipping = false` | Read Leash Plus entitlements. The quote's `membership`, `shippingWaivedByMembership` and `membershipSavingsCents` already exist and are always "not a member" |
-| Consult discount (V5) | `AppointmentService.CreateAsync`, `ConsultFee(…, 0)` | Pass the plan's `vet_consult_discount`. The three money columns are already written |
+| Free shipping (S5, S6) | `OrderService.PriceAsync`, `const bool freeShipping = false` | Read Leash Plus entitlements. The quote's `membership`, `shippingWaivedByMembership` and `membershipSavingsCents` already exist |
+| Consult discount (V5) | `AppointmentService.CreateAsync`, `ConsultFee(…, 0)` | Pass the plan's `vet_consult_discount` |
 | Priority booking (C13) | `Services/LeadTime.cs`, `member: false` at both call sites | Ask whether the caller holds `priority_booking` |
 | The payment state machine | — | The reference's `PAYMENT_TRANSITIONS`; M6 writes only `unpaid`, `paid`, `refunded` |
+| Notifications | `INotifier`, `Services/Notices.cs` | M8 is done: `order_payment_failed` and the four `membership_*` kinds are declared in `NotificationKinds` and want a `Notices` entry and a call **inside** the webhook reconciler's transaction |
 
 What the parity pass left for M7 in `web/`:
 
 | Where | What M7 does |
 |---|---|
 | `pages/CheckoutPage.tsx` | The reference's third step ("Pay") with `PaymentForm`. The `STEPS` label is already there; the step is skipped while the demo provider settles synchronously |
-| `pages/OrderDetailPage.tsx` | `?paid=1` already calls `syncPayment` on arrival, as the reference did after Stripe's redirect. The "Retry payment" button for `pending_payment` becomes "finish paying" |
+| `pages/OrderDetailPage.tsx` | `?paid=1` already calls `syncPayment` on arrival. "Retry payment" for `pending_payment` becomes "finish paying" |
 | `/plus`, `/account/membership` | `/plus` is a named placeholder (the cart links to it); `/account/membership` is not registered yet |
-| `components/booking/BookingNewClient.tsx` | The confirm step shows the reference's mock card. Booking payments are not in §9's scope as written — check before wiring |
+| `pages/BookingDetailPage.tsx` | **C14**: when a caretaker booking starts within 12 hours, "Cancel booking" warns and asks to confirm — UI only, no server rule. **Ask the owner whether vet appointments get the same warning** |
 
 ### Owner decisions still open
 
-- **One refill per unit** (STATUS §4) — as before.
-- ~~Three API gaps from the parity pass~~ — **decided 2026-10-10** (STATUS §4):
-  the clinic phone is in (`db/changes/003`, so M8's script is `004`), allergen
-  flags on store cards are not, and `GET /users?ids=` is public. The pet page
-  keeps the owner's Remove link.
+- **One refill per unit** (STATUS §4) — leave it as built.
+- **C14 for vet appointments** — ask before building it on the appointment page.
 
 ---
 
@@ -118,36 +97,28 @@ What the parity pass left for M7 in `web/`:
 
 | | |
 |---|---|
-| **`refillsLeft`**: 0 = exhausted, null = no limit, **spent at checkout** | Implemented in M6. **One refill per unit is pending the owner's confirmation** — see STATUS §4 |
+| **`refillsLeft`**: 0 = exhausted, null = no limit, **spent at checkout** | One refill per unit is pending the owner's confirmation |
 | **Deleting a pet with clinical history is a 409** | Not a bug. Soft delete is a later pass |
-| **No booking cancellation cutoff, no penalty** | §11.1 as written. C14 decided 2026-10-10: only a warning when cancelling within 12 hours of the start — not built yet |
+| **No booking cancellation cutoff, no penalty** | Only the 12-hour warning (C14), not built yet |
 | **A cookie copied before sign-out keeps working** | Deliberate. Do **not** bump the watermark on logout |
-| **A vet review is one-directional** | The owner reviews the vet. `ReviewKinds` exists for exactly this |
+| **A vet review is one-directional** | The owner reviews the vet |
 | **Completing a visit requires a summary** | There is no status button for `completed` |
-| **The checkpoint and first deploy were skipped** | Owner's call, 2026-10-09 |
-| **Ops moves of an order check authority before legality** | The opposite of bookings and appointments, on purpose — a customer is not a party to fulfilment |
+| **Ops moves of an order check authority before legality** | The opposite of bookings and appointments, on purpose |
+| **Marking notifications read takes the ids that were shown** | N7. `{}` is a 400, never "all" |
 
 ---
 
-## 5. The thing most likely to go wrong from here
+## 5. What is still between here and a release
 
-**Nothing has ever been deployed, and the checkpoint that was meant to prove
-otherwise was skipped.** That is the owner's decision and it stands; what it
-means in practice is that every deploy problem is now deferred to week 8, which
-is precisely the outcome `BUILD_PLAN.md` §7 warns about. The known ones, all in
-STATUS §4:
-
-1. **Nothing builds the SPA into `wwwroot`.** A deploy today serves the API and
-   404s every page.
-2. **`.github/workflows/` is empty** — no CI at all.
-3. **`verify.sh` cannot run in CI** — its baseline is gitignored.
-4. **Vulnerable transitive packages in the test project** — trips any
-   vulnerability gate.
-5. **The fulfilment job must run on one instance** once there is more than one.
-6. **Host configuration** — `ConnectionStrings__Default`, `Auth__Secret`,
-   `App__Origin` (never the `Host` header) — none of it exercised anywhere yet.
-
-None of these is hard. All of them are cheaper now than in week 8.
+The deployment exists now (two IIS sites, `deploy/`), so "nothing builds the
+SPA" is moot for that topology. What remains is BUILD_PLAN §0's release
+hardening, all in `NEXT_PROMPT.md`: **CI** (`.github/workflows/` is empty;
+`verify.sh` needs a committed baseline or a mode without the delta half), the
+**vulnerable transitive packages** in the test project, the **M5/M6 endpoint
+suites**, the **fulfilment job on one instance** (document
+`Fulfilment__Enabled=false` for the others — the outbox drain is safe
+everywhere), **route-level code splitting**, and a redeploy with every change
+script applied to `leash_review`.
 
 ---
 
@@ -195,9 +166,34 @@ New in M6:
 - **`petapp_dev` now has smoke-test orders in it** from the HTTP walks below.
   Re-seed it if a clean demo matters.
 
+
+New in M8:
+
+- **Notify inside the transaction you already have.** `INotifier.NotifyAsync`
+  takes the caller's scope; pass it. Without one it opens its own and swallows
+  failures — right for a caller with no transaction, wrong for a status
+  machine, where a crash between two commits loses the notice.
+- **Anything listed "newest first" needs a tie-break that is not the id.**
+  `notifications.seq` exists for that. Same trap as the order timeline.
+- **The test `RecordingMailer` is shared state.** Its `Sent` is a snapshot and
+  `FailWith` simulates an outage; the outbox tests drain from two tasks at once.
+- **The outbox drain is off under `LeashApp`** (`Notifications__Outbox__Enabled=false`).
+  Endpoint tests that need email should drive `INotificationOutbox` at the
+  service level, as `NotificationServiceTests` does.
+- **`STAFF_PASSWORD` is in the root `.env.local`** (gitignored). The staff
+  accounts u21–u23 use it; read it from there for a walk, never print it.
+
 ---
 
 ## 7. What was checked by hand
+
+- **M8** (2026-10-17, headless Chrome against `petapp_dev`): Liam accepted b1
+  from the booking page → Maya's bell "1 unread" → the panel showed "Your
+  booking was accepted", the count cleared, the item linked to `/booking/b1`.
+  Maya bought dental chews; Rosa (ops) walked the order to delivered from the
+  console → Maya's bell "3 unread", newest first. The API log shows the outbox
+  sending all four emails. No console errors, no failed API calls. **This
+  mutated `petapp_dev`**: b1 is accepted and there is one more delivered order.
 
 - **Parity pass:** a headless Chrome walk (Playwright from the root
   `node_modules`, the system Chrome) of every screen as signed out, maya.chen,

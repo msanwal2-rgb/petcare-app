@@ -20,7 +20,7 @@ namespace Leash.Api.Tests;
 /// intents, webhook idempotency, partial refunds and the payment transition
 /// table. Those are M7 (BUILD_PLAN.md week 7), and that suite should be ported
 /// <i>before</i> M7's implementation is written, as the plan says. The
-/// fulfilment suite's "notifies the customer" case is M8's.
+/// fulfilment suite's "notifies the customer" case arrived with M8.
 ///
 /// ── Fixtures ──
 ///
@@ -825,6 +825,27 @@ public sealed class OrderServiceTests(DatabaseFixture db) : IAsyncLifetime
     /// <summary><paramref name="hours"/> after o3 was actually placed — derived, not assumed.</summary>
     private async Task<DateTimeOffset> AfterPlacementAsync(string orderId, double hours)
         => (await _lifecycle.LoadAsync(orderId))!.PlacedAt.AddHours(hours);
+
+    [Fact]
+    public async Task Notifies_the_customer_as_it_goes()
+    {
+        // The case M6 left for M8. The job moves orders through OrderLifecycle,
+        // so it announces through the same line the ops console does.
+        await _fulfilment.RunAsync(await AfterPlacementAsync("o3", 72));
+
+        // The same run also delivers Maya's o2, so look at o3's alone.
+        var kinds = (await _core.Get<INotificationService>().ListMineAsync(Maya, null))
+            .Items.Where(n => n.Href == "/store/orders/o3").Select(n => n.Kind).ToArray();
+
+        Assert.Contains(NotificationKinds.OrderShipped, kinds);
+        Assert.Contains(NotificationKinds.OrderDelivered, kinds);
+
+        // A catch-up run stamps every stage with one instant; the bell still
+        // reads newest first.
+        Assert.Equal(
+            [NotificationKinds.OrderDelivered, NotificationKinds.OrderOutForDelivery, NotificationKinds.OrderShipped],
+            kinds);
+    }
 
     [Fact]
     public async Task Moves_an_order_through_every_intermediate_stage_not_just_the_last()

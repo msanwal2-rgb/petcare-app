@@ -16,6 +16,7 @@ public sealed class BookingService(
     ICaretakerRepository caretakers,
     IAccessService access,
     IReputationService reputation,
+    INotifier notifier,
     IUnitOfWork unitOfWork) : IBookingService
 {
     /// <summary>
@@ -201,6 +202,11 @@ public sealed class BookingService(
         if (updated is null) return (null, BookingFailure.NotFound);
 
         await reputation.RefreshCaretakerResponseRateAsync(updated.CaretakerId, scope, ct);
+
+        // The owner is the one waiting on an answer, so they are the one told —
+        // in this transaction, so the bell and the acceptance commit together.
+        if (Notices.ForBooking(updated.Id, status) is { } notice)
+            await notifier.NotifyAsync(updated.OwnerId, notice, scope, ct);
 
         await scope.CommitAsync(ct);
         return (updated.ToDto(), null);

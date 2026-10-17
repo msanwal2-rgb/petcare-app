@@ -2,7 +2,7 @@
 -- petapp.sql — THE MASTER SCHEMA
 --
 -- Running this on an empty database produces a complete, current Leash
--- schema: 29 tables, all indexes and foreign keys, and the schema_version
+-- schema: 32 tables, all indexes and foreign keys, and the schema_version
 -- journal recording the bootstrap scripts already baked in.
 --
 --   New server:        psql -d petapp -f db/petapp.sql
@@ -30,7 +30,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict g3zUnutxJzKJvWCJEBNiba13x4YgKnR2DO0cU03Wj5buRhx12LTLakX044jomjZ
+\restrict toalIrp9SAWcpWx49oJJ5YbpMvg3iAkE2OZVfzuSqoJCK0eAHZQlaPgGErq5YfB
 
 -- Dumped from database version 18.6
 -- Dumped by pg_dump version 18.6
@@ -226,6 +226,24 @@ CREATE TABLE public.messages (
 
 
 --
+-- Name: notification_outbox; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notification_outbox (
+    id text NOT NULL,
+    "notificationId" text NOT NULL,
+    channel text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    "nextAttemptAt" timestamp with time zone NOT NULL,
+    "lockedAt" timestamp with time zone,
+    "lastError" text,
+    "createdAt" timestamp with time zone NOT NULL,
+    "sentAt" timestamp with time zone
+);
+
+
+--
 -- Name: notifications; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -237,7 +255,22 @@ CREATE TABLE public.notifications (
     body text DEFAULT ''::text NOT NULL,
     href text NOT NULL,
     "readAt" timestamp with time zone,
-    "createdAt" timestamp with time zone NOT NULL
+    "createdAt" timestamp with time zone NOT NULL,
+    seq bigint NOT NULL
+);
+
+
+--
+-- Name: notifications_seq_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.notifications ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.notifications_seq_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -756,6 +789,22 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: notification_outbox notification_outbox_notificationId_channel_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_outbox
+    ADD CONSTRAINT "notification_outbox_notificationId_channel_key" UNIQUE ("notificationId", channel);
+
+
+--
+-- Name: notification_outbox notification_outbox_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_outbox
+    ADD CONSTRAINT notification_outbox_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1052,10 +1101,24 @@ CREATE INDEX "messages_bookingId_idx" ON public.messages USING btree ("bookingId
 
 
 --
+-- Name: notification_outbox_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX notification_outbox_due_idx ON public.notification_outbox USING btree ("nextAttemptAt") WHERE (status = 'pending'::text);
+
+
+--
 -- Name: notifications_userId_createdAt_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX "notifications_userId_createdAt_idx" ON public.notifications USING btree ("userId", "createdAt");
+
+
+--
+-- Name: notifications_userId_unread_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX "notifications_userId_unread_idx" ON public.notifications USING btree ("userId") WHERE ("readAt" IS NULL);
 
 
 --
@@ -1417,6 +1480,14 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: notification_outbox notification_outbox_notificationId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_outbox
+    ADD CONSTRAINT "notification_outbox_notificationId_fkey" FOREIGN KEY ("notificationId") REFERENCES public.notifications(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
 -- Name: notifications notifications_userId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1556,7 +1627,7 @@ ALTER TABLE ONLY public.vet_profiles
 -- PostgreSQL database dump complete
 --
 
-\unrestrict g3zUnutxJzKJvWCJEBNiba13x4YgKnR2DO0cU03Wj5buRhx12LTLakX044jomjZ
+\unrestrict toalIrp9SAWcpWx49oJJ5YbpMvg3iAkE2OZVfzuSqoJCK0eAHZQlaPgGErq5YfB
 
 
 
@@ -1569,5 +1640,6 @@ INSERT INTO public.schema_version (script) VALUES
   ('002_cents_and_timestamps'),
   ('001_sessions_valid_from_timestamptz'),
   ('002_refresh_tokens'),
-  ('003_vet_clinic_phone')
+  ('003_vet_clinic_phone'),
+  ('004_notification_outbox')
 ON CONFLICT (script) DO NOTHING;
