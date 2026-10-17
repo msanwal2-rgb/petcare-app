@@ -64,7 +64,6 @@ web/*.local
 
 # ── Database working files ───────────────────────────────────────────
 # Throwaway databases dumped by db/verify.sh
-db/petapp_at_last_release.sql
 
 # Visual Studio / Rider local caches
 .vs/

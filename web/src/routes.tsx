@@ -5,44 +5,47 @@ import { Moved } from "./components/Moved";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import VerifyEmailPage from "./pages/VerifyEmailPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import DashboardPage from "./pages/DashboardPage";
-import PetNewPage from "./pages/PetNewPage";
-import PetDetailPage from "./pages/PetDetailPage";
-import SearchPage from "./pages/SearchPage";
-import CaretakerDetailPage from "./pages/CaretakerDetailPage";
-import BookingNewPage from "./pages/BookingNewPage";
-import BookingDetailPage from "./pages/BookingDetailPage";
-import CaretakerProfilePage from "./pages/CaretakerProfilePage";
-import VetSearchPage from "./pages/VetSearchPage";
-import VetDetailPage from "./pages/VetDetailPage";
-import AppointmentNewPage from "./pages/AppointmentNewPage";
-import AppointmentDetailPage from "./pages/AppointmentDetailPage";
-import VetProfilePage from "./pages/VetProfilePage";
-import StorePage from "./pages/StorePage";
-import ProductPage from "./pages/ProductPage";
-import CartPage from "./pages/CartPage";
-import CheckoutPage from "./pages/CheckoutPage";
-import OrdersPage from "./pages/OrdersPage";
-import OrderDetailPage from "./pages/OrderDetailPage";
-import OpsOrdersPage from "./pages/OpsOrdersPage";
-import PetHealthPage from "./pages/PetHealthPage";
-import SupportPage from "./pages/SupportPage";
-import ComingSoonPage from "./pages/ComingSoonPage";
-import PlusPage from "./pages/PlusPage";
-import MembershipPage from "./pages/MembershipPage";
-import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
-import AdminUsersPage from "./pages/admin/AdminUsersPage";
-import AdminUserDetailPage from "./pages/admin/AdminUserDetailPage";
-import AdminProfessionalsPage from "./pages/admin/AdminProfessionalsPage";
-import AdminPaymentsPage from "./pages/admin/AdminPaymentsPage";
-import AdminSubscriptionsPage from "./pages/admin/AdminSubscriptionsPage";
-import AdminAuditPage from "./pages/admin/AdminAuditPage";
-import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import {
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  VerifyEmailPage,
+  OnboardingPage,
+  DashboardPage,
+  PetNewPage,
+  PetDetailPage,
+  SearchPage,
+  CaretakerDetailPage,
+  BookingNewPage,
+  BookingDetailPage,
+  CaretakerProfilePage,
+  VetSearchPage,
+  VetDetailPage,
+  AppointmentNewPage,
+  AppointmentDetailPage,
+  VetProfilePage,
+  StorePage,
+  ProductPage,
+  CartPage,
+  CheckoutPage,
+  OrdersPage,
+  OrderDetailPage,
+  OpsOrdersPage,
+  PetHealthPage,
+  SupportPage,
+  ComingSoonPage,
+  PlusPage,
+  MembershipPage,
+  AdminOverviewPage,
+  AdminUsersPage,
+  AdminUserDetailPage,
+  AdminProfessionalsPage,
+  AdminPaymentsPage,
+  AdminSubscriptionsPage,
+  AdminAuditPage,
+  AdminSettingsPage,
+} from "./lazyPages";
+
 
 /**
  * The route tree — the reference project's `app/` directory, path for path.

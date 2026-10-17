@@ -1,6 +1,6 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **M9 (admin console)**, 2026-10-17.
+For whoever picks this up next. Written at the end of **release hardening**, 2026-10-17.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -36,7 +36,7 @@ rewritten without them on purpose.
 an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 840 passing, ~5 min
+cd API && dotnet test        # 889 passing, ~5 min
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
@@ -54,30 +54,24 @@ working cross-origin; do not revert this.
 
 ---
 
-## 3. What to do next — release hardening, then M10
+## 3. What to do next
 
-`NEXT_PROMPT.md` has the brief (BUILD_PLAN §0, days 43–44):
+**First, the redeploy** — the one hardening step this session could not do,
+because writing to `C:\inetpub` needs elevation. From an elevated PowerShell
+at the repository root: `.\deploy\publish-iis.ps1`. It keeps the server's
+`config.js` (currently a Cloudflare tunnel address) and
+`appsettings.Production.json`. `leash_review` already has scripts 001–005.
 
-- **CI** in `.github/workflows/`: a throwaway PostgreSQL built from
-  `db/petapp.sql`, `dotnet test`, web build + oxlint, and `verify.sh` — which
-  needs a committed baseline (`petapp_at_last_release.sql` is gitignored) or a
-  mode that skips the delta half. Pick one and document it.
-- **The vulnerable transitive packages** in the test project
-  (`Azure.Identity` 1.3.0, `System.Drawing.Common` 5.0.0) — upgrade or pin.
-- **Endpoint suites for M5 and M6** (`VetEndpointTests`, `StoreEndpointTests`) —
-  S9 and price tampering are HTTP-shaped and only ever hand-checked.
-- **The fulfilment job on one instance** — document `Fulfilment__Enabled=false`
-  for the others (the notification drain is safe everywhere).
-- **Route-level code splitting** — the bundle is ~900 kB in one chunk.
-- **`deploy/publish-iis.ps1`** — still the single-site layout; see §5.
-- **Redeploy** to the IIS sites and apply every change script to `leash_review`
-  (it is at 005 now — nothing outstanding unless a new one is written).
+**Then M10, adoption** (stretch). `NEXT_PROMPT.md` has the brief:
+`tests/adoption-transfer.test.ts` first; the transfer sets `ownerId` and
+`ownedSince` in **one statement** (STATUS §3d). M7 and M9 left it ready: the
+ledger has `PaymentKinds.AdoptionFee` and `payments."adoptionApplicationId"`,
+`NotificationKinds` has every `adoption_*` kind, and the professionals screen
+already verifies shelters.
 
-Then **M10, adoption** (stretch): `tests/adoption-transfer.test.ts` first; the
-transfer sets `ownerId` and `ownedSince` in **one statement** (STATUS §3d).
-M7 and M9 left it ready: the ledger has `PaymentKinds.AdoptionFee` and
-`payments."adoptionApplicationId"`; `NotificationKinds` has every `adoption_*`
-kind; the professionals screen already verifies shelters.
+**Watch the first CI run.** `.github/workflows/ci.yml` has never run on GitHub;
+every command in it passes locally. The likeliest surprise is the PGDG apt
+step.
 
 ### Owner decisions still open
 
@@ -106,20 +100,11 @@ kind; the professionals screen already verifies shelters.
 
 ## 5. What is still between here and a release
 
-The deployment exists now (two IIS sites, `deploy/`), so "nothing builds the
-SPA" is moot for that topology. What remains is BUILD_PLAN §0's release
-hardening, all in `NEXT_PROMPT.md`: **CI** (`.github/workflows/` is empty;
-`verify.sh` needs a committed baseline or a mode without the delta half), the
-**vulnerable transitive packages** in the test project, the **M5/M6 endpoint
-suites**, the **fulfilment job on one instance** (document
-`Fulfilment__Enabled=false` for the others — the outbox drain is safe
-everywhere), **route-level code splitting**, and a redeploy with every change
-script applied to `leash_review`.
-
-**`deploy/publish-iis.ps1` still builds the old single-site layout** (the SPA
-into the API's `wwwroot`) and would ship `web/public/config.js` with the
-development API address. It needs the two-site shape `deploy/README.md`
-describes, and must not overwrite the frontend site's edited `config.js`.
+Release hardening is done (STATUS §3-H): CI, no vulnerable packages, endpoint
+suites for every module, a split bundle, a two-site publish script, and the
+deploy README covering payments settings and multiple instances. What remains
+is operational: run the redeploy (§3), watch CI's first run, and — before real
+money — configure Stripe and Resend (`deploy/README.md` §4).
 
 ---
 

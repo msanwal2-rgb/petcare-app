@@ -1,24 +1,38 @@
 <#
 .SYNOPSIS
-  Builds the SPA and the API into one folder that an IIS site serves.
+  Builds Leash and publishes it to the two IIS sites: the API and the SPA.
 
 .DESCRIPTION
-  The API serves the built SPA from wwwroot (BUILD_PLAN.md §2), so the output
-  is a single folder: Leash.Api.dll, web.config, and wwwroot\.
+  The two-site layout deploy/README.md describes:
 
-  Publishing straight into a live site is safe: the script drops
-  app_offline.htm first, which makes IIS stop the app and release its files,
-  and removes it at the end.
+    API       C:\inetpub\wwwroot\leash          (:8080)  dotnet publish of Leash.Api
+    Frontend  C:\inetpub\wwwroot\leashfrontend  (:8081)  web\dist
 
-  The site's appsettings.Production.json (connection string, auth secret) is
-  not part of the build, so a redeploy never overwrites it.
+  What a redeploy keeps on the server, never overwriting it:
+    - the API's appsettings.Production.json (connection string, auth secret,
+      Cors:Origins, Payments:*);
+    - the frontend's config.js (apiBaseUrl, stripePublishableKey). The build
+      ships the development copy; the server's edited one wins. On a first
+      deploy, when there is none, the build's copy is installed — edit it.
+
+  The API is taken offline with app_offline.htm while its files are replaced,
+  which makes IIS stop the app and release its DLLs.
+
+  Writing to C:\inetpub needs an elevated shell. -StageOnly builds and
+  publishes into the staging folder and stops there, which needs nothing.
+
+  Database changes are NOT applied by this script. Run each new
+  db\changes\NNN_*.sql once against the site's database (deploy/README.md).
 
 .EXAMPLE
-  .\deploy\publish-iis.ps1                          # to API\src\Leash.Api\bin\iis
-  .\deploy\publish-iis.ps1 -Out C:\inetpub\leash    # straight into the site
+  .\deploy\publish-iis.ps1                 # build and deploy both sites (elevated)
+  .\deploy\publish-iis.ps1 -StageOnly      # build and publish to the staging folder only
 #>
 param(
-    [string]$Out = (Join-Path $PSScriptRoot "..\API\src\Leash.Api\bin\iis")
+    [string]$ApiPath = "C:\inetpub\wwwroot\leash",
+    [string]$WebPath = "C:\inetpub\wwwroot\leashfrontend",
+    [string]$Staging = (Join-Path $PSScriptRoot "..\API\src\Leash.Api\bin\iis-staging"),
+    [switch]$StageOnly
 )
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -32,40 +46,63 @@ function Invoke-Tool([string]$What, [scriptblock]$Command) {
     if ($LASTEXITCODE) { throw "$What failed (exit $LASTEXITCODE)" }
 }
 
-# ── 1. The SPA ───────────────────────────────────────────────────────────
+# Robocopy's exit codes 0-7 are degrees of success; 8 and up are failures.
+function Invoke-Mirror([string]$From, [string]$To, [string[]]$KeepFiles) {
+    $args = @($From, $To, "/MIR", "/NFL", "/NDL", "/NJH", "/NJS", "/NP")
+    if ($KeepFiles.Count -gt 0) { $args += "/XF"; $args += $KeepFiles }
+    & robocopy @args | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "Copying $From to $To failed (robocopy $LASTEXITCODE)" }
+    $global:LASTEXITCODE = 0
+}
+
+# ── 1. Build the SPA ─────────────────────────────────────────────────────
 Push-Location (Join-Path $root "web")
 try {
     if (-not (Test-Path node_modules)) { Invoke-Tool "npm ci" { npm ci } }
     Invoke-Tool "web build" { npm run build }
 } finally { Pop-Location }
 
-# ── 2. Take the site offline if it is live ───────────────────────────────
-New-Item -ItemType Directory -Force $Out | Out-Null
-$offline = Join-Path $Out "app_offline.htm"
-$live = Test-Path (Join-Path $Out "web.config")
+# ── 2. Publish the API to staging ────────────────────────────────────────
+$apiStaging = Join-Path $Staging "api"
+if (Test-Path $apiStaging) { Remove-Item $apiStaging -Recurse -Force }
+Invoke-Tool "dotnet publish" {
+    dotnet publish (Join-Path $root "API\src\Leash.Api\Leash.Api.csproj") -c Release -o $apiStaging
+}
+# Development settings carry the dev auth key; never ship them. The API does
+# not serve the SPA in this layout, so it gets no wwwroot.
+Remove-Item (Join-Path $apiStaging "appsettings.Development.json") -ErrorAction SilentlyContinue
+
+$webStaging = Join-Path $root "web\dist"
+Write-Host "Staged: API in $(Resolve-Path $apiStaging), SPA in $webStaging" -ForegroundColor Green
+if ($StageOnly) { return }
+
+# ── 3. The API site ──────────────────────────────────────────────────────
+New-Item -ItemType Directory -Force $ApiPath | Out-Null
+$offline = Join-Path $ApiPath "app_offline.htm"
+$live = Test-Path (Join-Path $ApiPath "web.config")
 if ($live) {
     Set-Content $offline "<h1>Leash is updating. Back in a minute.</h1>" -Encoding utf8
     Start-Sleep -Seconds 3   # give IIS time to shut the app down
 }
-
 try {
-    # ── 3. The API ───────────────────────────────────────────────────────
-    Invoke-Tool "dotnet publish" {
-        dotnet publish (Join-Path $root "API\src\Leash.Api\Leash.Api.csproj") -c Release -o $Out
-    }
-
-    # ── 4. The SPA into wwwroot ──────────────────────────────────────────
-    $wwwroot = Join-Path $Out "wwwroot"
-    if (Test-Path $wwwroot) { Remove-Item $wwwroot -Recurse -Force }
-    Copy-Item (Join-Path $root "web\dist") $wwwroot -Recurse
-
-    # Development settings carry the dev auth key; never ship them.
-    Remove-Item (Join-Path $Out "appsettings.Development.json") -ErrorAction SilentlyContinue
+    Invoke-Mirror $apiStaging $ApiPath @("appsettings.Production.json", "app_offline.htm")
 } finally {
     if ($live) { Remove-Item $offline -ErrorAction SilentlyContinue }
 }
-
-Write-Host "Published to $(Resolve-Path $Out)" -ForegroundColor Green
-if (-not (Test-Path (Join-Path $Out "appsettings.Production.json"))) {
-    Write-Host "No appsettings.Production.json there yet - setup-iis.ps1 creates one." -ForegroundColor Yellow
+Write-Host "API published to $ApiPath" -ForegroundColor Green
+if (-not (Test-Path (Join-Path $ApiPath "appsettings.Production.json"))) {
+    Write-Host "  No appsettings.Production.json there yet - see deploy/README.md." -ForegroundColor Yellow
 }
+
+# ── 4. The frontend site ─────────────────────────────────────────────────
+New-Item -ItemType Directory -Force $WebPath | Out-Null
+$serverConfig = Join-Path $WebPath "config.js"
+$firstDeploy = -not (Test-Path $serverConfig)
+Invoke-Mirror $webStaging $WebPath @("config.js")
+if ($firstDeploy) {
+    Copy-Item (Join-Path $webStaging "config.js") $serverConfig
+    Write-Host "  Installed the development config.js - set apiBaseUrl in $serverConfig." -ForegroundColor Yellow
+} else {
+    Write-Host "  Kept the server's config.js." -ForegroundColor Green
+}
+Write-Host "Frontend published to $WebPath" -ForegroundColor Green

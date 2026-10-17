@@ -56,7 +56,7 @@ public sealed class AdminUserActionValidator : AbstractValidator<AdminUserAction
 
         RuleFor(a => a.Roles).Cascade(CascadeMode.Stop)
             .NotNull().WithMessage("List the roles")
-            .Must(r => r!.All(UserRoles.IsValid) && r.Distinct().Count() == r.Length)
+            .Must(r => r!.All(UserRoles.IsValid) && r!.Distinct().Count() == r!.Length)
             .WithMessage($"Roles must be from: {string.Join(", ", UserRoles.All)}")
             .When(a => a.Action == "set_roles");
         RuleFor(a => a.Roles).Null().When(a => a.Action != "set_roles")
@@ -64,7 +64,7 @@ public sealed class AdminUserActionValidator : AbstractValidator<AdminUserAction
 
         RuleFor(a => a.StaffRoles).Cascade(CascadeMode.Stop)
             .NotNull().WithMessage("List the staff roles")
-            .Must(r => r!.All(StaffRoles.IsValid) && r.Distinct().Count() == r.Length)
+            .Must(r => r!.All(StaffRoles.IsValid) && r!.Distinct().Count() == r!.Length)
             .WithMessage($"Staff roles must be from: {string.Join(", ", StaffRoles.All)}")
             .When(a => a.Action == "set_staff_roles");
         RuleFor(a => a.StaffRoles).Null().When(a => a.Action != "set_staff_roles")

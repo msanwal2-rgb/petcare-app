@@ -1,0 +1,105 @@
+# Leash CI — the same three checks AGENTS.md asks for before "done":
+#   the schema (verify.sh), the API suite (dotnet test), the SPA (build + oxlint),
+# plus a vulnerability gate on both package managers.
+#
+# The API suite builds its own database: DatabaseFixture drops and recreates
+# the public schema of LEASH_TEST_DB from db/petapp.sql on every run, so the
+# throwaway PostgreSQL service below only has to exist.
+#
+# PostgreSQL 18 client tools come from the PGDG apt repository: the runner's
+# stock client is older, and an older pg_dump refuses to dump a newer server
+# (and an older psql does not know petapp.sql's \restrict).
+
+name: CI
+
+on:
+  push:
+    branches: [main, main_newDev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: Schema + API
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: leash
+          POSTGRES_PASSWORD: devonly
+          POSTGRES_DB: petapp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U leash"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      LEASH_TEST_DB: Host=localhost;Port=5432;Database=petapp_test;Username=leash;Password=devonly
+      PGHOST: localhost
+      PGUSER: leash
+      PGPASSWORD: devonly
+      DOTNET_NOLOGO: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PostgreSQL 18 client tools
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+
+      # db/petapp_at_last_release.sql + db/changes/ must produce exactly the
+      # schema db/petapp.sql does. The baseline is committed for this.
+      - name: Schema — master and change scripts agree
+        run: bash db/verify.sh
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore API/Leash.slnx
+
+      - name: No vulnerable packages
+        run: |
+          dotnet list API/Leash.slnx package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then exit 1; fi
+
+      - name: Test
+        run: dotnet test API/Leash.slnx --no-restore
+
+  web:
+    name: SPA
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - name: Build (tsc -b && vite build)
+        run: npm run build
+      - name: Lint
+        run: npx oxlint src --deny-warnings
+      - name: No vulnerable packages
+        run: npm audit --audit-level=high

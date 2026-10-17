@@ -86,8 +86,11 @@ pg_dump -U leash --schema-only --no-owner --no-privileges petapp_dev > /tmp/dump
 catches the failure that matters: the two paths producing *different* schemas
 while both look correct.
 
-> `db/petapp_at_last_release.sql` is gitignored and local-only. If it is missing,
-> copy the current `petapp.sql` to it before adding a change script.
+> `db/petapp_at_last_release.sql` is **committed** (since release hardening,
+> 2026-10-17) so CI can run `verify.sh`. It is the schema the scripts in
+> `changes/` start from. Replace it only when retiring scripts every environment
+> has run: copy `petapp.sql` over it and remove those scripts, in one commit.
+> Never edit it by hand.
 
 ### Step 2 — Entity and DTOs
 

@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-17**, end of M9 (admin console).
+Last updated: **2026-10-17**, end of release hardening.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -28,8 +28,8 @@ Last updated: **2026-10-17**, end of M9 (admin console).
 | **M8** | Notifications | ✅ Done — 2 endpoints, an outbox and its drain, the bell; 45 tests. See §3-M8 |
 | **M7** | Payments & membership | ✅ Done — 7 endpoints, the ledger, Stripe + demo providers, the webhook; 148 tests. See §3-M7 |
 | **M9** | Admin console | ✅ Done — 14 endpoints, 8 screens, the audit log; 108 tests. See §3-M9 |
-| — | Release hardening | ⬜ **Next** |
-| M10 | Adoption | ⬜ Stretch |
+| — | Release hardening | ✅ Done — CI, a vulnerability gate, M5/M6 endpoint suites, code splitting, the two-site publish script. **The redeploy itself needs an elevated shell** — see §3-H |
+| M10 | Adoption | ⬜ **Next** (stretch) |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
 touches data.**
@@ -54,7 +54,7 @@ cd API/src/Leash.Api && dotnet run --launch-profile http   # :5001 + Swagger
 cd web && npm run dev                                      # :5173, calls the API on :5001 (public/config.js)
 
 # check it
-cd API && dotnet test        # 840 passing, ~5m
+cd API && dotnet test        # 889 passing, ~5m
 cd web && npm run build && npx oxlint src
 ./db/verify.sh               # ✓ IDENTICAL
 ```
@@ -223,7 +223,7 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 840 passing
+### Tests — 889 passing
 
 | File | Covers |
 |---|---|
@@ -248,12 +248,32 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `PaymentEndpointTests` | §9.4 over HTTP: buy Plus → free shipping and the 20% consult discount; the webhook refuses everything without a secret, rejects bad signatures, and processes one event delivered twice exactly once; the lead-time 409 carries the member window |
 | `AdminServiceTests` | Port of `tests/admin.test.ts` — staff roles, search (every sort walked one row at a time, wildcards escaped), detail, every account action, staff-role changes and the last admin (including two admins demoting each other at once), soft delete, the audit log, settings, stats — plus professionals and finance, which the reference had no suite for |
 | `AdminEndpointTests` | The console over HTTP: anonymous 401, customer 403 with an explanation (D2), the role matrix, Journey 7 (suspend → next request 401) and Journey 8 (refund → ledger and customer view), malformed actions, the audit row's actor and IP, settings reaching `/config`, V11 from the vet's side |
+| `VetEndpointTests` | M5 over HTTP: every private route 401, the public three 200, no contact details in search, 403 vs 409, somebody else's appointment 404, the visit summary stamped with this appointment and the access check's vet whatever the body says, the one-way review, V11 |
+| `StoreEndpointTests` | M6 over HTTP: S9 on quote and order, refused identically whatever the pet holds; the Rx 409 with its quote; **a tampered body charged the server's total**; duplicate lines 400; somebody else's order 404; customers cannot move orders; the ops queue; cancel window and refund |
 | `BookingEndpointTests` | What is guarded and what is deliberately public, 409-vs-403, and the §6.4 acceptance walk |
 | `AuthServiceTests` | Port of `tests/auth.test.ts` — hashing, credentials, registration, OAuth linking |
 | `EmailFlowTests` | Port of `tests/email-flows.test.ts` — tokens, verification, reset, watermark |
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-H. Release hardening (2026-10-17)
+
+| | |
+|---|---|
+| **CI** | `.github/workflows/ci.yml` — two jobs. *Schema + API*: a PostgreSQL 18 service, PGDG's 18 client tools, `bash db/verify.sh`, `dotnet list … --vulnerable` as a gate, `dotnet test`. *SPA*: `npm ci`, `npm run build`, `oxlint --deny-warnings`, `npm audit --audit-level=high`. Each command was run locally and passes; the workflow has not yet run on GitHub |
+| **verify.sh in CI** | By committing `db/petapp_at_last_release.sql` (un-ignored). A delta-skipping mode was the alternative and would have checked nothing |
+| **Vulnerabilities** | None in either package manager. Respawn 6.2.1 → 7.0.0 removed SqlClient and with it Azure.Identity 1.3.0; one dev-only npm finding fixed |
+| **Endpoint suites** | `VetEndpointTests` (24) and `StoreEndpointTests` (25) — 889 tests |
+| **Bundle** | Route-level splitting; entry 404 kB / 120 kB gzipped, from 847 kB in one chunk |
+| **Deploy** | `deploy/publish-iis.ps1` rewritten for the two sites; it keeps the server's `config.js` and `appsettings.Production.json`. `-StageOnly` verified here. `deploy/README.md` §3–§5: publishing, payments settings, multiple instances |
+
+**Not done: the redeploy.** Writing to `C:\inetpub\wwwroot\leash` and
+`\leashfrontend` needs an elevated shell, which this session did not have. The
+build is staged and verified; run `.\deploy\publish-iis.ps1` from an elevated
+PowerShell. `leash_review` already has every change script (001–005).
 
 ---
 
@@ -870,7 +890,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | ~~`origin/main_newDev` still has the pre-rewrite commit hashes.~~ **Settled 2026-09-21.** The history rewrite is on the remote: `origin/main_newDev` and local `main_newDev` are both at `9ff75e2`, and all 8 commits are authored *and* committed by `rehman427 <abdulrehmanlatif65@gmail.com>` with no Claude trailers. No force push is outstanding. The pre-rewrite history is kept at `backup/main_newDev-pre-rewrite` (`90a6473`, old authorship + trailers) and `backup/main_newDev-pre-name-rewrite` (`e59b561`) — **local refs only, never pushed.** Delete them when you no longer want the old hashes recoverable |
 | ⚠ | A cookie copied before sign-out keeps working — deliberate, pinned by a test, documented in `BUILD_PLAN.md` §11. **Do not "fix" it by bumping the watermark on logout** |
 | | `tests/` in the reference project has 28 Vitest suites. 20 are ported in full (M8 added `notifications`; M7 `webhooks`, `stripe-signature`, `entitlements` and the second half of `orders`; M9 `admin`), and `users` is covered by `UserEndpointTests`. Not ported: `adoption-transfer` (M10), the five `assistant-*` suites (out of scope), and `validation` — eight Zod-schema cases; the equivalent FluentValidation rules exist but not every one is pinned by a test. They are the specification — port each module's as you build it |
-| | **M5 and M6 have no endpoint suites.** Every other module has one (`PetEndpointTests`, `BookingEndpointTests`, …) covering what a service test structurally cannot: that `[Authorize]` is on each action, that a 401 carries the envelope, that 409-vs-403 survives the controller. Both service layers are covered in full; their 22 routes are checked only by the hand-run curl walks recorded in `HANDOFF.md`. **`StoreEndpointTests` matters most** — S9 and the price-tampering refusal are the store's two security properties, and both are HTTP-shaped |
+| | ~~M5 and M6 have no endpoint suites.~~ **Done in release hardening**: `VetEndpointTests` and `StoreEndpointTests`, including S9 and the price-tampering refusal over HTTP |
 | ⚠ | **Refills spent on a cancelled order are not given back.** Checkout spends them per unit; cancellation restocks the goods but cannot return the refills, because nothing records *which* prescription a line drew on — that wants an `order_items."prescriptionId"` column (a schema change). The direction is safe — it under-authorises, never over — but an owner who cancels has to ask their vet to renew. Decide before real customers do it |
 | ❓ | **Confirm "one refill per unit".** The owner's decision says "decrement when an Rx line is bought" without saying whether a line of three bags spends one refill or three. Implemented as three, because one-per-line lets a single refill cover a 99-bag line. One constant to change in `PrescriptionCover` if the intent was the other |
 | | ~~REQUIREMENTS C14 — the booking cancellation window.~~ **Settled 2026-09-22: §11.1 as written, no cutoff.** Revisit alongside cancellation *penalties* when M7 brings payments and refunds — a cutoff with no money behind it is a rule with no consequence. See §5 |
@@ -879,17 +899,17 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | ~~M6 must decrement `refillsLeft` when an Rx line is bought.~~ **Done in M6**, in the order's transaction alongside the stock — see §3. REQUIREMENTS P9 is closed on both sides |
 | | ~~M7 owns three things M6 left at the safe default, plus retryable refunds.~~ **Done in M7** — free shipping in the quote, the consult discount, priority booking; refunds write a pending row before the provider is called and are retried |
 | | ~~Notifications for order milestones are M8's.~~ **Done in M8** — `OrderLifecycle.MoveAsync` raises them inside the move's transaction; the fulfilment suite's "notifies the customer" case is ported |
-| ⚠ | **Run the fulfilment job on one instance.** Concurrent runs are *safe* — every move is conditional on the status read — but duplicate the work. On more than one machine set `Fulfilment__Enabled=false` on all but one, or make it a scheduled job. A deploy decision |
+| | **Run the fulfilment job on one instance** — documented in `deploy/README.md` §5 (`Fulfilment__Enabled=false` on the others). The notification drain and the webhook are safe on every instance |
 | | Catalogue text search is `ILIKE` — a sequential scan, fine at 25 products. At catalogue scale it wants a `pg_trgm` index (a schema change) |
 | ⚠ | **A pet that has died cannot be removed.** Deleting is blocked once the animal has vet visits or health records, because all three FKs onto `pets` cascade and an owner must not delete records their vet authored. Needs a soft delete (`deletedAt`) and a decision about what a bereaved owner still sees — `STATUS.md` §3 has the reasoning |
 | | `AccessServiceTests` still inlines the active-prescription rule as SQL. `IMedicalRecordRepository.ListAuthorizedProductSlugsAsync` now exists — swap the helper for a call to it so there is one definition in the tests too |
 | | Google OAuth is implemented but unconfigured, so untested against the real provider. Set `Auth:Google:ClientId`/`:ClientSecret` and add `http://localhost:5173/api/v1/auth/google/callback` as an authorised redirect URI |
-| | `db/petapp_at_last_release.sql` is gitignored and local-only. Recreate it from `petapp.sql` before adding the next change script |
-| | No CI yet. `BUILD_PLAN.md` §9 wants: throwaway database from `petapp.sql`, run the suite, run `verify.sh`. **`.github/workflows/` exists and is empty** |
-| ⚠ | **Nothing builds the SPA into `wwwroot`.** `Program.cs` calls `UseStaticFiles()` and `MapFallbackToFile("index.html")`, and `ARCHITECTURE.md` §6 says production serves the SPA from the API's `wwwroot` — but no `.csproj` target, script or pipeline step runs `npm run build` or copies `web/dist` there. A deploy done today ships an API that answers `/api/v1/*` and returns 404 for every page. Found while wiring M5's routes; see §6 of `HANDOFF.md` |
-| ⚠ | **The test project pulls vulnerable transitive packages.** `Azure.Identity` 1.3.0 (one high, two moderate) and `System.Drawing.Common` 5.0.0 (one critical) — nine `NU19xx` warnings on every build. Test-only and not shipped, but any CI with a vulnerability gate fails on day one, which is a bad way to discover them |
-| ⚠ | **`verify.sh` cannot run in CI as written.** It diffs `petapp.sql` against `petapp_at_last_release.sql` + `changes/`, and that baseline is **gitignored** — a fresh clone does not have it, so the script has nothing to compare against. CI needs either a committed baseline, a tagged-release checkout to generate one from, or a mode that skips the delta half |
-| | The web bundle is **847 kB (246 kB gzipped)** in one chunk — 606 at M4, 687 at M5, 749 at M6; the parity pass added ~100 kB of ported screens. Route-level code splitting is now worth doing; the store and the vet screens are natural first splits, and nobody needs the ops console in their first load |
+| | ~~`db/petapp_at_last_release.sql` is gitignored.~~ **Committed** so CI can run `verify.sh`; ARCHITECTURE §2 step 1 says when to replace it |
+| | ~~No CI.~~ **`.github/workflows/ci.yml`**: PostgreSQL 18 service, `verify.sh`, a NuGet vulnerability gate, `dotnet test`; and for the SPA `npm ci`, build, `oxlint --deny-warnings`, `npm audit --audit-level=high`. Every step was run locally; **the workflow itself has not run on GitHub yet** — it will on the next push |
+| | ~~Nothing builds the SPA into `wwwroot`.~~ Moot: the deployment is two sites (the SPA is its own). `deploy/publish-iis.ps1` now publishes both and keeps the server's `config.js` and `appsettings.Production.json` |
+| | ~~Vulnerable transitive packages.~~ **Gone**: Respawn 6.2.1 pulled Microsoft.Data.SqlClient 4.0.5 → Azure.Identity 1.3.0; Respawn 7.0.0 needs neither. `System.Drawing.Common` was no longer in the graph. `npm audit` fixed one dev-only finding (`source-map-js`) |
+| | ~~`verify.sh` cannot run in CI.~~ It can: the baseline is committed (the option chosen over a mode that skips the delta half, which would test nothing) |
+| | ~~One 847 kB bundle.~~ **Route-level splitting** (`web/src/lazyPages.ts`): the entry chunk is 404 kB (120 kB gzipped), every page but home/login/signup/404 loads on first visit, plus a 234 kB shared chunk (framer-motion) |
 | | **The parity pass's three API questions — decided 2026-10-10.** (1) **Clinic phone: yes.** `vet_profiles."clinicPhone"` (db/changes/003), on the wire as `clinic.phone`, set by the vet on their profile form, shown as a `tel:` link in the emergency panel. Not backfilled from `users.phone`, so a live database never publishes a vet's personal number; the dev seed carries clinic numbers. (2) **Allergen flags on store cards: no.** The product page and cart show the server's finding; the catalogue search takes no pet. (3) **Reviewer names for signed-out visitors: yes.** `GET /users?ids=` is public, like `GET /users/{id}` — the public projection only, capped at 50. The unfiltered listing still needs a session and a Development host. Both pinned by tests (`VetServiceTests`, `UserEndpointTests`) |
 | | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past" |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
