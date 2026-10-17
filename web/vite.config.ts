@@ -17,22 +17,9 @@ export default defineConfig({
 
   server: {
     port: 5173,
-    // Everything under /api goes to the .NET API.
-    //
-    // This is what lets the whole frontend use RELATIVE paths ("/api/v1/pets")
-    // exactly as the reference project does. Two things fall out of it: no CORS
-    // preflight, and the auth cookie stays first-party — no SameSite=None, no
-    // credentials:"include" on every call.
-    //
-    // Production reproduces the same arrangement differently: ASP.NET serves
-    // the built SPA from wwwroot, so the app and the API are genuinely one
-    // origin. See BUILD_PLAN.md §2.
-    proxy: {
-      "/api": {
-        target: "http://localhost:5001",
-        changeOrigin: false,
-      },
-    },
+    // No /api proxy: the frontend calls the API at the address in
+    // public/config.js, in development exactly as when deployed. The API
+    // allows this origin in Cors:Origins (appsettings.Development.json).
   },
 
   build: {

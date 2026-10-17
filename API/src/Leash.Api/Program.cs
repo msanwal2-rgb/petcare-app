@@ -50,12 +50,31 @@ builder.Services.AddControllers(options =>
 // one instance.
 builder.Services.AddHostedService<Leash.Api.Jobs.FulfilmentWorker>();
 
+// ── CORS ─────────────────────────────────────────────────────────────────
+// Only for a deployment where the SPA is a separate site from this API (e.g.
+// the frontend on :8081, this on :8080). List the SPA's address(es):
+//   "Cors": { "Origins": [ "http://localhost:8081" ] }
+// Unset, nothing is allowed cross-origin — the single-site default.
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
+        .WithOrigins(corsOrigins.Select(o => o.TrimEnd('/')).ToArray())
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        // The session is a cookie, so the browser must be allowed to send it.
+        .AllowCredentials()));
+}
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Always in Development; elsewhere only while Swagger:Enabled is true
+// (appsettings.json ships it on so a review deployment can be checked from the
+// browser — turn it off before real users arrive).
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -67,6 +86,8 @@ if (app.Environment.IsDevelopment())
 // :5173 and proxies /api here instead, so these are harmless no-ops.
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+if (corsOrigins.Length > 0) app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -4,21 +4,29 @@
  * Every function in src/api goes through here. Ported from the reference
  * project's lib/api/_client.ts with one change: the base URL.
  *
- * ── Why the base is usually empty ────────────────────────────────────
+ * ── Where the API is ─────────────────────────────────────────────────
  *
- * In development Vite proxies /api to the .NET API on :5001, and in production
- * ASP.NET serves this SPA from its own wwwroot. Either way the browser is
- * talking to one origin, so a relative path is correct and there is nothing to
- * configure. That is also what keeps the auth cookie first-party: no CORS
- * preflight, no SameSite=None, no `credentials: "include"` on every call.
+ * public/config.js (`apiBaseUrl`) — in development and when deployed alike.
+ * It is a plain file next to index.html, so a deployed copy can be edited on
+ * the server without a rebuild. VITE_API_BASE_URL is the build-time fallback;
+ * empty means "same origin as this page" (the API serving the SPA itself).
  *
- * VITE_API_BASE_URL exists for the case where the API is genuinely deployed
- * somewhere else. Setting it means cookies become cross-site, so the server
- * has to send SameSite=None; Secure and the requests here need
- * `credentials: "include"`. Prefer not to.
+ * The API must list this site in Cors:Origins. Different ports on one host
+ * are same-site, so the Lax session cookie still travels; on different
+ * domains, set Auth:CrossSiteCookie on the API as well — see deploy/README.md.
  */
 
-const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+declare global {
+  interface Window {
+    LEASH_CONFIG?: { apiBaseUrl?: string };
+  }
+}
+
+export const BASE = (
+  window.LEASH_CONFIG?.apiBaseUrl ||
+  import.meta.env.VITE_API_BASE_URL ||
+  ""
+).replace(/\/$/, "");
 
 /** Every endpoint lives under /api/v1 — see BUILD_PLAN.md §8a. */
 export const API_PREFIX = "/api/v1";
@@ -56,6 +64,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache: "no-store",
+    // Sends the session cookie when the API is on another address. On the
+    // same address it behaves exactly like the default.
+    credentials: "include",
   });
 
   if (!res.ok) {

@@ -48,7 +48,7 @@ public static class AuthSetup
                         : AuthSchemes.Cookie;
             });
 
-        AddCookie(builder);
+        AddCookie(builder, config);
         AddBearer(builder);
 
         // The validation parameters come from ITokenService, which owns the
@@ -75,7 +75,7 @@ public static class AuthSetup
         return services;
     }
 
-    private static void AddCookie(AuthenticationBuilder builder) =>
+    private static void AddCookie(AuthenticationBuilder builder, IConfiguration config) =>
         builder.AddCookie(AuthSchemes.Cookie, options =>
         {
             options.Cookie.Name = "leash.session";
@@ -94,6 +94,18 @@ public static class AuthSetup
             // because the dev proxy serves the SPA on plain http and a
             // Secure-only cookie would simply never arrive.
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
+            // Opt-in, for an SPA served from a different DOMAIN than this API
+            // (different ports on one host are still same-site, and Lax works).
+            // A cross-site fetch only carries a SameSite=None cookie, and
+            // browsers accept None only with Secure — so the API must be
+            // reached over https. Safari blocks such cookies outright; one
+            // domain for both is the dependable layout.
+            if (config.GetValue<bool>("Auth:CrossSiteCookie"))
+            {
+                options.Cookie.SameSite = SameSiteMode.None;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            }
 
             options.ExpireTimeSpan = TimeSpan.FromDays(30);
 

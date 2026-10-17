@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { postJson } from "./_client";
+import { BASE, postJson } from "./_client";
 
 /**
  * Auth domain — API client.
@@ -73,5 +73,5 @@ export function resetPassword(token: string, password: string): Promise<OkRespon
  */
 export function googleSignInUrl(callbackUrl?: string): string {
   const query = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : "";
-  return `/api/v1/auth/google${query}`;
+  return `${BASE}/api/v1/auth/google${query}`;
 }
