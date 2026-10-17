@@ -1,86 +1,203 @@
-The Leash build is complete. Every module in the plan — M0 to M10 — is
-built, tested, walked in the running app and committed on `main_newDev`.
-Read HANDOFF.md first, then STATUS.md (§3-M10 and §4).
+# Leash — next session brief
 
-## State of play
+**How to use this file:** fill in the client's answers in §1 (tick a box or
+write a note), then paste the whole file into a new chat. The session does
+only what §1 asks for. Anything left blank is not done and stays as it is.
 
-970 xUnit tests passing, web build + `oxlint --deny-warnings` clean,
-`./db/verify.sh` IDENTICAL. Change scripts run to 005; M10 needed none.
-21 of the reference's 28 Vitest suites are ported in full; the rest are the
-out-of-scope assistant and the Zod `validation` cases.
+Read HANDOFF.md first, then STATUS.md (§3-M10 and §4), then ARCHITECTURE.md
+before writing code.
 
-The architecture is two IIS sites (API :8080, SPA :8081; `config.js` +
-`Cors:Origins`). Do not redo or revert it. In development, Vite on :5173
-calls the API on :5001 directly.
+---
 
-## What is left
+## 1. The client's answers — fill these in
 
-Nothing is left to build. What remains is operational, plus decisions only
-the owner can make.
+### D1 — Payments: stay on the demo, or go live with Stripe?
+- [ ] Stay on the demo provider (no real money; today's setup)
+- [ ] Go live with Stripe. The client provides: secret key `sk_…`, publishable key
+      `pk_…`, the webhook signing secret `whsec_…`, and the Stripe price id
+      `price_…` for Leash Plus. Start in **test mode** (`sk_test_…`).
 
-### 1. Redeploy (owner — needs an elevated shell)
+### D2 — Adoption: which of the reference's screen gaps to fix? (tick any)
+- [ ] **B1** Shelters create, edit, publish and withdraw listings from the app
+- [ ] **B2** Support staff can reverse a completed adoption from the console
+- [ ] **B3** The applicant sees that their adoption fee is paid (**API change**)
+- [ ] **B4** Fix the dashboard buttons: no "Approve" on a new application;
+      "Decline" available on an approved one (with the refund)
+- [ ] **B5** "Not yet listed" stops showing animals whose listing is pending (**API change**)
 
-From an elevated PowerShell at the repository root:
+### D3 — R7: who may override an open booking when completing an adoption?
+- [ ] The shelter, after being shown what will be cancelled (as built, as the reference)
+- [ ] Support staff only
 
-```powershell
-.\deploy\publish-iis.ps1
-```
+### D4 — Prescription refills: one refill per unit bought?
+- [ ] Yes — three bags spend three refills (as built)
+- [ ] No — one refill per order line
 
-It builds the SPA, publishes the API with the site offline while its files
-are replaced, and keeps the server's `appsettings.Production.json` and
-`config.js`. `-StageOnly` builds without touching `C:\inetpub`.
+### D5 — Other product gaps (tick any)
+- [ ] **C1** Let an owner remove a pet that has health records (soft delete — schema change)
+- [ ] **C2** Give refills back when an order is cancelled (schema change)
+- [ ] **C3** Google sign-in — the client provides a Google OAuth client id and secret
 
-The database needs nothing: `leash_review` already has 001–005, and M10 added
-no script. To check a database:
-`psql -U leash -h localhost -d leash_review -c "SELECT script FROM schema_version"`
-(psql is at `C:\Program Files\PostgreSQL\18\bin`).
+### Notes from the client
+> _(paste anything else they said here)_
 
-After it runs, walk it once: `/adopt` lists two animals, a demo login
-(`maya.chen@example.com` / `leashdemo123`) reaches the dashboard, and
-`/dashboard/admin` answers for a staff account.
+---
 
-### 2. Watch the first CI run
+## 2. State of play (2026-10-18)
 
-`.github/workflows/ci.yml` has never run on GitHub. It will on the first push
-of `main_newDev`. Every step passes locally; the likeliest failure is the
-PGDG apt step that installs the PostgreSQL 18 client.
+Every module in the plan — M0 to M10 — is built, tested, walked in the
+running app and committed on `main_newDev` (last commit: M10, `d6895cd`).
+970 xUnit tests pass; web build and `oxlint --deny-warnings` are clean;
+`./db/verify.sh` prints IDENTICAL. Change scripts run to 005; **006 is next**.
 
-### 3. Before real money
+Not yet done by the owner: the redeploy (needs an elevated shell — §5) and the
+first push, which is also the first CI run.
 
-Stripe and real email are configured, not built (`deploy/README.md` §4):
+### Things already established — do not re-investigate
 
-- `Payments:Provider = stripe`, `Payments:Stripe:SecretKey`,
-  `Payments:Stripe:WebhookSecret` (endpoint `https://<api>/api/v1/webhooks/stripe`),
-  and `stripePublishableKey` in the frontend's `config.js`.
-- `UPDATE plans SET "stripePriceId" = 'price_…' WHERE key = 'leash_plus'`.
-- `Email:ResendApiKey`, `Email:From`.
+- **Stripe is set up exactly like the reference app.** The reference had real
+  Stripe code (payment intents, refunds, Leash Plus checkout, a signed webhook)
+  but ran `LEASH_PAYMENTS=demo` with no Stripe keys, so no real payment ever
+  went through Stripe. Ours is the same: real Stripe code, `Payments:Provider`
+  unset (demo), no keys. **Neither app has run against Stripe**; ours is tested
+  with fakes. Two deliberate differences: our demo provider sells Leash Plus
+  (the reference answered 503), and our adoption fee page shows Stripe's card
+  form when Stripe is on (the reference's only worked with the demo).
+- **The adoption gaps in D2 are all in the reference too.** It had API routes
+  for creating, editing and publishing listings and for reversing adoptions,
+  but no screen ever called them; its application page could not show a paid
+  fee; its dashboard offered "Approve" on new applications and hid "Decline"
+  on approved ones; its "Not yet listed" panel read the available-only search.
+  They were ported as they were because the build brief allowed only
+  REQUIREMENTS §12 fixes to change a screen. **The client's tick in D2 is the
+  instruction to change them**, and it covers the API changes it names.
 
-None of the Stripe path — orders, Leash Plus, the adoption fee, refunds,
-the webhook — has run against Stripe itself; it is tested with fakes and
-Stripe.net's own signature check. Do one test-mode purchase of each before
-going live.
+---
 
-### 4. Owner decisions still open (STATUS.md §4)
+## 3. Work packages — do the ones §1 asks for, in this order
 
-1. **One refill per unit** — built that way; confirm or change the constant
-   in `PrescriptionCover`.
-2. **R7** — the shelter overrides a live booking at completion (as the
-   reference). Change it only if R7 meant support staff.
-3. **Adoption screen gaps the reference also has**: no UI to create, publish
-   or edit a listing, or to reverse an adoption; the applicant's page cannot
-   show a paid fee (needs an API field); "Approve" offered on a new
-   application and "Decline" hidden once approved; "Not yet listed" includes
-   pending animals. Each is a small change once decided.
-4. Refills spent on a cancelled order are not returned (needs a schema
-   change); a pet with clinical history cannot be deleted (needs soft delete);
-   Google sign-in is unconfigured.
+Each is one commit, finished before the next (§6).
 
-## How to work on anything further
+### A. Go live with Stripe (D1 = go live)
 
-The rules from the build still hold: one change at a time, tests green, web
-build + oxlint clean, `verify.sh` IDENTICAL, walked in the running app,
-STATUS/HANDOFF updated, then commit as `rehman427` with **no Co-Authored-By
-or other Claude trailer**. Do not push; the owner pushes. Any schema change is
-the next `db/changes/006_*.sql`, mirrored into `db/petapp.sql` in the same
-commit. `STAFF_PASSWORD` is in the root `.env.local`; read it for a walk,
-never print it.
+Configuration, not code — `deploy/README.md` §4:
+
+1. Server `appsettings.Production.json`: `"Payments": { "Provider": "stripe",
+   "Stripe": { "SecretKey": "sk_…", "WebhookSecret": "whsec_…" } }`.
+2. Frontend `config.js`: `stripePublishableKey: "pk_…"`.
+3. In Stripe, register the webhook endpoint `https://<api>/api/v1/webhooks/stripe`
+   for `payment_intent.*`, `charge.refunded`, `charge.dispute.*`,
+   `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`.
+4. `UPDATE plans SET "stripePriceId" = 'price_…' WHERE key = 'leash_plus';`
+   on the server's database.
+5. Restart the API, then in **test mode** buy one of each and check the
+   ledger in the admin console: a store order (card `4242 4242 4242 4242`), a
+   3-D Secure card (`4000 0025 0000 3155`), Leash Plus, an adoption fee, a
+   refund from the console, and a refund from Stripe's dashboard. Record what
+   happened in STATUS §4. Go live only after that.
+
+Never put a secret key in the repository. If the client sends keys in the
+chat, write them only into the server's settings file, and tell the owner to
+rotate any key that was pasted somewhere public.
+
+### B. Adoption screens (D2)
+
+No reference screen exists for B1 and B2, so design them in the style of the
+screens next to them (the vet profile form, the admin users page) and list
+each in STATUS §3-M10 as a client-requested change.
+
+- **B1 — listing management.** On the shelter dashboard, each animal in "Not
+  yet listed" gets "List for adoption", opening a form (fee, headline, story,
+  the four yes/no/unknown answers, energy, special needs and notes, neutered,
+  microchipped, intake date; the location defaults to the shelter's). Saving
+  creates a draft (`POST /adoptions/listings`); "Publish" moves it to
+  available (`PATCH …/status`). "Listed animals" gets Edit and Withdraw; a
+  withdrawn or adopted listing can be relisted. API: none needed, but the
+  shelter must see its own drafts and withdrawn listings — that is B5's
+  endpoint, so do B5 with B1.
+- **B2 — reverse in the console.** The API exists
+  (`POST /admin/adoptions/{id}/reverse { reason }`, support role, audited).
+  Staff cannot read applications today, so either (a) **add**
+  `GET /admin/adoptions?status=completed` (support role, keyset with total)
+  and an "Adoptions" page in the console listing completed adoptions with a
+  Reverse button and a reason prompt — recommended; or (b) a field for an
+  application id on an existing console page, with no API change. Ask the
+  owner which if the client did not say.
+- **B3 — the applicant sees a paid fee.** Add `paymentStatus` (null when no
+  payment) to the application the applicant reads: `GET /adoptions/applications/{id}`
+  and the applicant's list. On `/adoptions/:id`, when it is `paid`, replace
+  the Pay button with "Fee paid" and the date; when `pending`/`processing`,
+  "Payment in progress". Pin it in `AdoptionEndpointTests`.
+- **B4 — the buttons.** `ShelterDashboard.tsx`: "Approve" only on
+  `under_review`; "Decline" on `approved` too, with the prompt saying any fee
+  paid will be refunded. No API change (the API already refuses the first and
+  allows the second).
+- **B5 — the shelter's own listings.** Add `GET /adoptions/listings/mine`
+  (shelter only, every status, keyset) and use it on the dashboard for
+  "Listed animals" and "Not yet listed" (an animal is unlisted only if it has
+  no listing at all). Keep the public directory available-only.
+
+### C. Product gaps (D5)
+
+- **C1 — pet soft delete.** `db/changes/006_pet_deleted_at.sql` adds
+  `pets."deletedAt"`; deleting a pet with history sets it instead of
+  returning 409. Every pet read, the access predicates, search and the
+  dashboards ignore deleted pets; the health record stays for the vets who
+  wrote it. Settle with the client first what a bereaved owner still sees.
+- **C2 — refills back on cancellation.** A schema change records which
+  prescription each order line drew on (`order_items."prescriptionId"` and the
+  count), and cancelling an unshipped order gives them back in the same
+  transaction as the restock.
+- **C3 — Google sign-in.** Configuration only: `Auth:Google:ClientId` and
+  `:ClientSecret` on the server, and the redirect URI
+  `https://<api>/api/v1/auth/google/callback` registered in Google. Walk a
+  first sign-in, a returning sign-in, and linking to an existing email account.
+
+### D. Small decisions (D3, D4)
+
+- **D3 = support staff only:** in `AdoptionTransferService.CompleteAsync`,
+  refuse `force` from the shelter; add a staff endpoint and console button to
+  force a completion (audited), and change the dashboard's confirm to "ask
+  support". Update the R7 note in STATUS §3-M10 and the tests.
+- **D4 = one per line:** one constant in `Services/PrescriptionCover.cs`;
+  update the quote message and its tests. Either answer: move the item from
+  STATUS §4 to §5 (decided).
+
+---
+
+## 4. What not to change
+
+- The two-site deployment (API :8080, SPA :8081; `config.js` + `Cors:Origins`;
+  `credentials: "include"`). Development: Vite :5173 → API :5001, no proxy.
+- Everything in STATUS §5, and the settled points in HANDOFF §4 — including:
+  only `TransferPetAsync` moves a pet's owner (with `ownedSince`); reversing
+  an adoption does not refund; the demo provider sells Leash Plus.
+
+## 5. For the owner, whatever the client says
+
+1. **Redeploy** from an elevated PowerShell at the repository root:
+   `.\deploy\publish-iis.ps1`. It keeps the server's `config.js` and
+   `appsettings.Production.json`. The database needs nothing new
+   (`leash_review` has 001–005). Then check `/adopt` lists two animals and a
+   demo login works.
+2. **Push `main_newDev`** and watch the first CI run
+   (`.github/workflows/ci.yml`). The likeliest failure is the PGDG apt step.
+
+## 6. How to work
+
+- One package at a time, finished before the next: `cd API && dotnet test`
+  green, `cd web && npm run build && npx oxlint src --deny-warnings` clean,
+  `./db/verify.sh` IDENTICAL, walked in the running app (Playwright scripts
+  in the old session's scratchpad are gone — write a new walk), STATUS,
+  HANDOFF and BUILD_PLAN §0 updated — then **commit** as `rehman427` with
+  **no Co-Authored-By or other Claude trailer**. Do not push; the owner pushes.
+- Any schema change is the next `db/changes/006_*.sql`, mirrored into
+  `db/petapp.sql` in the same commit, applied to `petapp_dev` and
+  `leash_review`, and new columns appended to positional seed rows.
+- Tests first for every behaviour change; the API is checked on every request.
+- Demo accounts use `leashdemo123`. `STAFF_PASSWORD` for u21–u23 is in the root
+  `.env.local` — read it for a walk, never print it. psql and pg_dump are at
+  `C:\Program Files\PostgreSQL\18\bin`, not on PATH.
+- If something the client asked for is ambiguous, ask before building it.
+- At the end: report what changed, what differs from the reference, and what
+  still waits on the client.

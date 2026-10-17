@@ -12,7 +12,7 @@ not repeat the permanent docs — read them in this order:
 | `REQUIREMENTS.md` | The durable spec. §9 is M7. |
 | `BUILD_PLAN.md` | Order of work, the decisions, the risks. §0 is where the plan stands. |
 | `API_CONTRACTS.md` | Every endpoint of the reference implementation. |
-| `NEXT_PROMPT.md` | What is left now that every module is built: the owner's open decisions and the deploy runbook. |
+| `NEXT_PROMPT.md` | The next session's brief: the client's decisions to fill in (§1), the work for each answer (§3), and the owner's deploy steps (§5). |
 
 ---
 
@@ -63,8 +63,16 @@ at the repository root: `.\deploy\publish-iis.ps1`. It keeps the server's
 `config.js` (currently a Cloudflare tunnel address) and
 `appsettings.Production.json`. `leash_review` already has scripts 001–005.
 
-There is no next module. M10 was the last; `NEXT_PROMPT.md` lists what is
-left, which is operational plus a handful of owner decisions.
+There is no next module. M10 was the last. **What happens next depends on the
+client**: `NEXT_PROMPT.md` §1 is a checklist of their decisions (payments,
+adoption screens, R7, refills, other gaps) to fill in, and §3 says exactly what
+to build for each answer. A session started without answers does only the
+owner's operational steps.
+
+Two facts settled on 2026-10-18, so nobody re-investigates them: **Stripe is
+set up exactly as in the reference** — real Stripe code, demo provider on, no
+keys, never run against Stripe in either app — and **every adoption screen gap
+in STATUS §3-M10 exists in the reference too**.
 
 **Watch the first CI run.** `.github/workflows/ci.yml` has never run on GitHub;
 every command in it passes locally. The likeliest surprise is the PGDG apt

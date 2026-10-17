@@ -31,7 +31,7 @@ detailed source; this is the plan-level view.**
 | 43–44 | Release hardening | ✅ Done 2026-10-17 — the redeploy waits on an elevated shell (STATUS §3-H) |
 | stretch | M10 Adoption | ✅ Done 2026-10-18 — `adoption-transfer` ported in full (STATUS §3-M10) |
 
-**Every module is built: 42 plan-days of scope and the M10 stretch; 2 days skipped.** What remains is operational — the redeploy from an elevated shell, the first CI run on GitHub, and Stripe/Resend before real money (`NEXT_PROMPT.md`). The
+**Every module is built: 42 plan-days of scope and the M10 stretch; 2 days skipped.** What remains is operational — the redeploy from an elevated shell, the first CI run on GitHub, and Stripe/Resend before real money — plus the client's decisions on payments and the adoption screen gaps (`NEXT_PROMPT.md` §1). The
 parity pass moves the end of the plan from day 40 to day 44 — the top of the
 original "~40–44 working days".
 970 xUnit tests passing; 21 of the reference's 28 Vitest suites ported in full (the rest are the out-of-scope assistant and the Zod `validation` cases). CI exists (`.github/workflows/ci.yml`). The IIS deployment
