@@ -7,6 +7,7 @@ import { listMyPets } from "@/api/pets";
 import { createAppointment } from "@/api/appointments";
 import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
+import { fromDateTimeInputs } from "@/lib/calendar";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Avatar } from "@/components/Avatar";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
@@ -38,9 +39,18 @@ const COMMON_SYMPTOMS = [
   "Weight loss",
 ];
 
-/** Combine an ISO date and a "HH:MM" wall time into an ISO timestamp. */
+/**
+ * A calendar day and a "HH:MM" wall time, as the instant that is where the
+ * owner is.
+ *
+ * Published hours are the clinic's wall clock, and the owner and the clinic
+ * share a zone in a local marketplace. The reference read the time as UTC —
+ * `${date}T${time}:00.000Z` — so a "09:00" slot was booked for 09:00 UTC and
+ * the appointment page then showed it in the owner's zone as some other hour
+ * (2:00 PM at UTC+5).
+ */
 function isoAt(date: string, time: string): string {
-  return `${date}T${time}:00.000Z`;
+  return fromDateTimeInputs(date, time)!;
 }
 
 /**
