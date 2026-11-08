@@ -43,7 +43,7 @@ export function ProfileStrip({
         </span>
       ))}
       <Link
-        to={editHref}
+        to={`${editHref}#availability`}
         className="ml-auto text-xs font-medium text-charcoal/60 underline-offset-2 hover:text-ink hover:underline"
       >
         Edit profile &amp; availability

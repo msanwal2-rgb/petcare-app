@@ -37,7 +37,7 @@ rewritten without them on purpose.
 hardening, and an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 1036 passing, ~6 min
+cd API && dotnet test        # 1050 passing, ~6 min
 cd web && npm run build && npx oxlint src --deny-warnings
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
@@ -64,6 +64,12 @@ shared calendar in `web/src/components/dashboard/schedule/`, vet rescheduling.
 **The shelter dashboard is next and has no brief yet** — ask before building.
 On `petapp_dev` every seeded booking and visit is in June–July 2026, so the
 "Upcoming" cards read 0; page the calendar back to July to see it populated.
+
+**Providers publish their own bookable days now** (STATUS §3-AV): an
+Availability section on the vet and caretaker profile pages. Owners can book
+only published days, and the seed's are all July 2026 — so a vet or caretaker
+is unbookable until somebody opens days for them in that editor. On
+`petapp_dev`, Dr Ruiz has Mon–Fri open to early January.
 
 **First, the redeploy** — the one hardening step this session could not do,
 because writing to `C:\inetpub` needs elevation. From an elevated PowerShell

@@ -1,8 +1,9 @@
 import { Link } from "react-router";
 import { useSession } from "@/store/session";
-import { getCaretakerProfileForUser } from "@/api/caretakers";
+import { getCaretakerProfileForUser, saveCaretakerProfile } from "@/api/caretakers";
 import { useAsync } from "@/hooks/useAsync";
 import { CaretakerProfileForm } from "@/components/CaretakerProfileForm";
+import { AvailabilityEditor } from "@/components/AvailabilityEditor";
 import { AuthRequired } from "@/components/AuthRequired";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -63,6 +64,27 @@ export default function CaretakerProfilePage() {
           <CaretakerProfileForm userId={currentUser.id} profile={profile} />
         )}
       </div>
+
+      <section id="availability" className="mt-6 scroll-mt-24 rounded-2xl border border-mist bg-white p-6">
+        <h2 className="text-lg font-semibold text-ink">Availability</h2>
+        <p className="mb-4 mt-1 text-sm text-charcoal/60">
+          Owners can book only the days you open here, at the hours you set.
+        </p>
+        {loading ? (
+          <Skeleton className="h-80 w-full" />
+        ) : profile ? (
+          <AvailabilityEditor
+            initial={profile.availability}
+            onSave={async (availability) =>
+              (await saveCaretakerProfile(currentUser.id, { availability })).availability
+            }
+          />
+        ) : (
+          <p className="rounded-xl border border-dashed border-mist px-4 py-6 text-center text-sm text-charcoal/60">
+            Save your caretaker profile first, then publish your hours here.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

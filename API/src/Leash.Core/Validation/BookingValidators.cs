@@ -101,19 +101,54 @@ public sealed class PricingEntryValidator : AbstractValidator<PricingEntryDto>
 
 public sealed class AvailabilityDayValidator : AbstractValidator<AvailabilityDayDto>
 {
+    /// <summary>A real 24-hour clock time — "24:00" and "09:75" are not.</summary>
+    private const string ClockTime = @"^([01]\d|2[0-3]):[0-5]\d$";
+
+    /// <summary>
+    /// More stretches of hours than anyone works in a day. A bound, so a
+    /// published day cannot be a thousand-slot payload.
+    /// </summary>
+    public const int MaxSlotsPerDay = 12;
+
     public AvailabilityDayValidator()
     {
+        RuleFor(d => d.Slots).Must(s => s.Length <= MaxSlotsPerDay)
+            .WithMessage($"At most {MaxSlotsPerDay} sets of hours in a day");
+
         RuleForEach(d => d.Slots).ChildRules(slot =>
         {
-            slot.RuleFor(s => s.Start).Matches(@"^\d{2}:\d{2}$")
+            slot.RuleFor(s => s.Start).Matches(ClockTime)
                 .WithMessage("Times look like 09:00");
-            slot.RuleFor(s => s.End).Matches(@"^\d{2}:\d{2}$")
+            slot.RuleFor(s => s.End).Matches(ClockTime)
                 .WithMessage("Times look like 17:00");
             slot.RuleFor(s => s)
                 .Must(s => string.CompareOrdinal(s.End, s.Start) > 0)
                 .WithMessage("A slot must end after it starts");
         });
+
+        // Two stretches of hours that overlap would offer an owner the same
+        // time twice. Zero-padded HH:MM compares correctly as text.
+        RuleFor(d => d.Slots)
+            .Must(slots =>
+            {
+                var sorted = slots.OrderBy(s => s.Start, StringComparer.Ordinal).ToArray();
+                for (var i = 1; i < sorted.Length; i++)
+                    if (string.CompareOrdinal(sorted[i].Start, sorted[i - 1].End) < 0) return false;
+                return true;
+            })
+            .WithMessage("Two sets of hours on one day overlap");
     }
+}
+
+/// <summary>The whole published calendar, which is sent replace-whole.</summary>
+public static class AvailabilityRules
+{
+    /// <summary>
+    /// A bound on the days sent in one save — a little over the year ahead
+    /// the editor lets anyone plan, so a calendar cannot be a payload of
+    /// thousands of rows. The editor drops days already past when it saves.
+    /// </summary>
+    public const int MaxDays = 400;
 }
 
 /// <summary>
@@ -165,6 +200,11 @@ public sealed class CaretakerPatchValidator : AbstractValidator<CaretakerPatchRe
         RuleFor(c => c.Availability!)
             .Must(a => a.Select(x => x.Date).Distinct().Count() == a.Length)
             .WithMessage("The same date is listed twice")
+            .When(c => c.Availability is not null);
+
+        RuleFor(c => c.Availability!)
+            .Must(a => a.Length <= AvailabilityRules.MaxDays)
+            .WithMessage($"At most {AvailabilityRules.MaxDays} days can be published at once")
             .When(c => c.Availability is not null);
     }
 }

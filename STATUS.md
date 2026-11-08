@@ -31,6 +31,7 @@ Last updated: **2026-11-08**, the client's dashboard round (§3-D). **Every modu
 | — | Release hardening | ✅ Done — CI, a vulnerability gate, M5/M6 endpoint suites, code splitting, the two-site publish script. **The redeploy itself needs an elevated shell** — see §3-H |
 | **M10** | Adoption | ✅ Done — 16 endpoints, 5 screens and the shelter dashboard; 81 tests, including the full port of `adoption-transfer`. See §3-M10 |
 | — | **Dashboards** (client, 2026-11-08) | ✅ Vet, caretaker and owner done — stats cards, an interactive calendar, the upcoming list, vet rescheduling; 4 endpoints, 66 tests. **Shelter not started.** See §3-D |
+| — | **Publishing availability** (2026-11-08) | ✅ An editor on the vet and caretaker profile pages; the booking calendar is a real month calendar; vet booking times fixed to the owner’s zone; 14 tests. See §3-AV |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
 touches data.**
@@ -234,10 +235,11 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 1036 passing
+### Tests — 1050 passing
 
 | File | Covers |
 |---|---|
+| `AvailabilityEndpointTests` | Publishing availability (§3-AV): a vet's save replaces the calendar and owners read the new days, saving the rest of the profile leaves it alone, an empty list closes everything, caretakers the same way, nobody publishes someone else's; refused: non-clock times, backwards hours, overlaps, 13 sets in a day, 401 days, a date twice |
 | `DashboardServiceTests` | The dashboards (§3-D): what each card counts (declined/cancelled are not work, "upcoming" is live and not yet over, earnings are completed work at the recorded price, spending is the ledger net of refunds), the viewer's "today" and its clamp, the window reads (overlap, soonest first, status filter, keyset paging across shared start times), and rescheduling — vet only, requested/confirmed only, legality before authority, future only, the owner told in-app and by email, the conditional write |
 | `DashboardEndpointTests` | The same over HTTP: every new route 401 anonymous, somebody else's figures and calendar 404, the wire shapes, the window's query string validated into the envelope (each list's own status vocabulary), the unchanged newest-first list, reschedule 200/403/404/409/400 and the owner's notification |
 | `AdoptionTransferTests` | **Port of `tests/adoption-transfer.test.ts`, every case** — the specification for R6: preconditions, live engagements and the forced handover, the one-statement transfer (owner and `ownedSince` together), the record staying with the animal, severed grants both ways, rivals closed, one of two concurrent completions winning, reversal, the post-approval refund. Plus: reversal is audited, never refunds, needs support staff |
@@ -272,6 +274,34 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-AV. Publishing availability (2026-11-08)
+
+Owners can book a vet or caretaker only on a day the provider has published,
+at the hours published. **Nothing let a provider publish** — the API took
+`availability` on the profile PATCH (replace-whole), but no screen sent it, in
+this build or the reference. So every published day was still the seed's July
+2026, and the booking calendar, which only laid out those days with no months
+to move between, showed a stale July.
+
+| | |
+|---|---|
+| **The editor** | `components/AvailabilityEditor.tsx`, an "Availability" section on `/dashboard/vet-profile` and `/dashboard/caretaker-profile` (the dashboard strip links to `#availability`). Pick days on a month (several at once, or "Select weekdays"), set one or more sets of hours, open or close them; or **repeat a weekly pattern** for 4–52 weeks. Picking one open day loads its hours to edit. Nothing is sent until **Save availability**, which replaces the whole calendar with every day from today on — past days are dropped, so a calendar never outgrows the bound. Unsaved changes warn on leaving. Up to 12 months ahead. Shown once the profile exists; the profile form itself still never sends availability, so saving it leaves the calendar alone (tested) |
+| **The rules** | `lib/availability.ts` mirrors the API: real clock times (`24:00` and `09:75` are not), each set ends after it starts, no two overlap (end-to-start is fine), at most 12 a day. The API's `AvailabilityDayValidator` now enforces the same — before, `25:00` and overlapping hours were accepted — and a save is bounded at 400 days, for vets and caretakers alike |
+| **The booking calendar** | `AvailabilityCalendar` is a month grid with previous/next, starting at the selected day's month or the first month with something open, never before this month or beyond the 12-month horizon. Published days with hours are pickable; past days are not; a published day with no hours reads "Booked". With nothing open from today on, it says so. The same component is on the vet and caretaker profile pages |
+| **Vet booking times** | The booking flow built each instant as `${date}T${time}:00.000Z` — the reference's — so a "09:00" slot was booked for **09:00 UTC** and the appointment page then showed it in the owner's zone (2:00 PM at UTC+5). It now reads the slot in the owner's zone (`fromDateTimeInputs`). Assumes owner and clinic share a zone, which a local marketplace does; the clinic's zone is not stored anywhere |
+
+**Walked** (headless Chrome, `petapp_dev`): Dr Ruiz from the dashboard strip
+landed on the editor; "Repeat every week" filled Mon–Fri for 8 weeks (40 days),
+a Saturday clinic 10:00–13:00 on December 5, an overlap showed its message and
+disabled opening; saved → 41 open days. Maya's `/vets/book?vetId=v1` opened on
+November with those days open and their hours as slots; December showed the
+Saturday; `/vets/v1` showed the same. A 09:00 booking on November 10 was stored
+as 09:00 local (04:00 UTC). **The test appointment was deleted and v1's
+response rate recomputed; Dr Ruiz's new published days were kept**, so
+`petapp_dev` has a bookable vet.
 
 ---
 
@@ -1023,7 +1053,7 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | ~~One 847 kB bundle.~~ **Route-level splitting** (`web/src/lazyPages.ts`): the entry chunk is 404 kB (120 kB gzipped), every page but home/login/signup/404 loads on first visit, plus a 234 kB shared chunk (framer-motion) |
 | | **The parity pass's three API questions — decided 2026-10-10.** (1) **Clinic phone: yes.** `vet_profiles."clinicPhone"` (db/changes/003), on the wire as `clinic.phone`, set by the vet on their profile form, shown as a `tel:` link in the emergency panel. Not backfilled from `users.phone`, so a live database never publishes a vet's personal number; the dev seed carries clinic numbers. (2) **Allergen flags on store cards: no.** The product page and cart show the server's finding; the catalogue search takes no pet. (3) **Reviewer names for signed-out visitors: yes.** `GET /users?ids=` is public, like `GET /users/{id}` — the public projection only, capped at 50. The unfiltered listing still needs a session and a Development host. Both pinned by tests (`VetServiceTests`, `UserEndpointTests`) |
 | | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past". **Since §3-D the cards, the calendar and the upcoming list no longer depend on this** — they are counted and windowed by the API; only the request/schedule/past lists still read the hundred |
-| | **The dev seed's bookings and appointments are all in June–July 2026**, so on `petapp_dev` today every "Upcoming" card reads 0 and the current month is empty; page back to July to see the calendar populated. Not changed, because the suites pin the seed's dates |
+| | **The dev seed's bookings and appointments are all in June–July 2026**, so on `petapp_dev` today every "Upcoming" card reads 0 and the current month is empty; page back to July to see the calendar populated. Not changed, because the suites pin the seed's dates. **The seed's published availability is July 2026 too** — every other vet and caretaker has nothing bookable until they publish days in the editor (§3-AV). On `petapp_dev`, Dr Ruiz now has Mon–Fri published to early January |
 | | **The header flickers if a page comes to rest at about 8px of scroll.** Found during the §3-D walk, there before it: `useScrolled(8)` shrinks the header past 8px, which shortens the page, which can pull the scroll back under the threshold — a 1px loop. Only at that exact resting point; a hysteresis (e.g. on at 16px, off at 4px) would end it |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
 

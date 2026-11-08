@@ -133,6 +133,11 @@ public sealed class VetPatchValidator : AbstractValidator<VetPatchRequest>
             .Must(a => a.Select(x => x.Date).Distinct().Count() == a.Length)
             .WithMessage("The same date is listed twice")
             .When(v => v.Availability is not null);
+
+        RuleFor(v => v.Availability!)
+            .Must(a => a.Length <= AvailabilityRules.MaxDays)
+            .WithMessage($"At most {AvailabilityRules.MaxDays} days can be published at once")
+            .When(v => v.Availability is not null);
     }
 }
 

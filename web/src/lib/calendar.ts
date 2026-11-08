@@ -9,6 +9,12 @@
 
 const DAY_MS = 86_400_000;
 
+/**
+ * How far ahead a provider can publish hours, and an owner can page. A year
+ * keeps a published calendar inside the API's 400-day bound.
+ */
+export const PLANNING_MONTHS = 12;
+
 /** Local midnight at the start of `d`'s day. */
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
