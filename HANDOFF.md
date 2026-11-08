@@ -13,6 +13,7 @@ not repeat the permanent docs — read them in this order:
 | `BUILD_PLAN.md` | Order of work, the decisions, the risks. §0 is where the plan stands. |
 | `API_CONTRACTS.md` | Every endpoint of the reference implementation. |
 | `NEXT_PROMPT.md` | The next session's brief: the client's decisions to fill in (§1), the work for each answer (§3), and the owner's deploy steps (§5). |
+| `FEATURE_PROMPT.md` | A fill-in prompt for any later improvement or new feature: how the API and web app are laid out, the rules, and the steps. |
 
 ---
 

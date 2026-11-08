@@ -3,6 +3,7 @@
 **How to use this file:** fill in the client's answers in §1 (tick a box or
 write a note), then paste the whole file into a new chat. The session does
 only what §1 asks for. Anything left blank is not done and stays as it is.
+For improvements or new features beyond these decisions, use `FEATURE_PROMPT.md` instead.
 
 Read HANDOFF.md first, then STATUS.md (§3-M10 and §4), then ARCHITECTURE.md
 before writing code.

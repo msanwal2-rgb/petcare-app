@@ -392,7 +392,7 @@ is a REQUIREMENTS.md §12 fix — and then it is listed in `STATUS.md`.
 ## 7. Testing
 
 ```bash
-cd API && dotnet test          # 539 tests, ~3m
+cd API && dotnet test          # 970 tests, ~5m
 cd web && npm run build        # tsc -b && vite build
 cd web && npx oxlint src
 ./db/verify.sh                 # must print ✓ IDENTICAL
