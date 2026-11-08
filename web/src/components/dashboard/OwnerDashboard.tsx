@@ -127,13 +127,12 @@ export function OwnerDashboard({ user }: { user: User }) {
       </RevealItem>
 
       <RevealItem>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Calendar</h2>
         {sources ? (
           <ScheduleOverview
             sources={sources}
             version={0}
             noun={NOUN}
-            emptyUpcoming="Nothing coming up. Book a caretaker or a vet and it will show here."
+            emptyUpcoming="Book a caretaker or a vet and it will show here."
           />
         ) : (
           <Skeleton className="h-80 w-full rounded-2xl" />

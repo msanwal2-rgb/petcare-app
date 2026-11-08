@@ -235,13 +235,12 @@ export function CaretakerDashboard({ user }: { user: User }) {
       </RevealItem>
 
       <RevealItem>
-        <h2 className="mb-3 text-lg font-semibold text-ink">Calendar</h2>
         <ScheduleOverview
           sources={sources}
           version={version}
           availability={profile.availability}
           noun={NOUN}
-          emptyUpcoming="Nothing coming up. New requests appear here as soon as they arrive."
+          emptyUpcoming="New requests appear here as soon as they arrive."
           renderActions={(e) => (e.booking ? answer(e.booking) : null)}
         />
       </RevealItem>

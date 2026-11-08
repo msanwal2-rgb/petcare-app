@@ -100,6 +100,14 @@ export const formatLongDay = (d: Date) => LONG_DAY_FMT.format(d);
 export const formatWeekdayShort = (d: Date) => WEEKDAY_SHORT_FMT.format(d);
 export const formatTime = (iso: string) => TIME_FMT.format(new Date(iso));
 
+/** "9:00a" / "1:30p" — for the labels inside a calendar day, where space is short. */
+export function formatTimeCompact(iso: string): string {
+  return TIME_FMT.format(new Date(iso)).replace(/\s?AM$/i, "a").replace(/\s?PM$/i, "p");
+}
+
+const SHORT_MONTH_FMT = new Intl.DateTimeFormat("en-US", { month: "short" });
+export const formatShortMonth = (d: Date) => SHORT_MONTH_FMT.format(d);
+
 /** "Today", "Tomorrow", or "Wednesday, November 11". */
 export function relativeDayLabel(d: Date, now: Date = new Date()): string {
   const n = daysFromToday(d, now);

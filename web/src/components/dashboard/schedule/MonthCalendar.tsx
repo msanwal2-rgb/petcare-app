@@ -1,23 +1,27 @@
-import { TONE_DOT } from "@/lib/statusTone";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import {
   addMonths,
   dayKey,
   formatLongDay,
   formatMonth,
+  formatTimeCompact,
   monthGrid,
   startOfMonth,
 } from "@/lib/calendar";
+import { TONE_DOT } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 import type { Engagement } from "./engagement";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** Labels a day shows before it says "+N more". */
+const LABELS_PER_DAY = 2;
 
 /**
- * A month grid. Each day carries a dot per engagement on it (coloured by
- * status, up to three, then a count), a shaded background when the provider
- * has published availability for it, and a ring for today. Pressing a day
- * selects it; pressing it again closes the panel below.
+ * A month grid, full width. Every day says what is on it — on a phone as a
+ * dot per engagement (coloured by status), from `sm` up as short labels
+ * ("9:00a Biscuit") and "+N more". Days the provider has published are
+ * shaded; today has a ring. Pressing a day selects it; pressing it again
+ * closes the panel below.
  */
 export function MonthCalendar({
   month,
@@ -41,14 +45,30 @@ export function MonthCalendar({
 }) {
   const today = dayKey(new Date());
   const thisMonth = month.getMonth();
-  const days = monthGrid(month);
+  // Only the weeks this month spans — four to six — not always six. At full
+  // width a spare week of next month is a lot of empty page.
+  const grid = monthGrid(month);
+  const lastOfMonth = grid.findLastIndex((d) => d.getMonth() === thisMonth);
+  const days = grid.slice(0, Math.ceil((lastOfMonth + 1) / 7) * 7);
+  const monthCount = days
+    .filter((d) => d.getMonth() === thisMonth)
+    .reduce((n, d) => n + (byDay.get(dayKey(d))?.length ?? 0), 0);
 
   return (
     <div className="rounded-2xl border border-mist bg-white p-4 sm:p-5">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-ink" aria-live="polite">
-          {formatMonth(month)}
-        </h3>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold text-ink" aria-live="polite">
+            {formatMonth(month)}
+          </h3>
+          <p className="text-xs text-charcoal/55">
+            {loading
+              ? "Loading…"
+              : monthCount === 0
+                ? `No ${noun.many} this month`
+                : `${monthCount} ${monthCount === 1 ? noun.one : noun.many} this month`}
+          </p>
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -76,14 +96,15 @@ export function MonthCalendar({
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center" role="grid" aria-busy={loading}>
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5" role="grid" aria-busy={loading}>
         {WEEKDAYS.map((d) => (
           <div
             key={d}
             role="columnheader"
-            className="pb-1 font-mono text-[10px] uppercase tracking-wider text-charcoal/50"
+            className="pb-1 text-center font-mono text-[10px] uppercase tracking-wider text-charcoal/50"
           >
-            {d}
+            <span className="sm:hidden">{d[0]}</span>
+            <span className="hidden sm:inline">{d}</span>
           </div>
         ))}
 
@@ -93,6 +114,7 @@ export function MonthCalendar({
           const inMonth = d.getMonth() === thisMonth;
           const selected = key === selectedDay;
           const open = openDays.has(key);
+          const isToday = key === today;
           const count = items.length;
 
           return (
@@ -106,19 +128,31 @@ export function MonthCalendar({
               }${open ? ", open for bookings" : ""}`}
               onClick={() => onSelectDay(selected ? null : key)}
               className={cn(
-                "relative flex aspect-square min-h-11 flex-col items-center justify-start rounded-xl pt-1.5 text-sm transition-colors",
+                "relative flex min-w-0 flex-col rounded-xl border p-1 text-left transition-colors",
+                "aspect-square min-h-11 items-center sm:aspect-auto sm:h-20 sm:items-stretch lg:h-24",
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink",
-                inMonth ? "text-ink" : "text-charcoal/30",
-                open && !selected && "bg-[#2F6F5E]/[0.07]",
-                selected ? "bg-ink text-white" : "hover:bg-fog",
-                key === today && !selected && "ring-1 ring-inset ring-leash",
+                selected
+                  ? "border-ink bg-ink text-white"
+                  : open
+                    ? "border-[#2F6F5E]/15 bg-[#2F6F5E]/[0.06] hover:border-ink/30"
+                    : "border-transparent hover:border-mist hover:bg-fog/60",
+                !inMonth && !selected && "opacity-40",
+                isToday && !selected && "ring-1 ring-inset ring-leash"
               )}
             >
-              <span className={cn("font-mono text-xs sm:text-sm", key === today && "font-semibold")}>
+              <span
+                className={cn(
+                  "font-mono text-xs sm:px-1 sm:text-[13px]",
+                  isToday && "font-semibold",
+                  !selected && (inMonth ? "text-ink" : "text-charcoal/60")
+                )}
+              >
                 {d.getDate()}
               </span>
+
+              {/* Phones: a dot per engagement. */}
               {count > 0 && (
-                <span className="mt-auto mb-1.5 flex items-center gap-0.5" aria-hidden>
+                <span className="mt-auto mb-1 flex items-center gap-0.5 sm:hidden" aria-hidden>
                   {items.slice(0, 3).map((e) => (
                     <span
                       key={e.kind + e.id}
@@ -126,9 +160,35 @@ export function MonthCalendar({
                       style={{ backgroundColor: selected ? "#fff" : TONE_DOT[e.tone] }}
                     />
                   ))}
-                  {count > 3 && (
-                    <span className={cn("font-mono text-[9px] leading-none", selected ? "text-white" : "text-charcoal/60")}>
-                      +{count - 3}
+                </span>
+              )}
+
+              {/* Wider: what it is. */}
+              {count > 0 && (
+                <span className="mt-1 hidden min-w-0 flex-col gap-0.5 sm:flex" aria-hidden>
+                  {items.slice(0, LABELS_PER_DAY).map((e) => (
+                    <span
+                      key={e.kind + e.id}
+                      className={cn(
+                        "truncate rounded-md border-l-2 px-1 py-0.5 text-[10px] leading-tight",
+                        selected ? "bg-white/15 text-white" : "bg-fog text-charcoal"
+                      )}
+                      style={{ borderLeftColor: TONE_DOT[e.tone] }}
+                    >
+                      <span className="font-mono">
+                        {dayKey(new Date(e.start)) === key ? formatTimeCompact(e.start) : "…"}
+                      </span>{" "}
+                      {e.pets[0]?.name ?? e.title}
+                    </span>
+                  ))}
+                  {count > LABELS_PER_DAY && (
+                    <span
+                      className={cn(
+                        "px-1 text-[10px] font-medium",
+                        selected ? "text-white/80" : "text-charcoal/60"
+                      )}
+                    >
+                      +{count - LABELS_PER_DAY} more
                     </span>
                   )}
                 </span>
@@ -148,6 +208,10 @@ export function MonthCalendar({
           Booked
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: TONE_DOT.progress }} />
+          Under way
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: TONE_DOT.done }} />
           Done
         </span>
@@ -157,7 +221,6 @@ export function MonthCalendar({
             Open for bookings
           </span>
         )}
-        {loading && <span className="ml-auto">Loading…</span>}
       </div>
     </div>
   );

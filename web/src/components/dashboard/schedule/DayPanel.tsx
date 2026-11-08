@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { motion } from "framer-motion";
 import type { AvailabilityDay } from "@/types";
@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { CalendarIcon, ClockIcon, StethoscopeIcon, PawIcon, XIcon } from "@/components/ui/icons";
 import { formatTime, fromDayKey, relativeDayLabel } from "@/lib/calendar";
 import { DURATION, EASE_OUT } from "@/lib/motion";
-import { formatCurrency, formatRange } from "@/lib/utils";
+import { cn, formatCurrency, formatRange } from "@/lib/utils";
 import type { Engagement } from "./engagement";
 
 /**
@@ -35,16 +35,36 @@ export function DayPanel({
   noun: { one: string; many: string };
 }) {
   const date = fromDayKey(day);
+  const ref = useRef<HTMLElement>(null);
+
+  // Bring the panel to the eye when it opens off-screen, by no more than it
+  // takes. Re-checked when its content arrives, because a panel that opened
+  // as a short skeleton can grow past the bottom of the screen. A panel
+  // already in full view does not move the page.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const header = 72; // the sticky site header
+      const fits = r.height <= window.innerHeight - header;
+      if (r.top < header || r.bottom > window.innerHeight) {
+        el.scrollIntoView({ behavior: "smooth", block: fits ? "nearest" : "start" });
+      }
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [day, loading]);
 
   return (
     <motion.section
+      ref={ref}
       key={day}
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: DURATION.fast, ease: EASE_OUT }}
       aria-label={`Schedule for ${relativeDayLabel(date)}`}
-      className="relative mt-3 rounded-2xl border border-mist bg-white p-4 shadow-lg shadow-ink/5 sm:p-5"
+      className="relative mt-3 scroll-mt-24 scroll-mb-6 rounded-2xl border border-mist bg-white p-4 shadow-lg shadow-ink/5 sm:p-5"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
@@ -80,7 +100,7 @@ export function DayPanel({
           Nothing on this day.
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className={cn("grid grid-cols-1 gap-3", items.length > 1 && "lg:grid-cols-2")}>
           {items.map((e) => (
             <li key={e.kind + e.id}>
               <EngagementDetail engagement={e} actions={renderActions?.(e)} />

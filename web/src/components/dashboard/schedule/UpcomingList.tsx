@@ -2,17 +2,27 @@ import { useState } from "react";
 import { useAsync } from "@/hooks/useAsync";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { Avatar } from "@/components/Avatar";
-import { daysFromToday, formatTime, formatWeekdayShort, startOfTodayIso } from "@/lib/calendar";
+import { CalendarIcon } from "@/components/ui/icons";
+import {
+  daysFromToday,
+  formatShortMonth,
+  formatTime,
+  formatWeekdayShort,
+  startOfTodayIso,
+} from "@/lib/calendar";
+import { TONE_DOT } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
 import { bySoonest, type Engagement, type EngagementPage, type EngagementSource } from "./engagement";
 
 const PAGE = 20;
-const STEP = 5;
+/** One row of cards at the widest layout; "Show more" adds a row at a time. */
+const STEP = 4;
 
 /**
- * Everything still to come, soonest first, from every source the dashboard
- * has — one for a vet or caretaker, two for an owner.
+ * Everything still to come, soonest first, as a row of cards above the
+ * calendar — the next one marked "Next up". With nothing coming it is one
+ * slim line, not a tall empty box, so every dashboard keeps the same shape
+ * whether it is busy or quiet.
  *
  * Several cursor pages merged into one order need care: an item from source A
  * can only be shown once every source that still has pages has been read past
@@ -20,7 +30,7 @@ const STEP = 5;
  * to the earliest "last item" among the sources that are not finished, and
  * "Show more" reads on when it runs out.
  *
- * Pressing an item opens its day on the calendar.
+ * Pressing a card opens its day on the calendar.
  */
 export function UpcomingList({
   sources,
@@ -66,10 +76,12 @@ export function UpcomingList({
     .filter((e) => horizon === null || e.start <= horizon)
     .sort(bySoonest);
 
+  const visible = ordered.slice(0, shown);
   const canShowMore = ordered.length > shown || unfinished.length > 0;
+  const canShowLess = shown > STEP;
 
   async function showMore() {
-    if (ordered.length > shown + STEP || unfinished.length === 0) {
+    if (ordered.length >= shown + STEP || unfinished.length === 0) {
       setShown((n) => n + STEP);
       return;
     }
@@ -89,98 +101,141 @@ export function UpcomingList({
     }
   }
 
-  return (
-    <section className="flex flex-col rounded-2xl border border-mist bg-white p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold text-ink">Upcoming</h3>
-        {!loading && ordered.length > 0 && (
-          <span className="rounded-full bg-fog px-2 py-0.5 font-mono text-xs text-charcoal/70">
-            {unfinished.length > 0 ? `${ordered.length}+` : ordered.length}
-          </span>
-        )}
+  if (loading && !first) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className={cn("h-[104px] w-full rounded-2xl", i > 0 && "hidden sm:block")} />
+        ))}
       </div>
+    );
+  }
 
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-14 w-full rounded-xl" />
-          <Skeleton className="h-14 w-full rounded-xl" />
-          <Skeleton className="h-14 w-full rounded-xl" />
-        </div>
-      ) : error ? (
-        <p className="text-sm text-charcoal/60">Couldn&rsquo;t load your upcoming {noun.many}.</p>
-      ) : ordered.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-mist px-4 py-8 text-center text-sm text-charcoal/60">
-          {empty}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {ordered.slice(0, shown).map((e) => {
-            const start = new Date(e.start);
-            return (
-              <li key={e.kind + e.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(e)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-mist px-3 py-2.5 text-left transition-colors hover:border-ink/40"
-                >
-                  <span className="flex w-11 shrink-0 flex-col items-center rounded-lg bg-fog py-1">
-                    <span className="font-mono text-[10px] uppercase text-charcoal/55">
-                      {formatWeekdayShort(start)}
-                    </span>
-                    <span className="font-mono text-base font-semibold leading-tight text-ink">
-                      {start.getDate()}
-                    </span>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-ink">
-                      {e.pets[0] ? `${e.pets.map((p) => p.name).join(", ")} — ` : ""}
-                      {e.title}
-                    </span>
-                    <span className="flex items-center gap-1.5 truncate text-xs text-charcoal/60">
-                      {e.counterpart?.avatarUrl && (
-                        <Avatar src={e.counterpart.avatarUrl} size={16} />
-                      )}
-                      <span className="truncate">
-                        {shortDay(start)} · {formatTime(e.start)}
-                        {e.counterpart ? ` · ${e.counterpart.name}` : ""}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="hidden shrink-0 sm:block">
-                    <StatusBadge tone={e.tone} label={e.statusLabel} />
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {!loading && canShowMore && (
-        <button
-          type="button"
-          onClick={showMore}
-          disabled={loadingMore}
-          className={cn(
-            "mt-3 self-center rounded-full px-4 py-1.5 text-sm font-medium text-ink hover:bg-fog",
-            loadingMore && "opacity-60",
+  if (error || ordered.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-dashed border-mist bg-white/60 px-4 py-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fog text-charcoal/60">
+          <CalendarIcon width={16} height={16} />
+        </span>
+        <p className="text-sm text-charcoal/65">
+          {error ? (
+            <>Couldn&rsquo;t load your upcoming {noun.many}.</>
+          ) : (
+            <>
+              <span className="font-medium text-ink">Nothing coming up.</span> {empty}
+            </>
           )}
-        >
-          {loadingMore ? "Loading…" : "Show more"}
-        </button>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {visible.map((e, i) => (
+          <li key={e.kind + e.id}>
+            <UpcomingCard engagement={e} next={i === 0} onSelect={onSelect} />
+          </li>
+        ))}
+      </ul>
+
+      {(canShowMore || canShowLess) && (
+        <div className="mt-3 flex items-center justify-center gap-2">
+          {canShowMore && (
+            <button
+              type="button"
+              onClick={showMore}
+              disabled={loadingMore}
+              className="rounded-full px-4 py-1.5 text-sm font-medium text-ink hover:bg-fog disabled:opacity-60"
+            >
+              {loadingMore ? "Loading…" : "Show more"}
+            </button>
+          )}
+          {canShowLess && (
+            <button
+              type="button"
+              onClick={() => setShown(STEP)}
+              className="rounded-full px-4 py-1.5 text-sm font-medium text-charcoal/60 hover:bg-fog hover:text-ink"
+            >
+              Show less
+            </button>
+          )}
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 
-const SHORT_DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "long" });
-
-/** "Today", "Tomorrow", a weekday within the week, else "Dec 20" — never an ambiguous weekday. */
-function shortDay(d: Date): string {
+/** "Today", "Tomorrow", a weekday within the week, else nothing — the date block says it. */
+function whenLabel(d: Date): string {
   const n = daysFromToday(d);
   if (n === 0) return "Today";
   if (n === 1) return "Tomorrow";
-  if (n > 1 && n < 7) return WEEKDAY.format(d);
-  return SHORT_DATE.format(d);
+  return formatWeekdayShort(d);
+}
+
+function UpcomingCard({
+  engagement: e,
+  next,
+  onSelect,
+}: {
+  engagement: Engagement;
+  next: boolean;
+  onSelect: (e: Engagement) => void;
+}) {
+  const start = new Date(e.start);
+  const pets = e.pets.map((p) => p.name).join(", ");
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(e)}
+      className={cn(
+        "group flex h-full w-full items-start gap-3 rounded-2xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md",
+        next ? "border-ink bg-ink text-white" : "border-mist bg-white text-ink"
+      )}
+    >
+      <span
+        className={cn(
+          "flex w-12 shrink-0 flex-col items-center rounded-xl py-1.5",
+          next ? "bg-white/10" : "bg-fog"
+        )}
+      >
+        <span className={cn("font-mono text-[10px] uppercase", next ? "text-white/70" : "text-charcoal/55")}>
+          {formatShortMonth(start)}
+        </span>
+        <span className="font-mono text-lg font-semibold leading-tight">{start.getDate()}</span>
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block font-mono text-[10px] uppercase tracking-wider",
+            next ? "text-marigold" : "text-charcoal/50"
+          )}
+        >
+          {next ? "Next up" : whenLabel(start)} · {formatTime(e.start)}
+        </span>
+        <span className="mt-0.5 block truncate text-sm font-medium">
+          {pets ? `${pets} — ` : ""}
+          {e.title}
+        </span>
+        <span className={cn("block truncate text-xs", next ? "text-white/70" : "text-charcoal/60")}>
+          {e.counterpart?.name ?? e.modeLabel}
+        </span>
+        <span className="mt-1.5 block">
+          {next ? (
+            // The badge's own tints are made for white cards; on ink they vanish.
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-medium text-white">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: TONE_DOT[e.tone] }} aria-hidden />
+              {e.statusLabel}
+            </span>
+          ) : (
+            <StatusBadge tone={e.tone} label={e.statusLabel} />
+          )}
+        </span>
+      </span>
+    </button>
+  );
 }
