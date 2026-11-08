@@ -1,4 +1,7 @@
+import { useId } from "react";
+import { motion } from "framer-motion";
 import { ChevronRightIcon } from "@/components/ui/icons";
+import { layoutGlide } from "@/lib/motion";
 import {
   addMonths,
   dayKey,
@@ -39,10 +42,14 @@ export function MonthCalendar({
   /** Day keys with published availability. Empty for owners. */
   openDays: Set<string>;
   selectedDay: string | null;
-  onSelectDay: (key: string | null) => void;
+  /** `origin` is the pressed day's box on screen — where the panel flies from. */
+  onSelectDay: (key: string | null, origin?: DOMRect) => void;
   loading: boolean;
   noun: { one: string; many: string };
 }) {
+  // The selected day's highlight is one shared element that glides from day
+  // to day, like the nav bar's active pill.
+  const highlightId = `${useId()}-selected-day`;
   const today = dayKey(new Date());
   const thisMonth = month.getMonth();
   // Only the weeks this month spans — four to six — not always six. At full
@@ -126,13 +133,16 @@ export function MonthCalendar({
               aria-label={`${formatLongDay(d)}${
                 count ? `, ${count} ${count === 1 ? noun.one : noun.many}` : ""
               }${open ? ", open for bookings" : ""}`}
-              onClick={() => onSelectDay(selected ? null : key)}
+              onClick={(ev) =>
+                onSelectDay(selected ? null : key, ev.currentTarget.getBoundingClientRect())
+              }
               className={cn(
-                "relative flex min-w-0 flex-col rounded-xl border p-1 text-left transition-colors",
+                "relative isolate flex min-w-0 flex-col rounded-xl border p-1 text-left",
+                "transition-[color,background-color,border-color,transform] duration-200 active:scale-[0.96]",
                 "aspect-square min-h-11 items-center sm:aspect-auto sm:h-20 sm:items-stretch lg:h-24",
                 "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ink",
                 selected
-                  ? "border-ink bg-ink text-white"
+                  ? "border-transparent text-white"
                   : open
                     ? "border-[#2F6F5E]/15 bg-[#2F6F5E]/[0.06] hover:border-ink/30"
                     : "border-transparent hover:border-mist hover:bg-fog/60",
@@ -140,6 +150,14 @@ export function MonthCalendar({
                 isToday && !selected && "ring-1 ring-inset ring-leash"
               )}
             >
+              {selected && (
+                <motion.span
+                  layoutId={highlightId}
+                  aria-hidden
+                  className="absolute inset-0 -z-10 rounded-xl bg-ink shadow-md shadow-ink/20"
+                  transition={layoutGlide}
+                />
+              )}
               <span
                 className={cn(
                   "font-mono text-xs sm:px-1 sm:text-[13px]",

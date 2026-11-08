@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence } from "framer-motion";
 import type { AvailabilityDay } from "@/types";
 import { useAsync } from "@/hooks/useAsync";
-import { addDays, dayKey, daysCovered, monthGrid, startOfMonth } from "@/lib/calendar";
+import { addDays, dayKey, daysCovered, fromDayKey, monthGrid, startOfMonth } from "@/lib/calendar";
 import { DayPanel } from "./DayPanel";
 import { MonthCalendar } from "./MonthCalendar";
 import { UpcomingList } from "./UpcomingList";
@@ -39,7 +39,29 @@ export function ScheduleOverview({
   emptyUpcoming: string;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // The selected day; which way the selection last moved (the panel's content
+  // slides in from that side); and, when this pick opened the panel, the day
+  // box it was opened from (the panel flies out of it).
+  const [selection, setSelection] = useState<{
+    day: string;
+    direction: number;
+    origin: DOMRect | null;
+  } | null>(null);
+  const selectedDay = selection?.day ?? null;
+
+  /** Open a day (or switch to it), or close the panel with null. */
+  function selectDay(day: string | null, origin?: DOMRect) {
+    setSelection((prev) =>
+      day === null
+        ? null
+        : {
+            day,
+            direction: prev && day < prev.day ? -1 : 1,
+            // Only an opening flies; switching days changes the open panel in place.
+            origin: prev ? null : origin ?? null,
+          }
+    );
+  }
 
   const grid = monthGrid(month);
   const from = grid[0].toISOString();
@@ -72,7 +94,7 @@ export function ScheduleOverview({
   function selectFromList(e: Engagement) {
     const start = new Date(e.start);
     setMonth(startOfMonth(start));
-    setSelectedDay(dayKey(start));
+    selectDay(dayKey(start));
   }
 
   return (
@@ -94,25 +116,30 @@ export function ScheduleOverview({
           month={month}
           onMonthChange={(m) => {
             setMonth(m);
-            setSelectedDay(null);
+            selectDay(null);
           }}
           byDay={byDay}
           openDays={openDays}
           selectedDay={selectedDay}
-          onSelectDay={setSelectedDay}
+          onSelectDay={selectDay}
           loading={loading}
           noun={noun}
         />
-        <AnimatePresence mode="wait">
-          {selectedDay && (
+        {/* One panel while any day is open: it unfolds on the first pick,
+            changes in place on the next, and folds away on close. */}
+        <AnimatePresence>
+          {selection && (
             <DayPanel
-              key={selectedDay}
-              day={selectedDay}
-              items={byDay.get(selectedDay) ?? []}
+              key="day-panel"
+              day={selection.day}
+              column={fromDayKey(selection.day).getDay()}
+              direction={selection.direction}
+              origin={selection.origin}
+              items={byDay.get(selection.day) ?? []}
               loading={loading}
-              availability={availability.find((a) => a.date === selectedDay)}
+              availability={availability.find((a) => a.date === selection.day)}
               renderActions={renderActions}
-              onClose={() => setSelectedDay(null)}
+              onClose={() => selectDay(null)}
               noun={noun}
             />
           )}
