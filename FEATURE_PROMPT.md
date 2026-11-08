@@ -1,9 +1,28 @@
 # Leash — prompt for improvements and new features
 
-**How to use:** fill in §1 with what you want, then paste this whole file
-into a new chat. For the client's pending decisions from the original build
-(Stripe, the adoption screen gaps, R7, refills), use `NEXT_PROMPT.md` instead —
-it already says what to build for each answer.
+**How to use — two ways:**
+
+1. **Short (recommended).** Paste this into a new chat, then describe the
+   feature in your next message:
+
+   > This repo is Leash, a pet-care app. Before I give you a task, get oriented:
+   > read AGENTS.md, HANDOFF.md (start with §0, the latest session), STATUS.md,
+   > ARCHITECTURE.md and FEATURE_PROMPT.md. The app is API/ (.NET 10), web/
+   > (React + Vite) and db/ (PostgreSQL 18); the root folders (app/, lib/,
+   > components/, prisma/, tests/) are the old reference app — read them if
+   > useful, never edit or run them. Don't change anything yet: reply with a
+   > short summary of where things stand and wait for my feature. When you do
+   > make changes, follow FEATURE_PROMPT.md §3–§4: tests first, `dotnet test`,
+   > `npm run build`, `npx oxlint src --deny-warnings` and `./db/verify.sh`
+   > must pass, then commit as rehman427 with no Co-Authored-By line. Don't
+   > push. I may already have the API and Vite running — check the ports and
+   > use mine; never stop my servers, and clean up any you start.
+
+2. **Long.** Fill in §1 below and paste this whole file.
+
+For the client's pending decisions from the original build (Stripe, the
+adoption screen gaps, R7, refills), use `NEXT_PROMPT.md` instead — it already
+says what to build for each answer.
 
 ---
 
@@ -37,7 +56,7 @@ Two codebases live in this repository. **Only change the build.**
 
 | | |
 |---|---|
-| `API/` + `web/` + `db/` | **The build** — .NET 10 API, React 19 + Vite SPA, PostgreSQL 18. Every module M0–M10 is done: auth, pets and health records, caretakers and bookings, vets and appointments, store and orders, notifications, payments and Leash Plus, the admin console, adoption. 1050 xUnit tests. |
+| `API/` + `web/` + `db/` | **The build** — .NET 10 API, React 19 + Vite SPA, PostgreSQL 18. Every module M0–M10 is done: auth, pets and health records, caretakers and bookings, vets and appointments, store and orders, notifications, payments and Leash Plus, the admin console, adoption. Since then (client round, 2026-11-08): reworked vet, caretaker and owner dashboards with stats cards, an interactive calendar and vet rescheduling, and an availability editor for vets and caretakers — HANDOFF §0, STATUS §3-D and §3-AV. **The shelter dashboard is the one not yet reworked.** 1050 xUnit tests. |
 | Root `app/`, `components/`, `lib/`, `prisma/`, `tests/` | **The reference implementation** (Next.js) the build was ported from. Read it to see how something already behaves; never run or edit it. `ROADMAP.md` and `PROJECT_ANALYSIS.md` describe the reference, not the build. |
 
 Read before writing code, in this order: `HANDOFF.md` (current state and
@@ -76,6 +95,15 @@ existing behaviour.
   `hooks/useAsync`; cursor lists use "Show more" or `hooks/useCursorPager`.
 - `types/index.ts` — shared domain types. `store/session.ts` — the signed-in
   user (a cache; the API is the truth).
+- `components/dashboard/schedule/*` — the dashboards' shared pieces:
+  `ScheduleOverview` (Upcoming cards + month calendar + day panel),
+  `StatCards`, `ProfileStrip`, `RescheduleDialog`, and `sources.ts` /
+  `engagement.ts`, which turn appointments and bookings into one shape. A new
+  dashboard reuses these. `components/AvailabilityEditor.tsx` and
+  `AvailabilityCalendar.tsx` publish and show bookable days. Dates and local
+  time: `lib/calendar.ts`; availability rules: `lib/availability.ts`.
+- Motion follows `lib/motion.ts` (glide, never bounce); reduced motion is
+  honoured globally by `MotionConfig` in `PageTransition`.
 
 ### Database (`db/`)
 
@@ -142,9 +170,14 @@ scripts (005 is the latest, **006 is next**); `db/devseed/` is the demo data;
    ```
    Stop the running API before building (`Stop-Process` on `Leash.Api`) —
    it locks `Leash.Core.dll`.
-6. **Walk it in the running app** as each role it affects: API with
+6. **Walk it in the running app** as each role it affects. **First check
+   whether I already have servers up** (I run the API from Visual Studio on
+   :5001 and Vite from VS Code on :5173 or :5174) — if so, use them and never
+   stop them. Otherwise start your own: API with
    `dotnet run --project API/src/Leash.Api --launch-profile http` (:5001),
-   SPA with `cd web && npm run dev` (:5173). Headless Chrome via
+   SPA with `cd web && npm run dev` (:5173) — and stop them when done by
+   process tree (stopping the background shell leaves the node/dotnet child
+   running; HANDOFF §0). Headless Chrome via
    `playwright-core` from the root `node_modules` and
    `C:/Program Files/Google/Chrome/Application/chrome.exe` works for scripted
    walks; put scripts in the scratchpad, not the repo. Check: no console
@@ -162,8 +195,10 @@ scripts (005 is the latest, **006 is next**); `db/devseed/` is the demo data;
 ### Accounts and tools
 
 - Demo accounts, password `leashdemo123`: `maya.chen@example.com` (owner),
-  `liam.novak@example.com` (caretaker), `naomi.ruiz@example.com` (vet),
-  `hello@austinpetsalive.example.com` (shelter).
+  `liam.novak@example.com` (caretaker), `elena.petrova@example.com`
+  (caretaker c4), `naomi.ruiz@example.com` (vet — the only provider with
+  future published days in `petapp_dev`), `hello@austinpetsalive.example.com`
+  (shelter).
 - Staff: `priya.raman@example.com` (admin), `tom.okafor@example.com`
   (support + finance), `rosa.delgado@example.com` (ops). Their password is
   `STAFF_PASSWORD` in the root `.env.local` — read it for a walk, never print it.

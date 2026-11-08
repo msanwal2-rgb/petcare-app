@@ -1,6 +1,59 @@
 # Leash — handoff
 
-For whoever picks this up next. Written at the end of **M10, adoption**, 2026-10-18 — the last module in the plan.
+For whoever picks this up next. Written at the end of **M10, adoption**, 2026-10-18 — the last module in the plan — and **brought up to date on 2026-11-08** after the client's first round of new work (§0).
+
+---
+
+## 0. The 2026-11-08 session — read this first
+
+**Done and committed** (all on `main_newDev`, rehman427, no trailer, not pushed):
+
+| Commit | What |
+|---|---|
+| `68bc20b` | Dashboards (STATUS §3-D): three cards counted by the API (`/vets/{id}/stats`, `/caretakers/{id}/stats`, `/me/stats`), the schedule lists' `?from=&to=&status=` window, the shared Upcoming + calendar + day panel, vet **reschedule** (`POST /appointments/{id}/reschedule`, owner notified in-app and by email) |
+| `1745cdb` | Vet booking stores slot times in the owner's zone, not UTC |
+| `e5f4230` | **Availability editor** on the vet and caretaker profile pages (STATUS §3-AV); the booking calendar is a real month calendar; stricter availability validation |
+| `c13fa40` | Upcoming as a card row above a full-width calendar; the day panel scrolls into view |
+| `07f2f4f`, `a9f9a8d` | Calendar motion: the day box flies into the panel on every opening, gliding selection, pointer, directional content slide |
+
+1050 tests pass; web build, `oxlint --deny-warnings` and `verify.sh` are clean.
+No schema change — `db/changes` still ends at 005.
+
+**Next:** the **shelter dashboard** is the one dashboard not reworked. The
+client has not given its brief — ask what they want before building. Reuse
+`web/src/components/dashboard/schedule/` (`ScheduleOverview`, `StatCards`,
+`ProfileStrip`) the way the vet, caretaker and owner dashboards do. Anything
+else the user brings comes through `FEATURE_PROMPT.md`.
+
+**`petapp_dev` right now:** Dr Ruiz (v1) has Mon–Fri published to early
+January plus Saturday 5 December — the only bookable provider; every other
+vet and caretaker has only the seed's July 2026 days until someone opens days
+in the editor. All seeded bookings and visits are June–July 2026, so
+"Upcoming" reads 0 everywhere; page the calendar back to July. Test rows made
+during the walks were deleted and v1's response rate recomputed.
+
+**New traps from this session:**
+
+- **The user runs their own servers** — the API from Visual Studio on :5001,
+  Vite from a VS Code terminal on :5173 or :5174 (`Cors:Origins` in their
+  uncommitted `appsettings.Development.json` allows 5174 — never commit that
+  file). Check who owns a port before starting anything
+  (`Get-NetTCPConnection -LocalPort …` → `Win32_Process` parent chain); if
+  theirs is up, use it. Never stop their processes.
+- **Stopping a background shell does not stop `npm run dev` or `dotnet run`
+  under it** — the node/dotnet child survives and keeps the port. Clean up with
+  `taskkill /T /F /PID <the npm or dotnet parent>` after confirming it is yours.
+- **AnimatePresence revives an exiting child with the same key** — state set
+  once at mount does not run again. The day panel's flight therefore follows
+  its `origin` prop (DayPanel.tsx). Anything else animated on mount inside an
+  AnimatePresence needs the same care.
+- **Headless walks: scroll well past 8px before clicking.** The site header
+  shrinks at 8px of scroll and can loop by 1px at that exact point (STATUS §4),
+  which makes Playwright report "element not stable".
+- **FluentValidation names a `x!.Value` rule `x.Value`** — use
+  `.OverridePropertyName("x")` so the envelope's `path` matches the field.
+- **No Python on this machine**, and long heredocs with backticks can break the
+  Bash tool — write files with the editor instead.
 
 This file is the short version and the things that are true *right now*. It does
 not repeat the permanent docs — read them in this order:
@@ -58,20 +111,10 @@ working cross-origin; do not revert this.
 
 ## 3. What to do next
 
-**The client's dashboard round is in progress (2026-11-08, STATUS §3-D).**
-Vet, caretaker and owner dashboards are done — cards counted by the API, the
-shared calendar in `web/src/components/dashboard/schedule/`, vet rescheduling.
-**The shelter dashboard is next and has no brief yet** — ask before building.
-On `petapp_dev` every seeded booking and visit is in June–July 2026, so the
-"Upcoming" cards read 0; page the calendar back to July to see it populated.
+**The client's work since M10 is in §0** — dashboards (vet, caretaker, owner)
+and the availability editor are done; the shelter dashboard waits for a brief.
 
-**Providers publish their own bookable days now** (STATUS §3-AV): an
-Availability section on the vet and caretaker profile pages. Owners can book
-only published days, and the seed's are all July 2026 — so a vet or caretaker
-is unbookable until somebody opens days for them in that editor. On
-`petapp_dev`, Dr Ruiz has Mon–Fri open to early January.
-
-**First, the redeploy** — the one hardening step this session could not do,
+**Still outstanding from before: the redeploy** — the one hardening step this session could not do,
 because writing to `C:\inetpub` needs elevation. From an elevated PowerShell
 at the repository root: `.\deploy\publish-iis.ps1`. It keeps the server's
 `config.js` (currently a Cloudflare tunnel address) and
