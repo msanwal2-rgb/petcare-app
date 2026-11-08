@@ -16,7 +16,20 @@ public sealed record BookingDto(
     string Notes,
     string Status,
     decimal PriceTotal,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt)
+{
+    /// <summary>
+    /// How to reach a guest owner (STATUS §3-G), on the caretaker's single
+    /// read only, and only while the owner has no account — a guest cannot
+    /// read messages. Absent from the JSON otherwise.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public GuestContactDto? GuestContact { get; init; }
+}
+
+/// <summary>A guest owner's name, email and phone, for the caretaker or clinic they booked.</summary>
+public sealed record GuestContactDto(string Name, string Email, string Phone);
 
 /// <summary>
 /// A booking request.

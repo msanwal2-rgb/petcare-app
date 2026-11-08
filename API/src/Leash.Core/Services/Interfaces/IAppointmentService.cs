@@ -168,6 +168,15 @@ public interface IAppointmentService
     Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)> CreateAsync(
         string callerId, CreateAppointmentRequest input, CancellationToken ct = default);
 
+    /// <summary>
+    /// The same rules as <see cref="CreateAsync"/>, inside the caller's
+    /// transaction, uncommitted. For a write that must land with the
+    /// appointment or not at all (a guest and their pet, STATUS §3-G).
+    /// </summary>
+    Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)> CreateInAsync(
+        string callerId, CreateAppointmentRequest input, Leash.Core.Persistence.ITransactionScope scope,
+        CancellationToken ct = default);
+
     /// <summary>Move an appointment. Legality first, then authority.</summary>
     Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)> UpdateStatusAsync(
         string callerId, string appointmentId, string status,

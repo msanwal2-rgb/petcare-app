@@ -53,12 +53,34 @@ public static class AccountStatus
     /// author; the personal data on it is scrubbed (REQUIREMENTS.md A16).
     /// </summary>
     public const string Deleted = "deleted";
+
+    /// <summary>
+    /// Somebody who booked without an account (STATUS §3-G). No password, so
+    /// no sign-in; the row exists because a booking and a pet need an owner.
+    /// </summary>
+    public const string Guest = "guest";
+
+    /// <summary>
+    /// A guest who asked to keep their details: sent a set-password link, not
+    /// yet used. Cannot sign in either.
+    /// </summary>
+    public const string Pending = "pending";
+
+    /// <summary>
+    /// Guest or pending — a row nobody has proved they own. Only these may be
+    /// booked against by email, and only these may be activated by a
+    /// set-password link.
+    /// </summary>
+    public static bool IsUnclaimed(string status) => status is Guest or Pending;
 }
 
 public static class TokenTypes
 {
     public const string VerifyEmail = "verify_email";
     public const string ResetPassword = "reset_password";
+
+    /// <summary>A guest choosing their first password, which activates the account (STATUS §3-G).</summary>
+    public const string SetPassword = "set_password";
 }
 
 /// <summary>

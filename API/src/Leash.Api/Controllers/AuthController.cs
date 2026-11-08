@@ -50,7 +50,20 @@ public sealed class AuthController(
 
         var user = await auth.RegisterAsync(request, ct);
         if (user is null)
-            return ApiResults.Conflict("An account with that email already exists");
+        {
+            // Somebody who booked as a guest (STATUS §3-G): no account to sign
+            // in to yet, so they get the set-password link for theirs. Sign-up
+            // already answers 409 for a taken address, so this tells a caller
+            // nothing that answer did not.
+            var setup = await emails.RequestAccountSetupAsync(request.Email, ct);
+            return setup is null
+                ? ApiResults.Conflict("An account with that email already exists")
+                : ApiResults.Conflict(
+                    "You've booked with us before. We've emailed you a link to set your password.",
+                    devMode.Enabled
+                        ? new { code = "finish_setup", devLink = setup }
+                        : (object)new { code = "finish_setup" });
+        }
 
         // Best-effort. A mail provider being down is not a reason to throw away
         // an account somebody just created — they can ask for another link from
@@ -202,6 +215,26 @@ public sealed class AuthController(
             : ApiResults.BadRequest("This reset link is invalid or has expired");
     }
 
+    // ── POST /auth/set-password — a guest's first password (STATUS §3-G) ─
+
+    [HttpPost("set-password")]
+    public async Task<IActionResult> SetPassword(SetPasswordRequest request, CancellationToken ct)
+    {
+        if (await Throttle(RateLimits.SetPassword, ClientKey(), ct) is { } limited)
+            return limited;
+
+        var user = await emails.SetPasswordAsync(request.Token, request.Password, ct);
+        if (user is null)
+            return ApiResults.BadRequest(
+                "This link has expired or was already used. Ask for a new one with Forgot password.");
+
+        // Signed in, as at sign-up: they just chose the password, and making
+        // them type it again straight away buys nothing.
+        var response = await EstablishSessionAsync(user, ct);
+        await auth.TouchLastLoginAsync(user.Id, ct);
+        return Ok(response);
+    }
+
     // ── POST /auth/refresh — mobile token rotation ───────────────────────
 
     [HttpPost("refresh")]
@@ -282,6 +315,7 @@ public sealed class AuthController(
             return Redirect(failure switch
             {
                 OAuthFailure.AccountExists => "/login?error=AccountExists",
+                OAuthFailure.FinishSetup => "/login?error=FinishSetup",
                 _ => "/login?error=EmailUnverified",
             });
         }

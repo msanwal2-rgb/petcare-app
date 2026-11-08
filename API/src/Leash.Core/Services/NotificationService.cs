@@ -157,7 +157,9 @@ public sealed class NotificationOutbox(
 
             // A suspended or deleted account is not emailed about its bookings.
             // Deleted accounts have had their address scrubbed (A16) anyway.
-            if (delivery.RecipientStatus != AccountStatus.Active)
+            // A guest is (STATUS §3-G): their inbox is all they have to go on.
+            if (delivery.RecipientStatus != AccountStatus.Active
+                && !AccountStatus.IsUnclaimed(delivery.RecipientStatus))
             {
                 await notifications.CompleteAsync(
                     delivery.Id, delivery.LockedAt, OutboxStatuses.Skipped, null,

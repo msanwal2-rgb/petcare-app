@@ -78,20 +78,30 @@ public sealed class PushChannel : INotificationChannel
 /// </summary>
 public static class NotificationEmail
 {
+    /// <summary>The forgot-password page, worded for a guest: it emails them a set-password link.</summary>
+    public const string GuestSetupPath = "/forgot-password?setup=1";
+
     public static MailMessage Render(OutboxDeliveryEntity d, AppOrigin origin)
     {
         var firstName = d.RecipientName.Split(' ', 2)[0];
-        var link = SafePath(d.Href) is { } path ? origin.Url(path) : null;
+
+        // A guest cannot open the page the href names — it needs a session they
+        // do not have yet (STATUS §3-G). Their link is to setting up the
+        // account instead, which then shows them the booking.
+        var guest = AccountStatus.IsUnclaimed(d.RecipientStatus);
+        var link = guest ? origin.Url(GuestSetupPath)
+            : SafePath(d.Href) is { } path ? origin.Url(path) : null;
+        var cta = guest ? "Set a password to see it on Leash" : "View it on Leash";
 
         var line = string.IsNullOrEmpty(d.Body) ? d.Title : $"{d.Title}\n\n{d.Body}";
         var text = $"Hi {firstName},\n\n{line}\n\n"
-                   + (link is null ? "" : $"{link}\n\n")
+                   + (link is null ? "" : guest ? $"{cta}: {link}\n\n" : $"{link}\n\n")
                    + "Leash";
 
         var html = $"<p>Hi {E(firstName)},</p>"
                    + $"<p><strong>{E(d.Title)}</strong></p>"
                    + (string.IsNullOrEmpty(d.Body) ? "" : $"<p>{E(d.Body)}</p>")
-                   + (link is null ? "" : $"<p><a href=\"{E(link)}\">View it on Leash</a></p>")
+                   + (link is null ? "" : $"<p><a href=\"{E(link)}\">{E(cta)}</a></p>")
                    + "<p>— Leash</p>";
 
         // The outbox row id: a retry after a send whose acknowledgement was

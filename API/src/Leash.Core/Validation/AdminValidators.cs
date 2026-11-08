@@ -17,7 +17,8 @@ public sealed class AdminUserQueryValidator : AbstractValidator<AdminUserQuery>
         RuleFor(q => q.StaffRole!).Must(StaffRoles.IsValid).When(q => q.StaffRole is not null)
             .WithMessage("Unknown staff role");
         RuleFor(q => q.Status!)
-            .Must(s => s is AccountStatus.Active or AccountStatus.Suspended or AccountStatus.Deleted)
+            .Must(s => s is AccountStatus.Active or AccountStatus.Suspended or AccountStatus.Deleted
+                or AccountStatus.Guest or AccountStatus.Pending)
             .When(q => q.Status is not null).WithMessage("Unknown status");
         RuleFor(q => q.AuthMethod!).Must(m => m is "password" or "google")
             .When(q => q.AuthMethod is not null).WithMessage("Sign-in method must be password or google");

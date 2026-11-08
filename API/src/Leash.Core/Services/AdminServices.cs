@@ -153,6 +153,12 @@ public sealed class AdminUserService(
             case "reactivate":
                 if (user.Status == AccountStatus.Deleted)
                     return (null, new AdminRefusal(AdminFailure.Conflict, "A deleted account cannot be reactivated"));
+
+                // Active with no password is an account nobody can reach; a
+                // guest activates their own from the emailed link (STATUS §3-G).
+                if (AccountStatus.IsUnclaimed(user.Status))
+                    return (null, new AdminRefusal(AdminFailure.Conflict,
+                        "This is a guest who hasn't set a password yet. They activate the account themselves from the link we emailed."));
                 await admin.ReactivateAsync(userId, scope, ct);
                 await audit.RecordAsync(actor, "user.reactivate", "user", userId, $"Reactivated {user.Email}", scope: scope, ct: ct);
                 break;

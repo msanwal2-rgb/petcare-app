@@ -98,6 +98,7 @@ public static class DependencyInjection
         services.AddSingleton<IVetService, VetService>();
         services.AddSingleton<IAppointmentService, AppointmentService>();
         services.AddSingleton<IBookingService, BookingService>();
+        services.AddSingleton<IGuestBookingService, GuestBookingService>();
         services.AddSingleton<IMessageService, MessageService>();
         services.AddSingleton<IReviewService, ReviewService>();
         services.AddSingleton<IReputationService, ReputationService>();

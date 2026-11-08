@@ -65,6 +65,30 @@ public static class RateLimits
         "auth:refresh", 60, TimeSpan.FromHours(1),
         "Too many refresh attempts. Sign in again.");
 
+    // ── Booking as a guest (STATUS §3-G) ──
+    //
+    // The two public routes write a user, a pet and a booking request a real
+    // caretaker or clinic has to answer. Per client, an hour and a day, both
+    // guest routes together; per email, so one address cannot be used to
+    // flood someone's inbox or a provider's queue.
+
+    public static readonly RateLimitRule GuestBookingClient = new(
+        "guest-booking:client", 5, TimeSpan.FromHours(1),
+        "Too many booking requests from here. Try again later, or sign in.");
+
+    public static readonly RateLimitRule GuestBookingClientDaily = new(
+        "guest-booking:client-day", 20, TimeSpan.FromDays(1),
+        "Too many booking requests from here. Try again later, or sign in.");
+
+    public static readonly RateLimitRule GuestBookingEmail = new(
+        "guest-booking:email", 3, TimeSpan.FromHours(1),
+        "Too many booking requests from here. Try again later, or sign in.");
+
+    /// <summary>The token is the only thing between a caller and an account; guessing at it is not free.</summary>
+    public static readonly RateLimitRule SetPassword = new(
+        "auth:set-password", 10, TimeSpan.FromHours(1),
+        "Too many attempts. Use the newest link we emailed you, or ask for another.");
+
     /// <summary>Starting a membership checkout: creates a customer and a session at the provider.</summary>
     /// <summary>Writes from the admin console, per member of staff.</summary>
     public static readonly RateLimitRule AdminWrite = new(

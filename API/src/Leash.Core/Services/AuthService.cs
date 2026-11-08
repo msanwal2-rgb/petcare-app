@@ -129,6 +129,12 @@ public sealed class AuthService(
             if (existing.PasswordHash is not null)
                 return new OAuthResult(null, false, OAuthFailure.AccountExists);
 
+            // A guest has no password either (STATUS §3-G), but is not an
+            // account Google can be linked to: it cannot hold a session until
+            // its owner has set a password from the emailed link.
+            if (AccountStatus.IsUnclaimed(existing.Status))
+                return new OAuthResult(null, false, OAuthFailure.FinishSetup);
+
             var adopted = await users.AdoptGoogleIdAsync(existing.Id, identity.GoogleId, scope, ct);
             await scope.CommitAsync(ct);
             return new OAuthResult(adopted!.ToDto(), false, null);

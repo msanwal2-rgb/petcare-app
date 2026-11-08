@@ -21,6 +21,7 @@ public sealed class AppointmentService(
     IReputationService reputation,
     INotifier notifier,
     IEntitlementService entitlements,
+    IUserRepository users,
     IUnitOfWork unitOfWork) : IAppointmentService
 {
     /// <summary>
@@ -77,9 +78,17 @@ public sealed class AppointmentService(
             return (null, AppointmentFailure.NotParticipant);
 
         var appointment = await appointments.GetByIdAsync(appointmentId, ct: ct);
-        return appointment is null
-            ? (null, AppointmentFailure.NotFound)
-            : (appointment.ToDto(), null);
+        if (appointment is null) return (null, AppointmentFailure.NotFound);
+
+        // The clinic reading a guest's visit (STATUS §3-G): a guest has no
+        // account to be reached through, so this is how.
+        var dto = appointment.ToDto();
+        if (appointment.OwnerId != callerId
+            && await users.GetByIdAsync(appointment.OwnerId, ct: ct) is { } owner
+            && AccountStatus.IsUnclaimed(owner.Status))
+            dto = dto with { GuestContact = new GuestContactDto(owner.Name, owner.Email, owner.Phone) };
+
+        return (dto, null);
     }
 
     public async Task<AppointmentPage> ListMineAsync(
@@ -204,6 +213,22 @@ public sealed class AppointmentService(
         CreateAsync(string callerId, CreateAppointmentRequest input,
             CancellationToken ct = default)
     {
+        await using var scope = await unitOfWork.BeginAsync(ct);
+
+        var result = await CreateInAsync(callerId, input, scope, ct);
+        if (result.Failure is null) await scope.CommitAsync(ct);
+        return result;
+    }
+
+    /// <summary>
+    /// Every rule of <see cref="CreateAsync"/>, inside the caller's transaction
+    /// and without committing it — so a guest visit (STATUS §3-G) writes its
+    /// user, its pet and this appointment as one, by exactly these rules.
+    /// </summary>
+    public async Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)>
+        CreateInAsync(string callerId, CreateAppointmentRequest input, ITransactionScope scope,
+            CancellationToken ct = default)
+    {
         if (input.EndDateTime <= input.StartDateTime)
             return (null, AppointmentFailure.BadDates);
 
@@ -219,8 +244,6 @@ public sealed class AppointmentService(
 
         if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member))
             return (null, AppointmentFailure.LeadTime);
-
-        await using var scope = await unitOfWork.BeginAsync(ct);
 
         if (!await access.OwnsPetAsync(callerId, input.PetId, scope, ct))
             return (null, AppointmentFailure.NotYourPet);
@@ -278,7 +301,6 @@ public sealed class AppointmentService(
         // A new request is one more thing left unanswered until the clinic replies.
         await reputation.RefreshVetResponseRateAsync(created.VetId, scope, ct);
 
-        await scope.CommitAsync(ct);
         return (created.ToDto(), null);
     }
 

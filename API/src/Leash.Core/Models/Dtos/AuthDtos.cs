@@ -70,6 +70,12 @@ public enum OAuthFailure
 
     /// <summary>A password account already exists at that address. See IAuthService.</summary>
     AccountExists,
+
+    /// <summary>
+    /// The address belongs to a guest who has not set a password (STATUS §3-G).
+    /// Not linked: they finish setting up from the emailed link.
+    /// </summary>
+    FinishSetup,
 }
 
 public sealed record OAuthResult(UserDto? User, bool Created, OAuthFailure? Failure);

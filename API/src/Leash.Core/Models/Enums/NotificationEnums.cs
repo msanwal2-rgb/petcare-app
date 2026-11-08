@@ -36,6 +36,14 @@ public static class NotificationKinds
     /// have filed under Leash Plus.
     /// </summary>
     public const string ProfileVerified = "profile_verified";
+
+    /// <summary>
+    /// A guest's booking or visit request went through (STATUS §3-G). Signed-in
+    /// owners see their request on the page they are on; a guest has only
+    /// their inbox.
+    /// </summary>
+    public const string BookingRequested = "booking_requested";
+    public const string AppointmentRequested = "appointment_requested";
 }
 
 /// <summary>

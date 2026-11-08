@@ -27,6 +27,11 @@ public sealed class EmailFlowService(
 
         // Short, because it is a password bypass sitting in someone's inbox.
         [TokenTypes.ResetPassword] = TimeSpan.FromHours(1),
+
+        // A week: it arrives with a booking, and someone may only think about
+        // an account once the caretaker has answered. It can only ever activate
+        // an account nobody holds yet, so a long life gives nothing away.
+        [TokenTypes.SetPassword] = TimeSpan.FromDays(7),
     };
 
     public async Task<string> RequestEmailVerificationAsync(
@@ -72,6 +77,11 @@ public sealed class EmailFlowService(
         // No link and no error. The difference between "we sent one" and "no
         // such account" is an account-enumeration oracle.
         if (user is null) return null;
+
+        // A guest has no password to reset; what they need is their first one
+        // (STATUS §3-G). Same answer to the caller either way.
+        if (AccountStatus.IsUnclaimed(user.Status))
+            return await SetupForAsync(user.Id, user.Email, user.Name, ct);
 
         var raw = await IssueTokenAsync(user.Id, TokenTypes.ResetPassword, ct);
         var link = origin.Url($"/reset-password?token={Uri.EscapeDataString(raw)}");
@@ -125,6 +135,66 @@ public sealed class EmailFlowService(
         return true;
     }
 
+    // ── A guest becoming an account (STATUS §3-G) ────────────────────────
+
+    public Task<string> IssueSetPasswordTokenAsync(
+        string userId, ITransactionScope scope, CancellationToken ct = default)
+        => IssueTokenAsync(userId, TokenTypes.SetPassword, ct, scope);
+
+    public async Task<string> SendAccountSetupAsync(
+        string email, string name, string rawToken, string? about = null, CancellationToken ct = default)
+    {
+        var link = origin.Url($"/set-password?token={Uri.EscapeDataString(rawToken)}");
+
+        var intro = $"Hi {FirstName(name)}, choose a password to finish setting up your Leash account"
+                    + (about is null ? "." : $" — {about} will be waiting in it.")
+                    + " Then you can follow your bookings, message your caretaker or vet, and book again in a click."
+                    + " This link works once and expires in 7 days.";
+
+        var (html, text) = Shell("Finish setting up your account", intro, link, "Set your password");
+
+        await mailer.SendAsync(
+            new MailMessage(email, "Finish setting up your Leash account", html, text), ct);
+
+        return link;
+    }
+
+    public async Task<string?> RequestAccountSetupAsync(string email, CancellationToken ct = default)
+    {
+        var user = await users.GetByEmailAsync(email, ct: ct);
+        if (user is null || !AccountStatus.IsUnclaimed(user.Status)) return null;
+
+        return await SetupForAsync(user.Id, user.Email, user.Name, ct);
+    }
+
+    public async Task<UserDto?> SetPasswordAsync(
+        string rawToken, string password, CancellationToken ct = default)
+    {
+        // bcrypt outside the transaction, as for a reset.
+        var passwordHash = Passwords.Hash(password);
+        var now = Ids.Now();
+
+        await using var scope = await unitOfWork.BeginAsync(ct);
+
+        var userId = await ConsumeTokenAsync(rawToken, TokenTypes.SetPassword, scope, ct);
+        if (userId is null) return null;
+
+        // Conditional on the account still being unclaimed: a leftover link is
+        // not a way to set the password of an account somebody already holds.
+        var activated = await users.ActivateUnclaimedAsync(userId, passwordHash, now, scope, ct);
+        if (activated is null) return null;
+
+        await scope.CommitAsync(ct);
+        return activated.ToDto();
+    }
+
+    /// <summary>A fresh set-password token for this account, sent. The token commits before the mail goes.</summary>
+    private async Task<string> SetupForAsync(string userId, string email, string name, CancellationToken ct)
+    {
+        var raw = await IssueTokenAsync(userId, TokenTypes.SetPassword, ct);
+        return await SendAccountSetupAsync(email, name, raw, null, ct);
+    }
+
     /// <summary>
     /// Mint a token, store only its hash, and return the raw value to email.
     ///
@@ -133,14 +203,14 @@ public sealed class EmailFlowService(
     /// issued?", and a one-way function answers that.
     /// </summary>
     private async Task<string> IssueTokenAsync(
-        string identifier, string type, CancellationToken ct)
+        string identifier, string type, CancellationToken ct, ITransactionScope? scope = null)
     {
         var raw = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
         var now = Ids.Now();
 
         await tokens.CreateAsync(
             Ids.New("tok"), identifier, HashToken(raw), type,
-            now.Add(Ttl[type]), now, ct: ct);
+            now.Add(Ttl[type]), now, scope, ct);
 
         return raw;
     }

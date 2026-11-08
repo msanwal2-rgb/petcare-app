@@ -1,5 +1,6 @@
 using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
+using Leash.Core.Persistence;
 
 namespace Leash.Core.Services.Interfaces;
 
@@ -77,6 +78,39 @@ public interface IEmailFlowService
     /// </summary>
     Task<bool> ResetPasswordAsync(
         string rawToken, string newPassword, CancellationToken ct = default);
+
+    // ── A guest becoming an account (STATUS §3-G) ────────────────────────
+    //
+    // A set-password token is single-use, seven days, stored hashed, and only
+    // ever activates an account that is still a guest or pending. Issuing one
+    // replaces the previous (the repository deletes it in the same write).
+
+    /// <summary>
+    /// Mint a set-password token inside the caller's transaction and return the
+    /// raw value, to email once that transaction has committed. The raw token
+    /// can never go through the outbox, which stores what it sends.
+    /// </summary>
+    Task<string> IssueSetPasswordTokenAsync(
+        string userId, ITransactionScope scope, CancellationToken ct = default);
+
+    /// <summary>Email the "finish setting up your account" link for a token already issued; returns the link.</summary>
+    Task<string> SendAccountSetupAsync(
+        string email, string name, string rawToken, string? about = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Issue and send a set-password link to an unclaimed account at this
+    /// address. Null — and nothing sent — for any other address, claimed or
+    /// unknown. Used by forgot-password and by sign-up with a guest's email.
+    /// </summary>
+    Task<string?> RequestAccountSetupAsync(string email, CancellationToken ct = default);
+
+    /// <summary>
+    /// Spend a set-password token: the account becomes active and verified with
+    /// this password, in one transaction. Null for an unknown, used, expired
+    /// or wrong-type token, or an account that is no longer unclaimed.
+    /// </summary>
+    Task<UserDto?> SetPasswordAsync(
+        string rawToken, string password, CancellationToken ct = default);
 }
 
 /// <summary>Reads and projections of the <c>users</c> table.</summary>

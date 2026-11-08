@@ -100,6 +100,15 @@ public interface IBookingService
     Task<(BookingDto? Booking, BookingFailure? Failure)> CreateAsync(
         string callerId, CreateBookingRequest input, CancellationToken ct = default);
 
+    /// <summary>
+    /// The same rules as <see cref="CreateAsync"/>, inside the caller's transaction,
+    /// uncommitted. For a write that must land with the booking or not at all
+    /// (a guest and their pet, STATUS §3-G).
+    /// </summary>
+    Task<(BookingDto? Booking, BookingFailure? Failure)> CreateInAsync(
+        string callerId, CreateBookingRequest input, Leash.Core.Persistence.ITransactionScope scope,
+        CancellationToken ct = default);
+
     Task<(BookingDto? Booking, BookingFailure? Failure)> UpdateStatusAsync(
         string callerId, string bookingId, string status, CancellationToken ct = default);
 }

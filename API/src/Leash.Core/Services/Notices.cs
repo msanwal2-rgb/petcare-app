@@ -71,6 +71,25 @@ public static class Notices
         $"{reason} — your vet moved it. Check the new time still works; if it doesn't, you can cancel from the appointment.",
         $"/appointments/{appointmentId}");
 
+    /// <summary>
+    /// A guest's caretaker request went through (STATUS §3-G). No time in the
+    /// text, for the same reason as <see cref="AppointmentRescheduled"/>. The
+    /// href is the booking page, for the bell once they have an account; the
+    /// email points a guest at account setup instead (NotificationEmail).
+    /// </summary>
+    public static NotifyInput GuestBookingRequested(string bookingId, string caretakerName, string petName) => new(
+        NotificationKinds.BookingRequested,
+        $"We've sent your request to {caretakerName}",
+        $"Your request for {petName} is with them now. We'll email you when they accept or decline.",
+        $"/booking/{bookingId}");
+
+    /// <summary>A guest's vet visit request went through. The body quotes their own reason.</summary>
+    public static NotifyInput GuestAppointmentRequested(string appointmentId, string vetName, string petName, string reason) => new(
+        NotificationKinds.AppointmentRequested,
+        $"We've sent your visit request to {vetName}",
+        $"{reason} — for {petName}. We'll email you when the clinic confirms or declines.",
+        $"/appointments/{appointmentId}");
+
     /// <summary>A declined card, not a cancellation: the intent stays retryable.</summary>
     public static NotifyInput OrderPaymentFailed(string orderId) => new(
         NotificationKinds.OrderPaymentFailed,

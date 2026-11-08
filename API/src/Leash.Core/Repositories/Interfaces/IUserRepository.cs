@@ -79,6 +79,25 @@ public interface IUserRepository
         ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>
+    /// A guest who ticked "save my details" (STATUS §3-G): <c>guest</c> becomes
+    /// <c>pending</c>. Conditional on still being a guest, so it never
+    /// downgrades a pending account or touches a claimed one.
+    /// </summary>
+    Task PromoteGuestToPendingAsync(
+        string id, ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// A guest's first password: set the hash, make the account active and
+    /// verified (they used a link we emailed), start the session watermark.
+    /// Conditional on the row still being unclaimed with no password; null if
+    /// it is not, which is what stops a set-password link from resetting an
+    /// active account.
+    /// </summary>
+    Task<UserEntity?> ActivateUnclaimedAsync(
+        string id, string passwordHash, DateTimeOffset at,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
     /// Claim a Google id for an account that already exists. False when another
     /// account holds it, so one Google account cannot key two Leash accounts.
     /// </summary>

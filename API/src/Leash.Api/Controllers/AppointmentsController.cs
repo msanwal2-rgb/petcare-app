@@ -163,7 +163,7 @@ public sealed class AppointmentsController(
         };
     }
 
-    private IActionResult AppointmentError(AppointmentFailure failure, string id)
+    internal static IActionResult AppointmentError(AppointmentFailure failure, string id)
         => failure switch
         {
             // Not a participant reads as 404, not 403: appointment ids are

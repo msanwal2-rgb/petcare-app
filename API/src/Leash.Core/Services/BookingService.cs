@@ -18,6 +18,7 @@ public sealed class BookingService(
     IReputationService reputation,
     INotifier notifier,
     IEntitlementService entitlements,
+    IUserRepository users,
     IUnitOfWork unitOfWork) : IBookingService
 {
     /// <summary>
@@ -71,9 +72,23 @@ public sealed class BookingService(
             return (null, BookingFailure.NotParticipant);
 
         var booking = await bookings.GetByIdAsync(bookingId, ct: ct);
-        return booking is null
-            ? (null, BookingFailure.NotFound)
-            : (booking.ToDto(), null);
+        if (booking is null) return (null, BookingFailure.NotFound);
+
+        // The caretaker reading a guest's booking (STATUS §3-G): a guest cannot
+        // read messages, so this is how to reach them.
+        var dto = booking.ToDto();
+        if (booking.OwnerId != callerId && await GuestContactAsync(booking.OwnerId, ct) is { } contact)
+            dto = dto with { GuestContact = contact };
+
+        return (dto, null);
+    }
+
+    private async Task<GuestContactDto?> GuestContactAsync(string ownerId, CancellationToken ct)
+    {
+        var owner = await users.GetByIdAsync(ownerId, ct: ct);
+        return owner is not null && AccountStatus.IsUnclaimed(owner.Status)
+            ? new GuestContactDto(owner.Name, owner.Email, owner.Phone)
+            : null;
     }
 
     public async Task<BookingPage> ListMineAsync(
@@ -137,6 +152,22 @@ public sealed class BookingService(
     public async Task<(BookingDto? Booking, BookingFailure? Failure)> CreateAsync(
         string callerId, CreateBookingRequest input, CancellationToken ct = default)
     {
+        await using var scope = await unitOfWork.BeginAsync(ct);
+
+        var result = await CreateInAsync(callerId, input, scope, ct);
+        if (result.Failure is null) await scope.CommitAsync(ct);
+        return result;
+    }
+
+    /// <summary>
+    /// Every rule of <see cref="CreateAsync"/>, inside the caller's transaction
+    /// and without committing it — so a guest booking (STATUS §3-G) writes its
+    /// user, its pet and this booking as one, by exactly these rules. Disposing
+    /// the scope after a failure leaves nothing behind.
+    /// </summary>
+    public async Task<(BookingDto? Booking, BookingFailure? Failure)> CreateInAsync(
+        string callerId, CreateBookingRequest input, ITransactionScope scope, CancellationToken ct = default)
+    {
         if (input.EndDateTime <= input.StartDateTime)
             return (null, BookingFailure.BadDates);
 
@@ -145,8 +176,6 @@ public sealed class BookingService(
         var member = await entitlements.HasEntitlementAsync(callerId, Entitlements.PriorityBooking, ct: ct);
         if (!LeadTime.IsMet(input.StartDateTime, Ids.Now(), member))
             return (null, BookingFailure.LeadTime);
-
-        await using var scope = await unitOfWork.BeginAsync(ct);
 
         foreach (var petId in input.PetIds)
         {
@@ -195,7 +224,6 @@ public sealed class BookingService(
         // A new request is one more thing left unanswered until they reply.
         await reputation.RefreshCaretakerResponseRateAsync(created.CaretakerId, scope, ct);
 
-        await scope.CommitAsync(ct);
         return (created.ToDto(), null);
     }
 

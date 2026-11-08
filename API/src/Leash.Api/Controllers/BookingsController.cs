@@ -143,7 +143,7 @@ public sealed class BookingsController(
         };
     }
 
-    private IActionResult BookingError(BookingFailure failure, string id) => failure switch
+    internal static IActionResult BookingError(BookingFailure failure, string id) => failure switch
     {
         // Not a participant reads as 404, not 403: booking ids are sequential,
         // and a caller who can tell "no such booking" from "not yours" can count

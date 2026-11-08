@@ -1,6 +1,7 @@
 using Dapper;
 using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
+using Leash.Core.Models.Enums;
 using Leash.Core.Persistence;
 using Leash.Core.Repositories.Interfaces;
 using Leash.Core.Security;
@@ -229,6 +230,37 @@ public sealed class UserRepository(NpgsqlDataSource db) : IUserRepository
             session.Transaction, cancellationToken: ct));
 
         return affected > 0;
+    }
+
+    public async Task PromoteGuestToPendingAsync(
+        string id, ITransactionScope? scope = null, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        await session.Connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE users SET status = @pending WHERE id = @id AND status = @guest",
+            new { id, pending = AccountStatus.Pending, guest = AccountStatus.Guest },
+            session.Transaction, cancellationToken: ct));
+    }
+
+    public async Task<UserEntity?> ActivateUnclaimedAsync(
+        string id, string passwordHash, DateTimeOffset at,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        return await session.Connection.QuerySingleOrDefaultAsync<UserEntity>(new CommandDefinition(
+            $"""
+             UPDATE users
+             SET "passwordHash" = @passwordHash, status = @active, verified = true,
+                 "sessionsValidFrom" = @at
+             WHERE id = @id AND status IN (@guest, @pending) AND "passwordHash" IS NULL
+             RETURNING {Columns}
+             """,
+            new
+            {
+                id, passwordHash, at,
+                active = AccountStatus.Active, guest = AccountStatus.Guest, pending = AccountStatus.Pending,
+            },
+            session.Transaction, cancellationToken: ct));
     }
 
     public async Task<bool> LinkGoogleAsync(

@@ -132,6 +132,13 @@ public sealed record AppointmentTimelineDto(
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public decimal? Fee { get; init; }
+
+    /// <summary>
+    /// How to reach a guest owner (STATUS §3-G), on the vet's single read
+    /// only, and only while the owner has no account. Absent otherwise.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GuestContactDto? GuestContact { get; init; }
 }
 
 /// <summary>
