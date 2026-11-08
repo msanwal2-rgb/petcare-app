@@ -165,6 +165,15 @@ public sealed class BookingService(
         if (rate is null || !caretaker.ServicesOffered.Contains(input.ServiceType))
             return (null, BookingFailure.ServiceNotOffered);
 
+        // STATUS §3-G: the drop-off and the pick-up must fall in hours the
+        // caretaker published. The form only offers those, but the form is a
+        // courtesy; this is the rule.
+        var calendar = await caretakers.ListAvailabilityAsync(input.CaretakerId, scope, ct);
+        if (!PublishedHours.CoversStay(
+                calendar.Select(d => d.ToDto()), input.StartDateTime, input.EndDateTime,
+                input.UtcOffsetMinutes ?? 0))
+            return (null, BookingFailure.NotAvailable);
+
         var booking = new BookingEntity
         {
             Id = Ids.New("b"),

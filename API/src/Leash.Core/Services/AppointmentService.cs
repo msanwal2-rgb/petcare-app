@@ -240,6 +240,15 @@ public sealed class AppointmentService(
         if (!vet.ConsultModes.Contains(input.Mode))
             return (null, AppointmentFailure.ModeNotOffered);
 
+        // STATUS §3-G: the visit must sit inside hours the clinic published.
+        // The form only offers those, but the form is a courtesy; this is the
+        // rule.
+        var calendar = await vets.ListAvailabilityAsync(input.VetId, scope, ct);
+        if (!PublishedHours.CoversVisit(
+                calendar.Select(d => d.ToDto()), input.StartDateTime, input.EndDateTime,
+                input.UtcOffsetMinutes ?? 0))
+            return (null, AppointmentFailure.NotAvailable);
+
         // V4: three numbers, snapshotted. A membership that lapses next month
         // does not rewrite what this appointment was quoted.
         var (baseFeeCents, appliedPct, feeCents) = ConsultFee(vet.ConsultFeeCents, discountPct);

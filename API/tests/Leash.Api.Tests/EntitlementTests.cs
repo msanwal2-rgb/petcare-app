@@ -39,6 +39,12 @@ public sealed class EntitlementTests(DatabaseFixture db) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await db.ResetAsync();
+
+        // Open both providers all day: these cases are about lead time and
+        // discounts, not the calendar (STATUS §3-G).
+        await Calendars.OpenVetAsync(db.ConnectionString, "v1");
+        await Calendars.OpenCaretakerAsync(db.ConnectionString, "c1");
+
         _core = new CoreHost(db.ConnectionString);
         _entitlements = _core.Get<IEntitlementService>();
     }

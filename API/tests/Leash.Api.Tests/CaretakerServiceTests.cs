@@ -379,6 +379,7 @@ public sealed class CaretakerServiceTests(DatabaseFixture db) : IAsyncLifetime
                 Pricing: [new PricingEntryDto(ServiceTypes.Walking, PricingUnits.Hour, 31m)],
                 null, null, null, null, null, null));
 
+        await Calendars.OpenCaretakerAsync(db.ConnectionString, Caretaker);   // STATUS §3-G
         var bookings = _core.Get<IBookingService>();
         var (booking, failure) = await bookings.CreateAsync(Owner, new CreateBookingRequest(
             Caretaker, ["p1"], ServiceTypes.Walking,

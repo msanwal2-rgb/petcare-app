@@ -29,10 +29,30 @@ public sealed class VetEndpointTests(DatabaseFixture db) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await db.ResetAsync();
+        await Calendars.OpenVetAsync(db.ConnectionString, "v1");   // STATUS §3-G
         _app = new LeashApp(db.ConnectionString);
     }
 
     public async Task DisposeAsync() => await _app.DisposeAsync();
+
+    [Fact]
+    public async Task An_hour_the_clinic_has_not_published_is_a_409_with_a_code()
+    {
+        await Calendars.CloseVetAsync(db.ConnectionString, "v1");
+        var maya = await SignedInAsync(Maya);
+        var start = Calendars.DaysAhead(3, hour: 10);
+
+        var response = await maya.PostAsJsonAsync("/api/v1/appointments", new
+        {
+            vetId = "v1", petId = "p1", mode = "in_clinic", reason = "Check-up", symptoms = Array.Empty<string>(),
+            startDateTime = start, endDateTime = start.AddMinutes(30), notes = "", utcOffsetMinutes = 0,
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await JsonOf(response);
+        Assert.Equal("not_available", body.GetProperty("code").GetString());
+        Assert.Equal("v1", body.GetProperty("vetId").GetString());
+    }
 
     private static async Task<JsonElement> JsonOf(HttpResponseMessage response)
         => JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;

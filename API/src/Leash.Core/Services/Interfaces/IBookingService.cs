@@ -29,6 +29,12 @@ public enum BookingFailure
     /// <summary>Too soon — the request does not clear the minimum lead time. 409.</summary>
     LeadTime,
 
+    /// <summary>
+    /// The drop-off or pick-up is not in the caretaker's published hours
+    /// (STATUS §3-G). 409, <c>code: "not_available"</c>.
+    /// </summary>
+    NotAvailable,
+
     /// <summary>One of the pets is not the caller's. 403.</summary>
     NotYourPet,
 

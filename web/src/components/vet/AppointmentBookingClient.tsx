@@ -8,6 +8,7 @@ import { createAppointment } from "@/api/appointments";
 import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
 import { fromDateTimeInputs } from "@/lib/calendar";
+import { utcOffsetMinutesAt } from "@/lib/availability";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Avatar } from "@/components/Avatar";
 import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
@@ -128,6 +129,8 @@ export function AppointmentBookingClient() {
         startDateTime: isoAt(date, slot.start),
         endDateTime: isoAt(date, slot.end),
         notes: notes.trim(),
+        // So the server reads the clinic's published hours in this zone (STATUS §3-G).
+        utcOffsetMinutes: utcOffsetMinutesAt(isoAt(date, slot.start)),
       });
       toast.success("Appointment requested", {
         description: `${vet.user.name} will confirm shortly.`,

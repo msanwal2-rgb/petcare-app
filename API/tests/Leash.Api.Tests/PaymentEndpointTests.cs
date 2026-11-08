@@ -91,7 +91,9 @@ public sealed class PaymentEndpointTests(DatabaseFixture db) : IAsyncLifetime
         Assert.True(after.GetProperty("shippingWaivedByMembership").GetBoolean());
 
         // The consultation discount, snapshotted onto the appointment (V4, V5).
-        var start = DateTimeOffset.UtcNow.AddDays(3);
+        // The clinic must be open then (STATUS §3-G).
+        await Calendars.OpenVetAsync(db.ConnectionString, "v1");
+        var start = Calendars.DaysAhead(3, hour: 10);
         var booked = await maya.PostAsJsonAsync("/api/v1/appointments", new
         {
             vetId = "v1", petId = "p1", mode = "in_clinic", reason = "Check-up", symptoms = Array.Empty<string>(),

@@ -24,6 +24,12 @@ export interface CreateBookingInput {
   startDateTime: string;
   endDateTime: string;
   notes?: string;
+  /**
+   * The browser's offset from UTC at the start, in minutes (UTC−6 is −360),
+   * so the server can read the caretaker's published local hours against the
+   * instants. `utcOffsetMinutesAt` in lib/availability.ts.
+   */
+  utcOffsetMinutes?: number;
 }
 
 /**

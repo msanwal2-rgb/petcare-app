@@ -1,6 +1,7 @@
 using FluentValidation;
 using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Enums;
+using Leash.Core.Services;
 
 namespace Leash.Core.Validation;
 
@@ -41,6 +42,12 @@ public sealed class CreateBookingValidator : AbstractValidator<CreateBookingRequ
             .WithMessage("The end time must be after the start time");
 
         RuleFor(b => b.Notes!).MaximumLength(2000).When(b => b.Notes is not null);
+
+        RuleFor(b => b.UtcOffsetMinutes!.Value)
+            .InclusiveBetween(-PublishedHours.MaxOffsetMinutes, PublishedHours.MaxOffsetMinutes)
+            .WithMessage("That time zone offset isn't a real one")
+            .OverridePropertyName("UtcOffsetMinutes")
+            .When(b => b.UtcOffsetMinutes is not null);
     }
 }
 

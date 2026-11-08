@@ -29,6 +29,12 @@ public enum AppointmentFailure
     /// <summary>This clinic does not offer that consult mode. 409.</summary>
     ModeNotOffered,
 
+    /// <summary>
+    /// The visit is not inside the clinic's published hours (STATUS §3-G).
+    /// 409, <c>code: "not_available"</c>.
+    /// </summary>
+    NotAvailable,
+
     /// <summary>The window ends at or before it starts. 400.</summary>
     BadDates,
 

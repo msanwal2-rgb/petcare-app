@@ -43,6 +43,11 @@ public sealed class BookingServiceTests(DatabaseFixture db) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await db.ResetAsync();
+
+        // The seed publishes July 2026 only. Open c1 all day so the cases about
+        // something else are not refused for availability (STATUS §3-G).
+        await Calendars.OpenCaretakerAsync(db.ConnectionString, Caretaker);
+
         _core = new CoreHost(db.ConnectionString);
         _bookings = _core.Get<IBookingService>();
     }
@@ -252,6 +257,80 @@ public sealed class BookingServiceTests(DatabaseFixture db) : IAsyncLifetime
         await _bookings.CreateAsync(Owner, NewBooking() with { PetIds = ["p3"] });
 
         Assert.Equal(before, (await _bookings.ListMineAsync(Owner, null, 100)).Items.Length);
+    }
+
+    // ── The published calendar (STATUS §3-G) ─────────────────────────────
+
+    [Fact]
+    public async Task Refuses_a_booking_when_the_caretaker_has_published_nothing()
+    {
+        await Calendars.CloseCaretakerAsync(db.ConnectionString, Caretaker);
+        var before = (await _bookings.ListMineAsync(Owner, null, 100)).Items.Length;
+
+        var (booking, failure) = await _bookings.CreateAsync(Owner, NewBooking());
+
+        Assert.Null(booking);
+        Assert.Equal(BookingFailure.NotAvailable, failure);
+        Assert.Equal(before, (await _bookings.ListMineAsync(Owner, null, 100)).Items.Length);
+    }
+
+    [Fact]
+    public async Task Refuses_a_booking_outside_the_published_hours()
+    {
+        var start = Calendars.DaysAhead(3, hour: 13);
+        await Calendars.CloseCaretakerAsync(db.ConnectionString, Caretaker);
+        await Calendars.SetCaretakerDayAsync(
+            db.ConnectionString, Caretaker, DateOnly.FromDateTime(start.UtcDateTime), ("08:00", "12:00"));
+
+        var (_, failure) = await _bookings.CreateAsync(
+            Owner, NewBooking() with { StartDateTime = start, EndDateTime = start.AddHours(1) });
+
+        Assert.Equal(BookingFailure.NotAvailable, failure);
+    }
+
+    [Fact]
+    public async Task Refuses_a_stay_whose_pick_up_day_is_closed()
+    {
+        var start = Calendars.DaysAhead(3, hour: 9);
+        await Calendars.CloseCaretakerAsync(db.ConnectionString, Caretaker);
+        await Calendars.SetCaretakerDayAsync(
+            db.ConnectionString, Caretaker, DateOnly.FromDateTime(start.UtcDateTime), ("08:00", "18:00"));
+
+        var (_, failure) = await _bookings.CreateAsync(
+            Owner, NewBooking() with
+            {
+                ServiceType = ServiceTypes.Sitting,
+                StartDateTime = start,
+                EndDateTime = start.AddDays(2),
+            });
+
+        Assert.Equal(BookingFailure.NotAvailable, failure);
+    }
+
+    [Fact]
+    public async Task Reads_the_published_hours_in_the_owners_zone()
+    {
+        // 09:00 at UTC-6 is 15:00 UTC: open at 08:00–12:00 local, closed if
+        // the server read the instant as UTC.
+        var localNine = new DateTimeOffset(
+            Calendars.DaysAhead(3, hour: 9).DateTime, TimeSpan.FromHours(-6));
+        await Calendars.CloseCaretakerAsync(db.ConnectionString, Caretaker);
+        await Calendars.SetCaretakerDayAsync(
+            db.ConnectionString, Caretaker, DateOnly.FromDateTime(localNine.DateTime), ("08:00", "12:00"));
+
+        var request = NewBooking() with
+        {
+            StartDateTime = localNine.ToUniversalTime(),
+            EndDateTime = localNine.ToUniversalTime().AddHours(1),
+        };
+
+        var (asUtc, refused) = await _bookings.CreateAsync(Owner, request);
+        Assert.Null(asUtc);
+        Assert.Equal(BookingFailure.NotAvailable, refused);
+
+        var (booking, failure) = await _bookings.CreateAsync(Owner, request with { UtcOffsetMinutes = -360 });
+        Assert.Null(failure);
+        Assert.Equal(localNine.ToUniversalTime(), booking!.StartDateTime);
     }
 
     // ── Who may move a booking ───────────────────────────────────────────

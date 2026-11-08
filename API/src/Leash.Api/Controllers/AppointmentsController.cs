@@ -183,6 +183,10 @@ public sealed class AppointmentsController(
             AppointmentFailure.ModeNotOffered => ApiResults.Conflict(
                 "This vet doesn't offer that kind of consultation.", new { vetId = id }),
 
+            AppointmentFailure.NotAvailable => ApiResults.Conflict(
+                "The clinic isn't open then. Choose a time from their calendar.",
+                new { code = "not_available", vetId = id }),
+
             AppointmentFailure.BadDates =>
                 ApiResults.BadRequest("The end time must be after the start time"),
 

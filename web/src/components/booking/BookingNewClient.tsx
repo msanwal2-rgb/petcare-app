@@ -17,6 +17,8 @@ import { Field, Textarea } from "@/components/ui/Field";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { AuthRequired } from "@/components/AuthRequired";
 import { Avatar } from "@/components/Avatar";
+import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
+import { stayProblem, utcOffsetMinutesAt } from "@/lib/availability";
 import {
   SERVICE_LABELS,
   formatCurrency,
@@ -37,6 +39,12 @@ const STEPS = ["Details", "Review", "Confirm"];
  * same card (hours to the nearest, days rounded up, floored at one unit). The
  * owner is not sent either — it is the session. When the server refuses, its
  * reason is shown: most often the 24-hour notice a booking needs.
+ *
+ * The caretaker's published calendar sits above the dates (STATUS §3-G): the
+ * server refuses a drop-off or pick-up outside their open hours, so the form
+ * shows the hours, fills them in from a picked day, and says so before
+ * sending. The browser's offset goes with the request so the server reads
+ * those hours in the same zone.
  */
 export function BookingNewClient() {
   const [params] = useSearchParams();
@@ -110,12 +118,29 @@ export function BookingNewClient() {
     draft.startDateTime &&
     draft.endDateTime &&
     new Date(draft.endDateTime) > new Date(draft.startDateTime);
-  const detailsValid = draft.petIds.length > 0 && draft.serviceType && datesValid;
+  const outsideHours = datesValid
+    ? stayProblem(caretaker.profile.availability, draft.startDateTime, draft.endDateTime)
+    : null;
+  const detailsValid = draft.petIds.length > 0 && draft.serviceType && datesValid && !outsideHours;
+
+  /** A picked day starts the stay at its first open hour; the end follows if it no longer fits. */
+  function pickDay(date: string) {
+    const first = caretaker?.profile.availability.find((d) => d.date === date)?.slots[0];
+    if (!first) return;
+    const startDateTime = `${date}T${first.start}`;
+    const endStillFits = draft.endDateTime && new Date(draft.endDateTime) > new Date(startDateTime);
+    draft.set({
+      startDateTime,
+      endDateTime: endStillFits ? draft.endDateTime : `${date}T${first.end}`,
+    });
+  }
 
   function goReview() {
     setAttempted(true);
     if (!detailsValid) {
-      toast.error("Add a pet, a service, and a valid date range to continue.");
+      toast.error(
+        outsideHours ?? "Add a pet, a service, and a valid date range to continue.",
+      );
       return;
     }
     draft.set({ step: "review" });
@@ -134,6 +159,7 @@ export function BookingNewClient() {
         startDateTime: new Date(draft.startDateTime).toISOString(),
         endDateTime: new Date(draft.endDateTime).toISOString(),
         notes: draft.notes,
+        utcOffsetMinutes: utcOffsetMinutesAt(new Date(draft.startDateTime).toISOString()),
       });
       toast.success("Booking requested — we’ll notify you when it’s accepted.");
       draft.reset();
@@ -233,6 +259,21 @@ export function BookingNewClient() {
               </div>
             </div>
 
+            <div>
+              <h2 className="text-lg font-semibold text-ink">When?</h2>
+              <p className="mt-0.5 text-sm text-charcoal/60">
+                Drop-off and pick-up need to fall in{" "}
+                {caretaker.user.name.split(" ")[0]}’s open hours. Pick a day to see them.
+              </p>
+              <AvailabilityCalendar
+                className="mt-3"
+                availability={caretaker.profile.availability}
+                selectedDate={draft.startDateTime ? draft.startDateTime.slice(0, 10) : undefined}
+                onSelectDate={pickDay}
+                emptyLabel={`${caretaker.user.name.split(" ")[0]} hasn’t opened any days yet, so there’s nothing to book.`}
+              />
+            </div>
+
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Starts" htmlFor="start" error={attempted && !draft.startDateTime ? "Required" : undefined}>
                 <input
@@ -260,6 +301,11 @@ export function BookingNewClient() {
                   className="w-full rounded-xl border border-mist bg-white px-3.5 py-2.5 text-sm text-charcoal focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/15"
                 />
               </Field>
+              {outsideHours && (
+                <p role="alert" className="text-xs text-leash sm:col-span-2">
+                  {outsideHours}
+                </p>
+              )}
             </div>
 
             <Field label="Notes for your caretaker" htmlFor="notes" hint="Optional">

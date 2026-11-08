@@ -47,6 +47,12 @@ public sealed class AppointmentServiceTests(DatabaseFixture db) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await db.ResetAsync();
+
+        // The seed publishes July 2026 only. Open v1 and v2 all day so the cases
+        // about something else are not refused for availability (STATUS §3-G).
+        await Calendars.OpenVetAsync(db.ConnectionString, Vet);
+        await Calendars.OpenVetAsync(db.ConnectionString, "v2");
+
         _core = new CoreHost(db.ConnectionString);
         _appointments = _core.Get<IAppointmentService>();
         _records = _core.Get<IMedicalRecordService>();
@@ -55,15 +61,18 @@ public sealed class AppointmentServiceTests(DatabaseFixture db) : IAsyncLifetime
 
     public async Task DisposeAsync() => await _core.DisposeAsync();
 
-    /// <summary>A request comfortably clear of the 24-hour lead time.</summary>
+    /// <summary>
+    /// A request comfortably clear of the 24-hour lead time, at 10:00 UTC —
+    /// a whole visit inside one published day, never straddling midnight.
+    /// </summary>
     private static CreateAppointmentRequest NewAppointment() => new(
         VetId: Vet,
         PetId: "p1",
         Mode: ConsultModes.InClinic,
         Reason: "Limping after a long walk",
         Symptoms: ["Limping"],
-        StartDateTime: DateTimeOffset.UtcNow.AddDays(3),
-        EndDateTime: DateTimeOffset.UtcNow.AddDays(3).AddMinutes(30),
+        StartDateTime: Calendars.DaysAhead(3, hour: 10),
+        EndDateTime: Calendars.DaysAhead(3, hour: 10, minute: 30),
         Notes: "");
 
     // ── Reads ────────────────────────────────────────────────────────────
@@ -314,6 +323,70 @@ public sealed class AppointmentServiceTests(DatabaseFixture db) : IAsyncLifetime
 
         Assert.Equal(
             before, (await _appointments.ListMineAsync(Owner, null, 100)).Items.Length);
+    }
+
+    // ── The published calendar (STATUS §3-G) ─────────────────────────────
+
+    [Fact]
+    public async Task Refuses_an_appointment_when_the_vet_has_published_nothing()
+    {
+        await Calendars.CloseVetAsync(db.ConnectionString, Vet);
+        var before = (await _appointments.ListMineAsync(Owner, null, 100)).Items.Length;
+
+        var (appointment, failure) = await _appointments.CreateAsync(Owner, NewAppointment());
+
+        Assert.Null(appointment);
+        Assert.Equal(AppointmentFailure.NotAvailable, failure);
+        Assert.Equal(
+            before, (await _appointments.ListMineAsync(Owner, null, 100)).Items.Length);
+    }
+
+    [Fact]
+    public async Task Refuses_a_visit_that_is_not_inside_one_published_set()
+    {
+        var day = DateOnly.FromDateTime(Calendars.DaysAhead(3, 0).UtcDateTime);
+        await Calendars.CloseVetAsync(db.ConnectionString, Vet);
+        await Calendars.SetVetDayAsync(db.ConnectionString, Vet, day, ("09:00", "12:00"), ("13:00", "17:00"));
+
+        var (_, overLunch) = await _appointments.CreateAsync(Owner, NewAppointment() with
+        {
+            StartDateTime = Calendars.DaysAhead(3, 11, 45),
+            EndDateTime = Calendars.DaysAhead(3, 13, 15),
+        });
+        Assert.Equal(AppointmentFailure.NotAvailable, overLunch);
+
+        var (inside, failure) = await _appointments.CreateAsync(Owner, NewAppointment() with
+        {
+            StartDateTime = Calendars.DaysAhead(3, 13),
+            EndDateTime = Calendars.DaysAhead(3, 13, 30),
+        });
+        Assert.Null(failure);
+        Assert.NotNull(inside);
+    }
+
+    [Fact]
+    public async Task Reads_the_clinics_hours_in_the_owners_zone()
+    {
+        // 09:00 at UTC+5 is 04:00 UTC — closed if read as UTC.
+        var localNine = new DateTimeOffset(
+            Calendars.DaysAhead(3, hour: 9).DateTime, TimeSpan.FromHours(5));
+        await Calendars.CloseVetAsync(db.ConnectionString, Vet);
+        await Calendars.SetVetDayAsync(
+            db.ConnectionString, Vet, DateOnly.FromDateTime(localNine.DateTime), ("09:00", "12:00"));
+
+        var request = NewAppointment() with
+        {
+            StartDateTime = localNine.ToUniversalTime(),
+            EndDateTime = localNine.ToUniversalTime().AddMinutes(30),
+        };
+
+        var (_, refused) = await _appointments.CreateAsync(Owner, request);
+        Assert.Equal(AppointmentFailure.NotAvailable, refused);
+
+        var (appointment, failure) = await _appointments.CreateAsync(
+            Owner, request with { UtcOffsetMinutes = 300 });
+        Assert.Null(failure);
+        Assert.NotNull(appointment);
     }
 
     // ── Who may move an appointment ──────────────────────────────────────

@@ -160,6 +160,10 @@ public sealed class BookingsController(
         BookingFailure.BadDates =>
             ApiResults.BadRequest("The end time must be after the start time"),
 
+        BookingFailure.NotAvailable => ApiResults.Conflict(
+            "The caretaker isn't available then. Choose a time from their calendar.",
+            new { code = "not_available", caretakerId = id }),
+
         BookingFailure.LeadTime => ApiResults.Conflict(
             $"Bookings need at least {Core.Services.LeadTime.StandardHours} "
             + "hours' notice.",

@@ -27,6 +27,7 @@ public sealed class BookingEndpointTests(DatabaseFixture db) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await db.ResetAsync();
+        await Calendars.OpenCaretakerAsync(db.ConnectionString, "c1");   // STATUS §3-G
         _app = new LeashApp(db.ConnectionString);
     }
 
@@ -192,6 +193,45 @@ public sealed class BookingEndpointTests(DatabaseFixture db) : IAsyncLifetime
         Assert.Equal(28m, booking.GetProperty("priceTotal").GetDecimal());
         Assert.Equal("u1", booking.GetProperty("ownerId").GetString());
         Assert.Equal("requested", booking.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task A_time_the_caretaker_has_not_published_is_a_409_with_a_code()
+    {
+        await Calendars.CloseCaretakerAsync(db.ConnectionString, "c1");
+        var client = await SignedInAsync(OwnerEmail);
+        var start = Calendars.DaysAhead(3, hour: 10);
+
+        var response = await client.PostAsJsonAsync("/api/v1/bookings", new
+        {
+            caretakerId = "c1", petIds = new[] { "p1" }, serviceType = "walking",
+            startDateTime = start, endDateTime = start.AddHours(1), notes = "", utcOffsetMinutes = 0,
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var body = await JsonOf(response);
+        Assert.Equal("not_available", body.GetProperty("code").GetString());
+        Assert.Equal("c1", body.GetProperty("caretakerId").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("error").GetString()));
+    }
+
+    [Theory]
+    [InlineData(-841)]
+    [InlineData(841)]
+    public async Task An_impossible_zone_offset_is_a_400(int offset)
+    {
+        var client = await SignedInAsync(OwnerEmail);
+        var start = Calendars.DaysAhead(3, hour: 10);
+
+        var response = await client.PostAsJsonAsync("/api/v1/bookings", new
+        {
+            caretakerId = "c1", petIds = new[] { "p1" }, serviceType = "walking",
+            startDateTime = start, endDateTime = start.AddHours(1), notes = "", utcOffsetMinutes = offset,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var issues = (await JsonOf(response)).GetProperty("issues");
+        Assert.Contains(issues.EnumerateArray(), i => i.GetProperty("path").GetString() == "utcOffsetMinutes");
     }
 
     [Fact]

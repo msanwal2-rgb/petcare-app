@@ -152,7 +152,12 @@ public sealed record CreateAppointmentRequest(
     string[]? Symptoms,
     DateTimeOffset StartDateTime,
     DateTimeOffset EndDateTime,
-    string? Notes);
+    string? Notes,
+
+    // The browser's offset from UTC in minutes (UTC+5 is 300), so the
+    // clinic's published local hours can be read against these instants
+    // (STATUS §3-G). Absent means UTC.
+    int? UtcOffsetMinutes = null);
 
 /// <summary>A status move. The actor is derived from the caller, never sent.</summary>
 public sealed record UpdateAppointmentStatusRequest(string Status);

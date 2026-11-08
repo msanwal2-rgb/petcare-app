@@ -80,6 +80,76 @@ export function toMap(availability: AvailabilityDay[]): Map<string, Slot[]> {
   return new Map(availability.map((d) => [d.date, d.slots]));
 }
 
+// ── Reading a request against the calendar ────────────────────────────────
+//
+// The same rules as the API's `PublishedHours` (STATUS §3-G), which is the one
+// that decides; these only let the form say so before sending. Hours are the
+// browser's local clock, which is what the provider published in.
+
+/** The browser's offset from UTC at that instant, in minutes — what the API wants as `utcOffsetMinutes`. */
+export function utcOffsetMinutesAt(iso: string): number {
+  // getTimezoneOffset is UTC − local; the API wants local − UTC. `|| 0` keeps
+  // UTC itself from being sent as −0.
+  return -new Date(iso).getTimezoneOffset() || 0;
+}
+
+const DAY_MINUTES = 24 * 60;
+
+function clockMinutes(hhmm: string): number | null {
+  if (!CLOCK.test(hhmm)) return null;
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** A day's open hours as minute ranges; a set ending 23:59 runs to midnight. */
+function openSets(published: Map<string, Slot[]>, key: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = [];
+  for (const s of published.get(key) ?? []) {
+    const start = clockMinutes(s.start);
+    let end = clockMinutes(s.end);
+    if (start === null || end === null) continue;
+    if (end === DAY_MINUTES - 1) end = DAY_MINUTES;
+    if (end > start) out.push({ start, end });
+  }
+  return out;
+}
+
+function minuteOfDay(d: Date): number {
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
+
+/**
+ * Why a caretaker booking falls outside the published hours, or null when it
+ * does not: the drop-off must be in open hours on its day (before closing),
+ * the pick-up in open hours on its day (closing time included).
+ */
+export function stayProblem(
+  availability: AvailabilityDay[],
+  startIso: string,
+  endIso: string,
+): string | null {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (!(end > start)) return null; // the dates' own message covers this
+
+  const published = toMap(availability);
+
+  const startMinute = minuteOfDay(start);
+  if (!openSets(published, dayKey(start)).some((s) => s.start <= startMinute && startMinute < s.end)) {
+    return "The drop-off isn’t during their open hours. Pick a time from their calendar.";
+  }
+
+  const endMinute = minuteOfDay(end);
+  const pickUpOpen =
+    openSets(published, dayKey(end)).some((s) => s.start <= endMinute && endMinute <= s.end) ||
+    (endMinute === 0 && openSets(published, dayKey(addDays(end, -1))).some((s) => s.end >= DAY_MINUTES));
+  if (!pickUpOpen) {
+    return "The pick-up isn’t during their open hours. Pick a time from their calendar.";
+  }
+
+  return null;
+}
+
 /** A sensible next set of hours after the last one: an hour later, an hour long. */
 export function nextSlot(slots: Slot[]): Slot {
   const last = sortSlots(slots).at(-1);

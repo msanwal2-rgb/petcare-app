@@ -33,6 +33,12 @@ export interface CreateAppointmentInput {
   startDateTime: string;
   endDateTime: string;
   notes?: string;
+  /**
+   * The browser's offset from UTC at the start, in minutes (UTC+5 is 300), so
+   * the server can read the clinic's published local hours against the
+   * instants. `utcOffsetMinutesAt` in lib/availability.ts.
+   */
+  utcOffsetMinutes?: number;
 }
 
 /**

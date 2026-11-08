@@ -33,7 +33,12 @@ public sealed record CreateBookingRequest(
     string ServiceType,
     DateTimeOffset StartDateTime,
     DateTimeOffset EndDateTime,
-    string? Notes);
+    string? Notes,
+
+    // The browser's offset from UTC in minutes (UTC−6 is −360), so the
+    // caretaker's published local hours can be read against these instants
+    // (STATUS §3-G). Absent means UTC.
+    int? UtcOffsetMinutes = null);
 
 /// <summary>A status move. The actor is derived from the caller, never sent.</summary>
 public sealed record UpdateBookingStatusRequest(string Status);
