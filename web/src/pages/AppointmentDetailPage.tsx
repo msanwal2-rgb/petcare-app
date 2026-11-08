@@ -24,6 +24,7 @@ import { ReviewCard } from "@/components/ReviewCard";
 import { LeaveReview } from "@/components/reviews/LeaveReview";
 import { EmptyState } from "@/components/EmptyState";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { GuestContactCard } from "@/components/guest/GuestContactCard";
 import { Panel } from "@/components/ui/Panel";
 import { ProgressLeash } from "@/components/ui/ProgressLeash";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -248,6 +249,10 @@ export default function AppointmentDetailPage() {
             reload();
           }}
         />
+      )}
+
+      {isVet && appointment.guestContact && (
+        <GuestContactCard contact={appointment.guestContact} className="mb-6" />
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

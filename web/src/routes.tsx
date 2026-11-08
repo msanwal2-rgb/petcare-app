@@ -9,6 +9,8 @@ import NotFoundPage from "./pages/NotFoundPage";
 import {
   ForgotPasswordPage,
   ResetPasswordPage,
+  SetPasswordPage,
+  GuestRequestedPage,
   VerifyEmailPage,
   OnboardingPage,
   DashboardPage,
@@ -85,6 +87,10 @@ export const router = createBrowserRouter([
       { path: "signup", element: <SignupPage /> },
       { path: "forgot-password", element: <ForgotPasswordPage /> },
       { path: "reset-password", element: <ResetPasswordPage /> },
+
+      // Unguarded, like verify-email: the emailed link is the credential, and a
+      // guest opening it has no session yet (STATUS §3-G).
+      { path: "set-password", element: <SetPasswordPage /> },
 
       // Unguarded on purpose: the link arrives by email, and someone clicking
       // it from a phone they have never signed in on must still be able to
@@ -167,11 +173,14 @@ export const router = createBrowserRouter([
         // Before `booking/:id`, so "new" is not matched as a booking id.
         path: "booking/new",
         element: (
-          <RequireAuth>
+          <RequireAuth allowGuest>
             <BookingNewPage />
           </RequireAuth>
         ),
       },
+      // A guest's confirmation (STATUS §3-G). Before `booking/:id`, and
+      // unguarded: a guest has no session; it reads what the form handed it.
+      { path: "booking/requested", element: <GuestRequestedPage /> },
       {
         path: "booking/:id",
         element: (
@@ -191,7 +200,7 @@ export const router = createBrowserRouter([
         // Static, so it outranks `vets/:id` — "book" is never read as a vet id.
         path: "vets/book",
         element: (
-          <RequireAuth>
+          <RequireAuth allowGuest>
             <AppointmentNewPage />
           </RequireAuth>
         ),

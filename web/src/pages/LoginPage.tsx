@@ -10,11 +10,23 @@ import {
   loginAsDemo,
   loginWithGoogle,
   loginWithPassword,
+  safeInternalPath,
 } from "@/auth/session";
 import { DEMO_ACCOUNTS, DEMO_PASSWORD, type DemoRole } from "@/auth/demo";
 import { Field, Input } from "@/components/ui/Field";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { Avatar } from "@/components/Avatar";
+
+/**
+ * The booking forms a guest may use instead of signing in (STATUS §3-G). When
+ * someone was bounced here from one, the page offers to carry on as a guest:
+ * back to the same form, with `guest=1`, which the route guard lets through.
+ */
+function guestTargetFor(callbackUrl: string | null): string | null {
+  const path = safeInternalPath(callbackUrl);
+  if (!path || !/^\/(booking\/new|vets\/book)(\?|$)/.test(path)) return null;
+  return path + (path.includes("?") ? "&" : "?") + "guest=1";
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -27,6 +39,8 @@ export default function LoginPage() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [demoVisible, setDemoVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const guestTarget = guestTargetFor(searchParams.get("callbackUrl"));
 
   const errorCode = searchParams.get("error");
   const signInError = errorCode
@@ -172,6 +186,9 @@ export default function LoginPage() {
               Forgot your password?
             </Link>
           </p>
+          <p className="text-right text-xs text-charcoal/45">
+            Booked as a guest? Use “Forgot your password?” to set one.
+          </p>
         </form>
 
         {demoVisible && (
@@ -211,6 +228,19 @@ export default function LoginPage() {
           </>
         )}
       </div>
+
+      {guestTarget && (
+        <div className="mt-4 rounded-2xl border border-mist bg-fog/60 p-5">
+          <p className="text-sm font-semibold text-ink">No account? Book as a guest</p>
+          <p className="mt-1 text-sm text-charcoal/65">
+            Give us your details and your pet’s, and send the request. You can save them as an
+            account at the same time.
+          </p>
+          <ButtonLink to={guestTarget} variant="outline" className="mt-3 w-full">
+            Continue as guest
+          </ButtonLink>
+        </div>
+      )}
 
       <p className="mt-5 text-center text-sm text-charcoal/60">
         New to Leash?{" "}

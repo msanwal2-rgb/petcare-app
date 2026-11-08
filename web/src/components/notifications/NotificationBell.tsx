@@ -40,6 +40,8 @@ const ICON: Record<NotificationKind, typeof CheckIcon> = {
   adoption_completed: HeartIcon,
   adoption_reversed: AlertIcon,
   profile_verified: ShieldCheckIcon,
+  booking_requested: CalendarIcon,
+  appointment_requested: StethoscopeIcon,
 };
 
 /**

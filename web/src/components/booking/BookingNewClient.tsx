@@ -1,9 +1,21 @@
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getCaretaker } from "@/api/caretakers";
 import { listMyPets } from "@/api/pets";
 import { createBooking } from "@/api/bookings";
+import { bookCaretakerAsGuest } from "@/api/guest";
+import { ApiError } from "@/api/_client";
+import { GuestDetailsForm } from "@/components/guest/GuestDetailsForm";
+import {
+  EMPTY_GUEST,
+  guestProblems,
+  issueErrors,
+  toGuestContact,
+  toGuestPet,
+  type GuestErrors,
+} from "@/components/guest/guestDetails";
+import type { GuestRequestedState } from "@/pages/GuestRequestedPage";
 import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
 import { useBookingDraft } from "@/store/booking-draft";
@@ -45,6 +57,12 @@ const STEPS = ["Details", "Review", "Confirm"];
  * shows the hours, fills them in from a picked day, and says so before
  * sending. The browser's offset goes with the request so the server reads
  * those hours in the same zone.
+ *
+ * **As a guest** (`guest=1`, from the login page; STATUS §3-G) the pets step is
+ * "Your details & your pet" instead, and the request goes to
+ * `POST /guest/bookings`. The server writes the guest, a new pet and the
+ * booking together; there is no booking page for someone with no session, so
+ * the guest lands on /booking/requested.
  */
 export function BookingNewClient() {
   const [params] = useSearchParams();
@@ -54,6 +72,10 @@ export function BookingNewClient() {
   const draft = useBookingDraft();
   const [submitting, setSubmitting] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const guestMode = !currentUser && params.get("guest") === "1";
+  const [guest, setGuest] = useState(EMPTY_GUEST);
+  const [guestServerErrors, setGuestServerErrors] = useState<GuestErrors>({});
+  const [accountExists, setAccountExists] = useState(false);
 
   const { data: caretaker, loading: loadingCaretaker } = useAsync(
     () => (caretakerId ? getCaretaker(caretakerId) : Promise.resolve(null)),
@@ -93,7 +115,7 @@ export function BookingNewClient() {
   );
 
   if (!hasHydrated || (caretakerId && loadingCaretaker)) return <LoadingState />;
-  if (!currentUser)
+  if (!currentUser && !guestMode)
     return (
       <AuthRequired
         message="Log in to request a booking."
@@ -121,7 +143,14 @@ export function BookingNewClient() {
   const outsideHours = datesValid
     ? stayProblem(caretaker.profile.availability, draft.startDateTime, draft.endDateTime)
     : null;
-  const detailsValid = draft.petIds.length > 0 && draft.serviceType && datesValid && !outsideHours;
+  const guestErrors: GuestErrors = guestMode
+    ? { ...(attempted ? guestProblems(guest) : {}), ...guestServerErrors }
+    : {};
+  const whoValid = guestMode
+    ? Object.keys(guestProblems(guest)).length === 0
+    : draft.petIds.length > 0;
+  const detailsValid = whoValid && draft.serviceType && datesValid && !outsideHours;
+  const loginAgain = `/login?callbackUrl=${encodeURIComponent(`/booking/new?caretakerId=${caretakerId}`)}`;
 
   /** A picked day starts the stay at its first open hour; the end follows if it no longer fits. */
   function pickDay(date: string) {
@@ -139,7 +168,10 @@ export function BookingNewClient() {
     setAttempted(true);
     if (!detailsValid) {
       toast.error(
-        outsideHours ?? "Add a pet, a service, and a valid date range to continue.",
+        outsideHours ??
+          (guestMode
+            ? "Check your details and your pet’s, then pick a service and dates."
+            : "Add a pet, a service, and a valid date range to continue."),
       );
       return;
     }
@@ -147,7 +179,60 @@ export function BookingNewClient() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  async function confirmAsGuest() {
+    if (!caretaker || !draft.serviceType) return;
+    setSubmitting(true);
+    const startDateTime = new Date(draft.startDateTime).toISOString();
+    const endDateTime = new Date(draft.endDateTime).toISOString();
+    try {
+      const result = await bookCaretakerAsGuest({
+        guest: toGuestContact(guest),
+        pet: toGuestPet(guest),
+        booking: {
+          caretakerId: caretaker.profile.id,
+          serviceType: draft.serviceType,
+          startDateTime,
+          endDateTime,
+          notes: draft.notes,
+          utcOffsetMinutes: utcOffsetMinutesAt(startDateTime),
+        },
+        saveAccount: guest.saveAccount,
+      });
+      draft.reset();
+      const state: GuestRequestedState = {
+        what: "booking",
+        providerName: result.caretakerName,
+        petName: result.petName,
+        serviceLabel: SERVICE_LABELS[result.booking.serviceType],
+        startDateTime: result.booking.startDateTime,
+        endDateTime: result.booking.endDateTime,
+        price: result.booking.priceTotal,
+        email: guest.email.trim(),
+        accountEmailSent: result.accountEmailSent,
+        savedAccount: guest.saveAccount,
+        devLink: result.devLink,
+      };
+      navigate("/booking/requested", { state });
+    } catch (e) {
+      setSubmitting(false);
+      if (e instanceof ApiError && e.details?.code === "account_exists") {
+        setAccountExists(true);
+        draft.set({ step: "details" });
+        return;
+      }
+      const fieldErrors = issueErrors(e);
+      if (Object.keys(fieldErrors).length > 0) {
+        setGuestServerErrors(fieldErrors);
+        draft.set({ step: "details" });
+      }
+      toast.error("Couldn’t send that request", {
+        description: e instanceof Error ? e.message : "Please try again.",
+      });
+    }
+  }
+
   async function confirm() {
+    if (guestMode) return confirmAsGuest();
     if (!currentUser || !caretaker || !draft.serviceType) return;
     setSubmitting(true);
     try {
@@ -187,6 +272,32 @@ export function BookingNewClient() {
       <div className="rounded-2xl border border-mist bg-white p-6">
         {draft.step === "details" && (
           <div className="space-y-6">
+            {guestMode ? (
+              <>
+                {accountExists && (
+                  <p
+                    role="alert"
+                    className="rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-charcoal"
+                  >
+                    You already have a Leash account with that email.{" "}
+                    <Link to={loginAgain} className="font-medium text-leash underline">
+                      Log in to book
+                    </Link>
+                    .
+                  </p>
+                )}
+                <GuestDetailsForm
+                  value={guest}
+                  onChange={(next) => {
+                    setGuest(next);
+                    setGuestServerErrors({});
+                    if (next.email !== guest.email) setAccountExists(false);
+                  }}
+                  errors={guestErrors}
+                  providerName={caretaker.user.name.split(" ")[0]}
+                />
+              </>
+            ) : (
             <div>
               <h2 className="text-lg font-semibold text-ink">Who needs care?</h2>
               <p className="mt-0.5 text-sm text-charcoal/60">
@@ -222,6 +333,7 @@ export function BookingNewClient() {
                 <p className="mt-1.5 text-xs text-leash">Select at least one pet.</p>
               )}
             </div>
+            )}
 
             <div>
               <h2 className="text-lg font-semibold text-ink">Which service?</h2>
@@ -334,7 +446,9 @@ export function BookingNewClient() {
               <Row
                 label="Pets"
                 value={
-                  pets
+                  guestMode
+                    ? guest.petName.trim() || "—"
+                    : pets
                     ?.filter((p) => draft.petIds.includes(p.id))
                     .map((p) => p.name)
                     .join(", ") || "—"

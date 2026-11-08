@@ -1,11 +1,18 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { forgotPassword } from "@/api/auth";
 import { Field, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
+/**
+ * Forgot password. With `?setup=1` (the link in a guest's emails, STATUS §3-G)
+ * it is worded for somebody who booked as a guest: the same request, which the
+ * server answers by sending a guest a set-password link instead of a reset.
+ */
 export default function ForgotPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const setup = searchParams.get("setup") === "1";
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
@@ -27,9 +34,13 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-16 sm:px-6">
-      <h1 className="text-2xl font-semibold text-ink">Reset your password</h1>
+      <h1 className="text-2xl font-semibold text-ink">
+        {setup ? "Finish setting up your account" : "Reset your password"}
+      </h1>
       <p className="mt-1 text-sm text-charcoal/60">
-        Enter your email and we’ll send you a link to set a new password.
+        {setup
+          ? "Booked with us as a guest? Enter the email you booked with and we’ll send you a link to choose a password. Your bookings come with it."
+          : "Enter your email and we’ll send you a link to set a new password."}
       </p>
 
       <div className="mt-6 rounded-2xl border border-mist bg-white p-6">
@@ -42,12 +53,12 @@ export default function ForgotPasswordPage() {
               turn the form into a membership lookup.
             */}
             <p>
-              If an account exists for <strong>{email}</strong>, a reset link is on
-              its way. Check your inbox.
+              If we have <strong>{email}</strong>, a link is on its way. Check your
+              inbox.
             </p>
             {devLink && (
               <p className="mt-4 break-all rounded-lg bg-fog p-3 font-mono text-[11px]">
-                Dev mode — reset link:{" "}
+                Dev mode — link:{" "}
                 <a href={devLink} className="text-leash underline">
                   {devLink}
                 </a>
@@ -68,7 +79,7 @@ export default function ForgotPasswordPage() {
               />
             </Field>
             <Button type="submit" variant="cta" className="w-full" disabled={loading}>
-              {loading ? "Sending…" : "Send reset link"}
+              {loading ? "Sending…" : setup ? "Send me a link" : "Send reset link"}
             </Button>
           </form>
         )}

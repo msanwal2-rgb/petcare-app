@@ -66,6 +66,15 @@ export function resetPassword(token: string, password: string): Promise<OkRespon
 }
 
 /**
+ * POST /auth/set-password — a guest's first password, from the emailed link
+ * (STATUS §3-G). Activates the account and signs it in, like sign-up. A used,
+ * expired or made-up token is a 400.
+ */
+export function setPassword(token: string, password: string): Promise<AuthResponse> {
+  return postJson<AuthResponse>("/auth/set-password", { token, password });
+}
+
+/**
  * Where to send the browser to start Google sign-in.
  *
  * A full navigation, not a fetch: OAuth is a redirect flow, and the response to

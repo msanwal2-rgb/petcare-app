@@ -22,6 +22,7 @@ import { ReviewCard } from "@/components/ReviewCard";
 import { EmptyState } from "@/components/EmptyState";
 import { LeaveReview } from "@/components/reviews/LeaveReview";
 import { MessageThread } from "@/components/booking/MessageThread";
+import { GuestContactCard } from "@/components/guest/GuestContactCard";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Reveal } from "@/components/ui/Reveal";
@@ -254,6 +255,10 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </div>
+
+      {isCaretaker && booking.guestContact && (
+        <GuestContactCard contact={booking.guestContact} className="mt-4" />
+      )}
 
       {/* Actions */}
       {(isOwner || isCaretaker) && (

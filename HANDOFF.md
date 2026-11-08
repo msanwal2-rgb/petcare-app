@@ -15,8 +15,11 @@ For whoever picks this up next. Written at the end of **M10, adoption**, 2026-10
 | `e5f4230` | **Availability editor** on the vet and caretaker profile pages (STATUS §3-AV); the booking calendar is a real month calendar; stricter availability validation |
 | `c13fa40` | Upcoming as a card row above a full-width calendar; the day panel scrolls into view |
 | `07f2f4f`, `a9f9a8d` | Calendar motion: the day box flies into the panel on every opening, gliding selection, pointer, directional content slide |
+| `93e9fa4` | **The server checks every booking and visit against the published calendar** (STATUS §3-G) — signed in or not, 409 `not_available`; requests carry `utcOffsetMinutes`; the caretaker form shows the calendar |
+| `2115c01` | **Guest booking API** (STATUS §3-G): `POST /guest/bookings`, `/guest/appointments`, `/auth/set-password`; guest/pending users who cannot sign in; the set-password link; guests emailed by the outbox; `guestContact` for the provider |
+| (the commit after) | Guest booking screens (login "Continue as guest", the guest form, `/booking/requested`, `/set-password`) and these docs |
 
-1050 tests pass; web build, `oxlint --deny-warnings` and `verify.sh` are clean.
+1150 tests pass; web build, `oxlint --deny-warnings` and `verify.sh` are clean.
 No schema change — `db/changes` still ends at 005.
 
 **Next:** the **shelter dashboard** is the one dashboard not reworked. The
@@ -30,9 +33,29 @@ January plus Saturday 5 December — the only bookable provider; every other
 vet and caretaker has only the seed's July 2026 days until someone opens days
 in the editor. All seeded bookings and visits are June–July 2026, so
 "Upcoming" reads 0 everywhere; page the calendar back to July. Test rows made
-during the walks were deleted and v1's response rate recomputed.
+during the walks were deleted and v1's response rate recomputed. Since §3-G
+the server refuses bookings outside published days, so **only Dr Ruiz can be
+booked** on `petapp_dev`. The guest-booking walk's rows were all removed.
 
 **New traps from this session:**
+
+- **Booking now needs published days — in tests and in `petapp_dev`.** A
+  suite that books must open the provider's calendar first
+  (`Infrastructure/Calendars.cs`: `OpenCaretakerAsync`, `OpenVetAsync`,
+  `SetCaretakerDayAsync`…), and book at a fixed hour (`Calendars.DaysAhead(3,
+  10)`) rather than "now + 3 days", or a vet visit can straddle midnight UTC.
+  On `petapp_dev` no caretaker has future days: open some in the editor (or by
+  SQL, then remove them) before walking a caretaker booking.
+- **Guest routes are rate-limited in the database** (`rate_limit_hits`,
+  buckets `guest-booking:*`, `auth:set-password`): five guest bookings an hour
+  from one machine. A repeated walk hits it — clear those buckets.
+- **A guest is a user with `status` guest/pending and no password.** Anything
+  new that reads `status` must decide what it means for them (login, Google
+  linking, the outbox and admin "reactivate" already do). `AccountStatus.IsUnclaimed`.
+- **Headless walks: lazy pages render a skeleton first** — wait for text on
+  the page, not for the URL, before asserting.
+- **`node -e` with JSX or apostrophes breaks in the Bash tool** — write a
+  script file in the scratchpad and run that.
 
 - **The user runs their own servers** — the API from Visual Studio on :5001,
   Vite from a VS Code terminal on :5173 or :5174 (`Cors:Origins` in their
@@ -90,7 +113,7 @@ rewritten without them on purpose.
 hardening, and an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 1050 passing, ~6 min
+cd API && dotnet test        # 1150 passing, ~7 min
 cd web && npm run build && npx oxlint src --deny-warnings
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```

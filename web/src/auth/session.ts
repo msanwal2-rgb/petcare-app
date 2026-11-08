@@ -87,6 +87,17 @@ export async function loginWithPassword(email: string, password: string): Promis
   return user;
 }
 
+/**
+ * A guest finishing their account from the emailed link (STATUS §3-G). The
+ * server activates it and sets the cookie; this caches who it belongs to.
+ */
+export async function completeAccountSetup(token: string, password: string): Promise<User> {
+  const { user } = await authApi.setPassword(token, password);
+  useSession.getState().setUser(user);
+  useSession.getState()._setHydrated();
+  return user;
+}
+
 /** One-tap demo login, using the shared demo password. */
 export function loginAsDemo(email: string): Promise<User> {
   return loginWithPassword(email, DEMO_PASSWORD);
@@ -128,4 +139,6 @@ export const SIGN_IN_ERRORS: Record<string, string> = {
     "Google hasn't verified that email address, so we can't use it to sign you in.",
   OAuthAccountNotLinked: "That Google account isn't linked to a Leash account yet.",
   OAuthCallback: "Google sign-in didn't complete. Please try again.",
+  FinishSetup:
+    "You've booked with us as a guest. Set a password from the link we emailed you — or use “Forgot your password?” to get a new one.",
 };

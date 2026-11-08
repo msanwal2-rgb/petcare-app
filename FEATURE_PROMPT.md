@@ -56,7 +56,7 @@ Two codebases live in this repository. **Only change the build.**
 
 | | |
 |---|---|
-| `API/` + `web/` + `db/` | **The build** — .NET 10 API, React 19 + Vite SPA, PostgreSQL 18. Every module M0–M10 is done: auth, pets and health records, caretakers and bookings, vets and appointments, store and orders, notifications, payments and Leash Plus, the admin console, adoption. Since then (client round, 2026-11-08): reworked vet, caretaker and owner dashboards with stats cards, an interactive calendar and vet rescheduling, and an availability editor for vets and caretakers — HANDOFF §0, STATUS §3-D and §3-AV. **The shelter dashboard is the one not yet reworked.** 1050 xUnit tests. |
+| `API/` + `web/` + `db/` | **The build** — .NET 10 API, React 19 + Vite SPA, PostgreSQL 18. Every module M0–M10 is done: auth, pets and health records, caretakers and bookings, vets and appointments, store and orders, notifications, payments and Leash Plus, the admin console, adoption. Since then (client round, 2026-11-08): reworked vet, caretaker and owner dashboards with stats cards, an interactive calendar and vet rescheduling, and an availability editor for vets and caretakers — HANDOFF §0, STATUS §3-D and §3-AV. Then guest booking (STATUS §3-G): book a caretaker or vet without an account, claim it later by setting a password; the server checks every booking against the published calendar. **The shelter dashboard is the one not yet reworked.** 1150 xUnit tests. |
 | Root `app/`, `components/`, `lib/`, `prisma/`, `tests/` | **The reference implementation** (Next.js) the build was ported from. Read it to see how something already behaves; never run or edit it. `ROADMAP.md` and `PROJECT_ANALYSIS.md` describe the reference, not the build. |
 
 Read before writing code, in this order: `HANDOFF.md` (current state and
@@ -164,7 +164,7 @@ scripts (005 is the latest, **006 is next**); `db/devseed/` is the demo data;
    `components/ui/`, then the route. No new UI library without asking.
 5. **Verify — all must pass before calling it done:**
    ```bash
-   cd API && dotnet test                                  # all green (1050 before this change)
+   cd API && dotnet test                                  # all green (1150 before this change)
    cd web && npm run build && npx oxlint src --deny-warnings
    ./db/verify.sh                                         # ✓ IDENTICAL
    ```

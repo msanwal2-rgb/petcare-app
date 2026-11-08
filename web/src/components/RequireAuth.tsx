@@ -23,7 +23,18 @@ import { Skeleton } from "./ui/Skeleton";
  * on a fresh page load the store is empty until /me answers, and redirecting on
  * that would bounce a signed-in user to /login on every refresh.
  */
-export function RequireAuth({ children }: { children: ReactNode }) {
+/**
+ * `allowGuest` (the two booking forms, STATUS §3-G): somebody signed out who
+ * chose "Continue as guest" on the login page arrives with `guest=1` and is
+ * let through to book with their details instead of an account.
+ */
+export function RequireAuth({
+  children,
+  allowGuest = false,
+}: {
+  children: ReactNode;
+  allowGuest?: boolean;
+}) {
   const { currentUser, hasHydrated } = useSession();
   const location = useLocation();
 
@@ -34,6 +45,10 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         <Skeleton className="mt-4 h-64 w-full rounded-2xl" />
       </div>
     );
+  }
+
+  if (!currentUser && allowGuest && new URLSearchParams(location.search).get("guest") === "1") {
+    return <>{children}</>;
   }
 
   if (!currentUser) {

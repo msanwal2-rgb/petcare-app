@@ -9,6 +9,8 @@ import { lazy } from "react";
  */
 export const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
 export const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+export const SetPasswordPage = lazy(() => import("./pages/SetPasswordPage"));
+export const GuestRequestedPage = lazy(() => import("./pages/GuestRequestedPage"));
 export const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 export const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 export const DashboardPage = lazy(() => import("./pages/DashboardPage"));

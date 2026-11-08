@@ -491,6 +491,15 @@ export interface Booking {
   status: BookingStatus;
   priceTotal: number; // USD
   createdAt: string; // ISO 8601
+  /** How to reach a guest owner — on the caretaker's own read only, while the owner has no account (STATUS §3-G). */
+  guestContact?: GuestContact;
+}
+
+/** A guest owner's name, email and phone, for the caretaker or clinic they booked (STATUS §3-G). */
+export interface GuestContact {
+  name: string;
+  email: string;
+  phone: string;
 }
 
 /** What was reviewed. Bookings are reviewed both ways; vet visits are not. */
@@ -593,6 +602,8 @@ export interface VetAppointment {
   fee: number; // USD
   notes: string;
   createdAt: string; // ISO 8601
+  /** How to reach a guest owner — on the vet's own read only, while the owner has no account (STATUS §3-G). */
+  guestContact?: GuestContact;
 }
 
 export type MedicalRecordType =
@@ -901,7 +912,10 @@ export type NotificationKind =
   | "adoption_completed"
   | "adoption_reversed"
   /** Staff verified a caretaker, vet or shelter. The reference reused membership_started. */
-  | "profile_verified";
+  | "profile_verified"
+  /** A guest's request went through (STATUS §3-G). */
+  | "booking_requested"
+  | "appointment_requested";
 
 export interface Notification {
   id: string;

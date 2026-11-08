@@ -5,6 +5,18 @@ import type { ConsultMode } from "@/types";
 import { getVet } from "@/api/vets";
 import { listMyPets } from "@/api/pets";
 import { createAppointment } from "@/api/appointments";
+import { bookVetAsGuest } from "@/api/guest";
+import { ApiError } from "@/api/_client";
+import { GuestDetailsForm } from "@/components/guest/GuestDetailsForm";
+import {
+  EMPTY_GUEST,
+  guestProblems,
+  issueErrors,
+  toGuestContact,
+  toGuestPet,
+  type GuestErrors,
+} from "@/components/guest/guestDetails";
+import type { GuestRequestedState } from "@/pages/GuestRequestedPage";
 import { useAsync } from "@/hooks/useAsync";
 import { useSession } from "@/store/session";
 import { fromDateTimeInputs } from "@/lib/calendar";
@@ -58,6 +70,10 @@ function isoAt(date: string, time: string): string {
  * Request a vet visit — the reference's three-step flow. The fee shown is the
  * clinic's published one and is not sent: the server reads `consultFee` and
  * records base, discount and charged amounts itself.
+ *
+ * **As a guest** (`guest=1`, from the login page; STATUS §3-G) "Which pet?" is
+ * "Your details & your pet" instead, the request goes to
+ * `POST /guest/appointments`, and the guest lands on /booking/requested.
  */
 export function AppointmentBookingClient() {
   const [params] = useSearchParams();
@@ -80,10 +96,15 @@ export function AppointmentBookingClient() {
   const [notes, setNotes] = useState("");
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const guestMode = !currentUser && params.get("guest") === "1";
+  const [guest, setGuest] = useState(EMPTY_GUEST);
+  const [guestServerErrors, setGuestServerErrors] = useState<GuestErrors>({});
+  const [accountExists, setAccountExists] = useState(false);
+  const [attempted, setAttempted] = useState(false);
 
   if (!hasHydrated) return <BookingSkeleton />;
   // The vet is in the query string; coming back without it is a dead end.
-  if (!currentUser)
+  if (!currentUser && !guestMode)
     return (
       <AuthRequired
         message="Log in to request an appointment."
@@ -108,7 +129,31 @@ export function AppointmentBookingClient() {
     vet.profile.acceptedSpecies.includes(p.species)
   );
   const pet = eligiblePets.find((p) => p.id === petId);
-  const canReview = Boolean(pet && mode && reason.trim() && date && slot);
+  const speciesProblem =
+    guestMode && !vet.profile.acceptedSpecies.includes(guest.species)
+      ? `${vet.user.name} treats ${vet.profile.acceptedSpecies.map((s) => `${SPECIES_LABELS[s]}s`).join(", ")} only.`
+      : null;
+  const guestErrors: GuestErrors = guestMode
+    ? {
+        ...(attempted ? guestProblems(guest) : {}),
+        ...(speciesProblem ? { species: speciesProblem } : {}),
+        ...guestServerErrors,
+      }
+    : {};
+  const whoValid = guestMode
+    ? Object.keys(guestProblems(guest)).length === 0 && !speciesProblem
+    : Boolean(pet);
+  const canReview = Boolean(whoValid && mode && reason.trim() && date && slot);
+  const loginAgain = `/login?callbackUrl=${encodeURIComponent(`/vets/book?vetId=${vetId}`)}`;
+
+  function goReview() {
+    setAttempted(true);
+    if (!canReview) {
+      toast.error("Check your details and your pet’s, then pick a format, a reason and a time.");
+      return;
+    }
+    setStep(1);
+  }
 
   function toggleSymptom(s: string) {
     setSymptoms((cur) =>
@@ -116,7 +161,60 @@ export function AppointmentBookingClient() {
     );
   }
 
+  async function submitAsGuest() {
+    if (!mode || !slot || !vet) return;
+    setSubmitting(true);
+    const startDateTime = isoAt(date, slot.start);
+    try {
+      const result = await bookVetAsGuest({
+        guest: toGuestContact(guest),
+        pet: toGuestPet(guest),
+        appointment: {
+          vetId: vet.profile.id,
+          mode,
+          reason: reason.trim(),
+          symptoms,
+          startDateTime,
+          endDateTime: isoAt(date, slot.end),
+          notes: notes.trim(),
+          utcOffsetMinutes: utcOffsetMinutesAt(startDateTime),
+        },
+        saveAccount: guest.saveAccount,
+      });
+      const state: GuestRequestedState = {
+        what: "visit",
+        providerName: result.vetName,
+        petName: result.petName,
+        serviceLabel: CONSULT_MODE_LABELS[result.appointment.mode],
+        startDateTime: result.appointment.startDateTime,
+        endDateTime: result.appointment.endDateTime,
+        price: result.appointment.fee,
+        email: guest.email.trim(),
+        accountEmailSent: result.accountEmailSent,
+        savedAccount: guest.saveAccount,
+        devLink: result.devLink,
+      };
+      navigate("/booking/requested", { state });
+    } catch (e) {
+      setSubmitting(false);
+      if (e instanceof ApiError && e.details?.code === "account_exists") {
+        setAccountExists(true);
+        setStep(0);
+        return;
+      }
+      const fieldErrors = issueErrors(e);
+      if (Object.keys(fieldErrors).length > 0) {
+        setGuestServerErrors(fieldErrors);
+        setStep(0);
+      }
+      toast.error("Couldn't request that appointment", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+    }
+  }
+
   async function submit() {
+    if (guestMode) return submitAsGuest();
     if (!pet || !mode || !slot || !currentUser || !vet) return;
     setSubmitting(true);
     try {
@@ -169,6 +267,32 @@ export function AppointmentBookingClient() {
 
       {step === 0 && (
         <div className="space-y-6 rounded-2xl border border-mist bg-white p-6">
+          {guestMode ? (
+            <>
+              {accountExists && (
+                <p
+                  role="alert"
+                  className="rounded-xl border border-leash/30 bg-leash/5 px-4 py-3 text-sm text-charcoal"
+                >
+                  You already have a Leash account with that email.{" "}
+                  <Link to={loginAgain} className="font-medium text-leash underline">
+                    Log in to book
+                  </Link>
+                  .
+                </p>
+              )}
+              <GuestDetailsForm
+                value={guest}
+                onChange={(next) => {
+                  setGuest(next);
+                  setGuestServerErrors({});
+                  if (next.email !== guest.email) setAccountExists(false);
+                }}
+                errors={guestErrors}
+                providerName={vet.user.name}
+              />
+            </>
+          ) : (
           <div>
             <h2 className="text-sm font-semibold text-ink">Which pet?</h2>
             {eligiblePets.length === 0 ? (
@@ -222,6 +346,7 @@ export function AppointmentBookingClient() {
               </div>
             )}
           </div>
+          )}
 
           <Field label="Consultation format" htmlFor="a-mode">
             <Select
@@ -303,8 +428,8 @@ export function AppointmentBookingClient() {
           <div className="flex justify-end">
             <Button
               variant="cta"
-              disabled={!canReview}
-              onClick={() => setStep(1)}
+              disabled={!guestMode && !canReview}
+              onClick={goReview}
             >
               Review request
             </Button>
@@ -312,12 +437,19 @@ export function AppointmentBookingClient() {
         </div>
       )}
 
-      {step === 1 && pet && slot && mode && (
+      {step === 1 && (pet || guestMode) && slot && mode && (
         <div className="space-y-5 rounded-2xl border border-mist bg-white p-6">
           <h2 className="text-sm font-semibold text-ink">Check the details</h2>
           <dl className="divide-y divide-mist text-sm">
             <Row label="Vet" value={`${vet.user.name} · ${vet.profile.clinicName}`} />
-            <Row label="Pet" value={`${pet.name} (${SPECIES_LABELS[pet.species]})`} />
+            <Row
+              label="Pet"
+              value={
+                pet
+                  ? `${pet.name} (${SPECIES_LABELS[pet.species]})`
+                  : `${guest.petName.trim()} (${SPECIES_LABELS[guest.species]})`
+              }
+            />
             <Row label="Format" value={CONSULT_MODE_LABELS[mode]} />
             <Row
               label="When"

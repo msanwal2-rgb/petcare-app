@@ -199,6 +199,13 @@ Disposing without committing rolls back, so an early `return` or a thrown
 exception leaves nothing behind. Keep expensive CPU work (bcrypt, image
 processing) **outside** the scope so it does not hold a row lock.
 
+When another service's write must land in your transaction — a guest booking
+writes the user and the pet, then the booking — do not copy that service's
+rules. Give it a `…InAsync(…, ITransactionScope scope)` method that runs every
+rule inside the caller's scope without committing, and make its ordinary method
+a wrapper that begins, calls it, and commits on success
+(`IBookingService.CreateInAsync`, `IAppointmentService.CreateInAsync`).
+
 Use `SELECT … FOR UPDATE` when a decision is read and then written, and two
 callers racing must not both succeed — stock decrements, token rotation, claiming
 a unique value.
@@ -392,7 +399,7 @@ is a REQUIREMENTS.md §12 fix — and then it is listed in `STATUS.md`.
 ## 7. Testing
 
 ```bash
-cd API && dotnet test          # 1050 tests, ~6m
+cd API && dotnet test          # 1150 tests, ~7m
 cd web && npm run build        # tsc -b && vite build
 cd web && npx oxlint src
 ./db/verify.sh                 # must print ✓ IDENTICAL

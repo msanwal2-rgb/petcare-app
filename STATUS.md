@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-11-08**, the client's dashboard round (§3-D). **Every module in the plan is built**; what remains is deploying it — see §4 and `NEXT_PROMPT.md`.
+Last updated: **2026-11-08**, guest booking (§3-G) after the client's dashboard round (§3-D). **Every module in the plan is built**; what remains is deploying it — see §4 and `NEXT_PROMPT.md`.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -32,6 +32,7 @@ Last updated: **2026-11-08**, the client's dashboard round (§3-D). **Every modu
 | **M10** | Adoption | ✅ Done — 16 endpoints, 5 screens and the shelter dashboard; 81 tests, including the full port of `adoption-transfer`. See §3-M10 |
 | — | **Dashboards** (client, 2026-11-08) | ✅ Vet, caretaker and owner done — stats cards, an interactive calendar, the upcoming list, vet rescheduling; 4 endpoints, 66 tests. **Shelter not started.** See §3-D |
 | — | **Publishing availability** (2026-11-08) | ✅ An editor on the vet and caretaker profile pages; the booking calendar is a real month calendar; vet booking times fixed to the owner’s zone; 14 tests. See §3-AV |
+| — | **Guest booking** (2026-11-08) | ✅ Book a caretaker or vet without an account; claim it with an emailed set-password link; every booking now checked against the published calendar on the server; 3 endpoints, 100 tests. See §3-G |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
 touches data.**
@@ -94,6 +95,8 @@ POST   /auth/signup              POST /auth/login          POST /auth/logout
 POST   /auth/verify-email        POST /auth/resend-verification
 POST   /auth/forgot-password     POST /auth/reset-password
 POST   /auth/refresh             GET  /auth/google         GET /auth/google/complete
+POST   /auth/set-password                                  → a guest's first password (§3-G)
+POST   /guest/bookings           POST /guest/appointments  → public, rate-limited (§3-G)
 GET    /me                       GET  /config
 GET    /users   /users/{id}      PATCH /users/{id}
 GET    /brands
@@ -235,10 +238,14 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 1050 passing
+### Tests — 1150 passing
 
 | File | Covers |
 |---|---|
+| `PublishedHoursTests` | The server's reading of a published calendar (§3-G): a visit inside one set (or sets carrying straight on over midnight), a stay's drop-off and pick-up in open hours, 23:59 as midnight, closed and unpublished days, malformed hours, the requester's zone deciding both the day and the hour |
+| `GuestBookingServiceTests` | Booking as a guest (§3-G): user, pet and booking written together or not at all, the rate-card price, the 24-hour lead time, the calendar, an account email refused (any case or spacing), a suspended one the same, a reused guest keeps its stored details, an unclaimed guest's pet never reused, guest → pending and never back, two first bookings at one email make one guest, the guest's notice and its outbox row, a mail outage not losing the booking, vet visits at the list fee |
+| `GuestAccountTests` | A guest becoming an account (§3-G): the link activates, verifies and brings the bookings and pets; single-use; dead after 7 days; reset and verify tokens refused; a set-password token cannot touch an active account; a new link replaces the old; guests cannot sign in; forgot-password sends a guest the set-password link; Google does not link to a guest; the outbox emails guests with the setup link; staff cannot "reactivate" a guest |
+| `GuestEndpointTests` | The same over HTTP: the 201 shapes (no user or pet id), dev-mode link, a session never booking as itself, 400 per field with its path, 404, 409 `account_exists` / `not_available` / lead time, 429 per client and per email, the provider's `guestContact` until the account is claimed, set-password signing in with the booking visible, sign-up's `finish_setup`, forgot-password |
 | `AvailabilityEndpointTests` | Publishing availability (§3-AV): a vet's save replaces the calendar and owners read the new days, saving the rest of the profile leaves it alone, an empty list closes everything, caretakers the same way, nobody publishes someone else's; refused: non-clock times, backwards hours, overlaps, 13 sets in a day, 401 days, a date twice |
 | `DashboardServiceTests` | The dashboards (§3-D): what each card counts (declined/cancelled are not work, "upcoming" is live and not yet over, earnings are completed work at the recorded price, spending is the ledger net of refunds), the viewer's "today" and its clamp, the window reads (overlap, soonest first, status filter, keyset paging across shared start times), and rescheduling — vet only, requested/confirmed only, legality before authority, future only, the owner told in-app and by email, the conditional write |
 | `DashboardEndpointTests` | The same over HTTP: every new route 401 anonymous, somebody else's figures and calendar 404, the wire shapes, the window's query string validated into the envelope (each list's own status vocabulary), the unchanged newest-first list, reschedule 200/403/404/409/400 and the owner's notification |
@@ -274,6 +281,103 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-G. Guest booking (2026-11-08)
+
+Somebody without an account can book a caretaker or a vet. Signed out, **Book**
+goes to the login page as before, which now also offers **Continue as guest**:
+the same booking form, with "Your details & your pet" in place of choosing a
+pet, and a box — *Save my details and create a Leash account*. Ticked, they
+are emailed a link to set a password; setting it activates the account with
+the booking and the pet already in it. Three commits: the calendar rule
+(`93e9fa4`), the API (`2115c01`), the screens and these docs.
+
+### The calendar rule — for everyone, not only guests
+
+Before this nothing on the server read a provider's published days; the vet
+form only offered published hours and the caretaker form showed none. Now
+`POST /bookings`, `POST /appointments` and both guest routes refuse a time
+outside the calendar with **409 `code: "not_available"`** (`Services/PublishedHours.cs`):
+
+| | |
+|---|---|
+| **A vet visit** | Inside one published set of hours — or, over midnight, in a set running to midnight followed by one starting at 00:00. A set ending **23:59 runs to midnight** (the editor cannot say 24:00) |
+| **A caretaker booking** | The drop-off in open hours on its day (from opening, before closing); the pick-up in open hours on its day (opening to closing, both included). Days in between are not read |
+| **The zone** | Hours are local clock times and the server knows no zone, so each request carries **`utcOffsetMinutes`** (−840…840, absent = UTC) — the browser's offset at the start. A wrong offset only moves which of the provider's own hours are checked; they still accept or decline |
+| **The caretaker form** | Now shows the caretaker's calendar ("When?"); picking a day fills the start with its first open hour; a time outside the hours is said on the form before sending |
+| **Tests** | Suites that book now publish days first (`Infrastructure/Calendars.cs`); the vet helpers book at 10:00 UTC rather than "now + 3 days" so they never straddle midnight |
+
+### Endpoints
+
+| | |
+|---|---|
+| `POST /guest/bookings` | `{ guest: { name, email, phone }, pet: { name, species, breed, sex, dob, weightLbs, allergies?, behaviorNotes? }, booking: { caretakerId, serviceType, startDateTime, endDateTime, notes?, utcOffsetMinutes }, saveAccount }` → **201** `{ booking: { id, status, serviceType, startDateTime, endDateTime, priceTotal }, caretakerName, petName, accountEmailSent }` (+ `devLink` in development). No user id, pet id or session |
+| `POST /guest/appointments` | The same with `appointment: { vetId, mode, reason, symptoms?, startDateTime, endDateTime, notes?, utcOffsetMinutes }` → **201** `{ appointment: { id, status, mode, startDateTime, endDateTime, fee }, vetName, petName, accountEmailSent }` |
+| Refusals | 400 per field (`guest.email`, `pet.dob`, `booking.utcOffsetMinutes`…); 404 unknown provider; 409 `account_exists`, `not_available`, the lead-time shape (`isMember: false`), and the signed-in failures (service, species, mode); **429** |
+| `POST /auth/set-password` | `{ token, password }` → **200** the login response, signed in. **400** for a used, expired, made-up or wrong-kind token |
+| `GET /bookings/{id}`, `GET /appointments/{id}` | For the caretaker or vet only, and only while the owner is a guest: **`guestContact: { name, email, phone }`** (absent otherwise) |
+
+### The rules
+
+| | |
+|---|---|
+| **What a guest is** | A user row, status **`guest`** (box unticked) or **`pending`** (ticked, link not yet used), with no password, roles `[owner]`, sign-up's default address. No schema change: `users.status` and `verification_tokens.type` are text |
+| **They cannot sign in** | No password hash (the login fails), login refuses any status but active, and the session validator does too. **Google is refused** (`OAuthFailure.FinishSetup` → `/login?error=FinishSetup`): an account with no password is normally linked on sight, and a guest has none |
+| **One transaction** | `GuestBookingService`: find or create the guest → a new pet → the booking through `IBookingService.CreateInAsync` / `IAppointmentService.CreateInAsync` (the signed-in rules by the same code — those services' `CreateAsync` now wrap them) → the guest's notice (`booking_requested` / `appointment_requested`) → a set-password token if pending → commit. Any refusal rolls back the guest and the pet. Then the email, best-effort: a mail outage never undoes a booking |
+| **An email with an account** | Active or suspended → 409 `account_exists` ("log in to book"), suspended reading the same. Sign-up already reveals a taken address, so this reveals nothing new |
+| **Nothing typed is trusted** | A reused guest row keeps the name and phone it has. **An unclaimed guest's pets are never reused** — each booking makes a new pet. Reusing by name would let anyone who knows a guest's email and pet's name book a vet for that animal and hand the vet its health record (owner's decision, 2026-11-08). Once claimed the email is an account's, the guest route refuses it, and they choose their pet signed in |
+| **Ticking the box later** | guest → pending, conditionally; not ticking never downgrades a pending account. Every booking by a pending guest sends a fresh link |
+| **The link** | 32 random bytes, stored hashed, **single-use**, **7 days**, a new one replacing the old (the repository deletes the previous in the same write). Spending it sets the password, `status = active`, `verified = true` and the session watermark in one statement **conditional on the account still being guest/pending with no password** — so a leftover link is never a password reset for an active account |
+| **The bookings come with it** | Nothing moves: they were written against this user id, and so were the pets and the bell notices |
+| **Other ways in** | Forgot-password for a guest/pending email sends the **set-password** link (same 200 either way). Sign-up with one answers **409 `finish_setup`** and sends it |
+| **Emails** | The outbox now delivers to guest and pending accounts (still skipping suspended and deleted). Their emails link to **`/forgot-password?setup=1`** ("set a password to see it on Leash") rather than a page that needs a session |
+| **Rate limits** | Per client 5 an hour and 20 a day (both routes together), per email 3 an hour; set-password 10 an hour per client. Counted before anything is read or written |
+| **Staff** | "Reactivate" refuses a guest (active with no password is an account nobody can reach); the console's status filter takes `guest` and `pending` |
+| **Providers** | The booking and appointment pages show a "Guest booking" card with phone and email while the owner has no account — a guest cannot read messages |
+
+### Screens
+
+| | |
+|---|---|
+| `/login` | **Continue as guest** when `callbackUrl` is `/booking/new` or `/vets/book`; a hint "Booked as a guest? Use Forgot password" for everyone |
+| `/booking/new`, `/vets/book` | `RequireAuth allowGuest`: `guest=1` lets a signed-out visitor through. `components/guest/GuestDetailsForm` (rules in `guestDetails.ts`, server issues mapped onto its fields); `account_exists` shows "You already have a Leash account — log in to book" |
+| `/booking/requested` | The guest's confirmation, from navigation state (a reload shows a generic version): what was asked, "check your email" or "set up my account" |
+| `/set-password?token=` | Choose a password → signed in → `/dashboard`. A dead link offers a new one |
+| `/forgot-password?setup=1` | The same form, worded for a guest |
+
+### Departures from the approved plan
+
+- **The "save my details" box starts unticked** — an account is something the
+  guest asks for.
+- **A vet visit must sit inside a published set, not equal one.** The form
+  offers whole sets today, so nothing changes for it; a clinic splitting its
+  hours into shorter visits later would not need the rule changed.
+- **The guest card is on the booking and appointment pages only**, not the
+  dashboard's day panel: the list reads would need a join for every row. The
+  day panel links to the booking page, which has it.
+
+### Not done (out of scope, as agreed)
+
+CAPTCHA; cleaning up guests who never claim; more than one pet per guest
+booking; guest store checkout; guest messaging; two bookings for one slot.
+
+**Walked** (headless Chrome, `petapp_dev`, my own API and Vite): signed out,
+`/vets/book?vetId=v1` went to the login page, **Continue as guest** opened the
+form; a visit with the box ticked → `/booking/requested` "check your email" →
+the set-password link → signed in on the dashboard with the pet there; the same
+link again → "expired". With Liam's days opened temporarily: a guest walking
+booking without the box → "want to keep track of it?"; Maya's email as a guest
+→ the log-in banner; Liam's booking page showed the guest card with phone and
+email; Dr Ruiz's page for the claimed guest showed none. Maya signed in saw the
+caretaker calendar, a 07:00 drop-off flagged, picking a day filled open hours.
+No sideways scroll at 390px. The first attempt picked tomorrow and got the
+24-hour 409; a rerun hit the 5-an-hour limit — both the rules working. No
+console errors; no unexpected failed calls. **Everything the walk wrote was
+deleted afterwards** (5 guests with their pets, bookings, visits, notices and
+tokens; Liam's temporary days; the guest rate-limit counters) and c1's and
+v1's response rates restored.
 
 ---
 
@@ -1058,6 +1162,8 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past". **Since §3-D the cards, the calendar and the upcoming list no longer depend on this** — they are counted and windowed by the API; only the request/schedule/past lists still read the hundred |
 | | **The dev seed's bookings and appointments are all in June–July 2026**, so on `petapp_dev` today every "Upcoming" card reads 0 and the current month is empty; page back to July to see the calendar populated. Not changed, because the suites pin the seed's dates. **The seed's published availability is July 2026 too** — every other vet and caretaker has nothing bookable until they publish days in the editor (§3-AV). On `petapp_dev`, Dr Ruiz now has Mon–Fri published to early January |
 | | **The header flickers if a page comes to rest at about 8px of scroll.** Found during the §3-D walk, there before it: `useScrolled(8)` shrinks the header past 8px, which shortens the page, which can pull the scroll back under the threshold — a 1px loop. Only at that exact resting point; a hysteresis (e.g. on at 16px, off at 4px) would end it |
+| | **Guests who never claim stay forever** (§3-G): a `guest` or `pending` user, their pets and bookings are never cleaned up, and there is no CAPTCHA on the two public guest routes — only rate limits. Both were out of scope; decide before a public launch |
+| | **The server now refuses bookings outside the published calendar** (§3-G), signed in or not. On `petapp_dev` only Dr Ruiz has future days, so **no caretaker can be booked until they publish days in the editor** |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
 
 | ❓ | **R7 — who may override the live-engagement refusal.** Built as the reference: the shelter, explicitly, after the dashboard names what is in the way; and any live booking or vet appointment refuses, not only boarding. If R7's "staff override" meant support staff only, it is a check in `AdoptionTransferService.CompleteAsync` and a button in the console. §3-M10 has the reasoning |
