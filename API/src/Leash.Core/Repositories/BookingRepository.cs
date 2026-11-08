@@ -1,5 +1,6 @@
 using System.Text;
 using Dapper;
+using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
 using Leash.Core.Persistence;
 using Leash.Core.Repositories.Interfaces;
@@ -77,6 +78,47 @@ public sealed class BookingRepository(NpgsqlDataSource db) : IBookingRepository
         {
             rows.RemoveAt(rows.Count - 1);
             nextCursor = Cursor.Encode(rows[^1].CreatedAt, rows[^1].Id);
+        }
+
+        return (rows, nextCursor);
+    }
+
+    public Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListByOwnerInWindowAsync(
+        string ownerId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+        => ListWindowAsync("\"ownerId\"", ownerId, window, cursor, limit, scope, ct);
+
+    public Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListByCaretakerInWindowAsync(
+        string caretakerId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+        => ListWindowAsync("\"caretakerId\"", caretakerId, window, cursor, limit, scope, ct);
+
+    /// <summary>
+    /// The calendar's read: by <i>when the booking is</i>, soonest first — not
+    /// the request queue's <c>createdAt</c> order. See <see cref="ScheduleWindowSql"/>.
+    /// </summary>
+    private async Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListWindowAsync(
+        string column, string value, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope, CancellationToken ct)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        var (where, parameters) = ScheduleWindowSql.Build(column, value, window, cursor, limit);
+
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        var rows = (await session.Connection.QueryAsync<BookingEntity>(
+            new CommandDefinition(
+                $"""
+                 SELECT {Columns} FROM bookings
+                 {where}
+                 {ScheduleWindowSql.OrderBy}
+                 """,
+                parameters, session.Transaction, cancellationToken: ct))).ToList();
+
+        string? nextCursor = null;
+        if (rows.Count > limit)
+        {
+            rows.RemoveAt(rows.Count - 1);
+            nextCursor = Cursor.Encode(rows[^1].StartDateTime, rows[^1].Id);
         }
 
         return (rows, nextCursor);

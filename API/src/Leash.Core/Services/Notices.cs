@@ -59,6 +59,18 @@ public static class Notices
             _ => null,
         };
 
+    /// <summary>
+    /// The vet moved the visit. The new time is not in the text: the server
+    /// does not know the owner's time zone, and a time in the wrong one is
+    /// worse than none — the appointment page shows it in theirs. Like
+    /// <see cref="ForAppointment"/>, the body quotes the owner's own reason.
+    /// </summary>
+    public static NotifyInput AppointmentRescheduled(string appointmentId, string reason) => new(
+        NotificationKinds.AppointmentRescheduled,
+        "Your vet appointment has a new time",
+        $"{reason} — your vet moved it. Check the new time still works; if it doesn't, you can cancel from the appointment.",
+        $"/appointments/{appointmentId}");
+
     /// <summary>A declined card, not a cancellation: the intent stays retryable.</summary>
     public static NotifyInput OrderPaymentFailed(string orderId) => new(
         NotificationKinds.OrderPaymentFailed,

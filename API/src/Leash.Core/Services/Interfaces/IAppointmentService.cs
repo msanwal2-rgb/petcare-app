@@ -65,6 +65,16 @@ public enum AppointmentFailure
     /// summary is empty. 400.
     /// </summary>
     BadSummary,
+
+    /// <summary>
+    /// A reschedule of an appointment that is no longer waiting to happen —
+    /// started, finished, declined or cancelled. 409: the rule is about the
+    /// appointment, and it is checked before the actor.
+    /// </summary>
+    NotReschedulable,
+
+    /// <summary>A reschedule to a time that has already begun. 400.</summary>
+    RescheduleInPast,
 }
 
 /// <summary>
@@ -116,6 +126,33 @@ public interface IAppointmentService
     /// </summary>
     Task<AppointmentPage?> ListForVetAsync(
         string callerId, string vetId, string? cursor, int limit,
+        CancellationToken ct = default);
+
+    /// <summary>The caller's own appointments that overlap a window, soonest first.</summary>
+    Task<AppointmentPage> ListMyScheduleAsync(
+        string callerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// A clinic's appointments that overlap a window, soonest first. Null
+    /// unless the caller owns the vet profile.
+    /// </summary>
+    Task<AppointmentPage?> ListVetScheduleAsync(
+        string callerId, string vetId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// The vet moves an appointment to a new time, and the owner is told.
+    ///
+    /// Only while it is <c>requested</c> or <c>confirmed</c> — once the visit
+    /// has started there is nothing left to move (409, checked first). Only the
+    /// vet (403): an owner who cannot make the new time cancels. The status
+    /// stays as it was, so a confirmed visit is still confirmed at its new
+    /// time and the owner keeps the right to cancel. Moving it to the time it
+    /// already has is a no-op and tells nobody.
+    /// </summary>
+    Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)> RescheduleAsync(
+        string callerId, string appointmentId, RescheduleAppointmentRequest input,
         CancellationToken ct = default);
 
     /// <summary>

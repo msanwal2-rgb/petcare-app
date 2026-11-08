@@ -33,11 +33,18 @@ public sealed class AppointmentsController(
     /// which is a parameter that can only ever hold one value guarded by a
     /// check that can be forgotten. A self-only collection reads itself from
     /// the principal.
+    ///
+    /// With <c>from</c> (and optionally <c>to</c> and <c>status</c>) it reads
+    /// a window of the calendar instead, soonest first — see <see cref="ScheduleListQuery"/>.
     /// </summary>
     [HttpGet("appointments")]
     public async Task<IActionResult> ListMine(
-        [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken ct)
-        => Ok(await appointments.ListMineAsync(User.RequireUserId(), cursor, limit ?? 24, ct));
+        [FromQuery] AppointmentListQuery query, CancellationToken ct)
+        => query.ToWindow() is { } window
+            ? Ok(await appointments.ListMyScheduleAsync(
+                User.RequireUserId(), window, query.Cursor, query.Limit ?? 24, ct))
+            : Ok(await appointments.ListMineAsync(
+                User.RequireUserId(), query.Cursor, query.Limit ?? 24, ct));
 
     [HttpGet("appointments/{id}")]
     public async Task<IActionResult> Get(string id, CancellationToken ct)
@@ -69,6 +76,27 @@ public sealed class AppointmentsController(
             User.RequireUserId(), id, input.Status, ct);
 
         return failure is null ? Ok(appointment) : AppointmentError(failure.Value, id);
+    }
+
+    /// <summary>
+    /// The vet moves the visit to a new time; the owner is told, in the app
+    /// and by email. Its own route rather than a field on the status PATCH:
+    /// the status does not change.
+    /// </summary>
+    [HttpPost("appointments/{id}/reschedule")]
+    public async Task<IActionResult> Reschedule(
+        string id, [FromBody] RescheduleAppointmentRequest input, CancellationToken ct)
+    {
+        var (appointment, failure) = await appointments.RescheduleAsync(
+            User.RequireUserId(), id, input, ct);
+
+        return failure switch
+        {
+            null => Ok(appointment),
+            AppointmentFailure.WrongActor =>
+                ApiResults.Forbidden("Only the vet can reschedule an appointment"),
+            _ => AppointmentError(failure.Value, id),
+        };
     }
 
     /// <summary>
@@ -182,6 +210,13 @@ public sealed class AppointmentsController(
 
             AppointmentFailure.BadSummary =>
                 ApiResults.BadRequest("A visit summary needs at least one valid entry"),
+
+            AppointmentFailure.NotReschedulable => ApiResults.Conflict(
+                "Only a requested or confirmed appointment can be moved to a new time.",
+                new { appointmentId = id }),
+
+            AppointmentFailure.RescheduleInPast =>
+                ApiResults.BadRequest("The new time has to be in the future"),
 
             _ => ApiResults.NotFound($"Appointment {id} not found"),
         };

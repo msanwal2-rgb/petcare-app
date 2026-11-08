@@ -35,19 +35,46 @@ export interface CreateAppointmentInput {
   notes?: string;
 }
 
+/**
+ * A list read. Without `from` it is newest first. With `from` it is a window
+ * of the calendar, soonest first: everything not over before `from` and, given
+ * `to`, starting before it. `status` (comma-separated) filters a window.
+ */
+export interface AppointmentListParams {
+  cursor?: string;
+  limit?: number;
+  from?: string;
+  to?: string;
+  status?: string;
+}
+
 /** GET /appointments -> the caller's own appointments, by visit date. */
 export function listMyAppointments(
-  params: { cursor?: string; limit?: number } = {},
+  params: AppointmentListParams = {},
 ): Promise<AppointmentPage> {
-  return getJson<AppointmentPage>(`/appointments${qs(params)}`);
+  return getJson<AppointmentPage>(`/appointments${qs({ ...params })}`);
 }
 
 /** GET /vets/:id/appointments -> that clinic's schedule. Theirs alone. */
 export function listVetAppointments(
   vetId: string,
-  params: { cursor?: string; limit?: number } = {},
+  params: AppointmentListParams = {},
 ): Promise<AppointmentPage> {
-  return getJson<AppointmentPage>(`/vets/${vetId}/appointments${qs(params)}`);
+  return getJson<AppointmentPage>(`/vets/${vetId}/appointments${qs({ ...params })}`);
+}
+
+/**
+ * POST /appointments/:id/reschedule -> the appointment at its new time.
+ *
+ * The vet only (403 for the owner), and only while it is requested or
+ * confirmed (409 otherwise). The status does not change; the owner is told in
+ * the app and by email.
+ */
+export function rescheduleAppointment(
+  id: string,
+  window: { startDateTime: string; endDateTime: string },
+): Promise<VetAppointment> {
+  return postJson<VetAppointment>(`/appointments/${id}/reschedule`, window);
 }
 
 /** GET /appointments/:id -> either party only; 404 to anyone else. */

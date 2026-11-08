@@ -36,6 +36,13 @@ export const CalendarIcon = (p: P) => (
     <path d="M3 9h18M8 3v3M16 3v3" />
   </svg>
 );
+export const WalletIcon = (p: P) => (
+  <svg {...svg(p)}>
+    <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3" />
+    <rect x="4" y="8" width="16" height="11" rx="2.5" />
+    <path d="M16 13.5h1.5" />
+  </svg>
+);
 export const ClockIcon = (p: P) => (
   <svg {...svg(p)}>
     <circle cx="12" cy="12" r="8.5" />

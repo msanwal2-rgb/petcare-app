@@ -99,6 +99,28 @@ public sealed class BookingService(
         return new BookingPage([.. rows.Select(b => b.ToDto())], next);
     }
 
+    public async Task<BookingPage> ListMyScheduleAsync(
+        string callerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default)
+    {
+        var (rows, next) = await bookings.ListByOwnerInWindowAsync(
+            callerId, window, cursor, limit, ct: ct);
+        return new BookingPage([.. rows.Select(b => b.ToDto())], next);
+    }
+
+    public async Task<BookingPage?> ListCaretakerScheduleAsync(
+        string callerId, string caretakerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default)
+    {
+        // The same gate as the queue: this is the same schedule, by date.
+        if (!await access.OwnsCaretakerProfileAsync(callerId, caretakerId, ct: ct))
+            return null;
+
+        var (rows, next) = await bookings.ListByCaretakerInWindowAsync(
+            caretakerId, window, cursor, limit, ct: ct);
+        return new BookingPage([.. rows.Select(b => b.ToDto())], next);
+    }
+
     /// <summary>
     /// Request a booking.
     ///

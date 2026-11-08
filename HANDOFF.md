@@ -37,7 +37,7 @@ rewritten without them on purpose.
 hardening, and an IIS deployment (`deploy/README.md`).
 
 ```bash
-cd API && dotnet test        # 970 passing, ~5 min
+cd API && dotnet test        # 1036 passing, ~6 min
 cd web && npm run build && npx oxlint src --deny-warnings
 ./db/verify.sh               # must print ✓ IDENTICAL
 ```
@@ -57,6 +57,13 @@ working cross-origin; do not revert this.
 ---
 
 ## 3. What to do next
+
+**The client's dashboard round is in progress (2026-11-08, STATUS §3-D).**
+Vet, caretaker and owner dashboards are done — cards counted by the API, the
+shared calendar in `web/src/components/dashboard/schedule/`, vet rescheduling.
+**The shelter dashboard is next and has no brief yet** — ask before building.
+On `petapp_dev` every seeded booking and visit is in June–July 2026, so the
+"Upcoming" cards read 0; page the calendar back to July to see it populated.
 
 **First, the redeploy** — the one hardening step this session could not do,
 because writing to `C:\inetpub` needs elevation. From an elevated PowerShell

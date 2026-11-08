@@ -8,6 +8,7 @@ import { useSession } from "@/store/session";
 import {
   AlertIcon,
   BellIcon,
+  CalendarIcon,
   CheckIcon,
   HeartIcon,
   ShieldCheckIcon,
@@ -23,6 +24,7 @@ const ICON: Record<NotificationKind, typeof CheckIcon> = {
   appointment_confirmed: StethoscopeIcon,
   appointment_declined: AlertIcon,
   appointment_completed: StethoscopeIcon,
+  appointment_rescheduled: CalendarIcon,
   order_shipped: TruckIcon,
   order_out_for_delivery: TruckIcon,
   order_delivered: TruckIcon,

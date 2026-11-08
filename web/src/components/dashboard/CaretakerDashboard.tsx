@@ -1,36 +1,59 @@
 import { Link } from "react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { User, Booking, BookingStatus } from "@/types";
 import { getCaretakerProfileForUser } from "@/api/caretakers";
 import { listCaretakerBookings, updateBookingStatus } from "@/api/bookings";
+import { getCaretakerStats } from "@/api/dashboard";
 import { getUsersByIds } from "@/api/users";
 import { useAsync } from "@/hooks/useAsync";
 import { Avatar } from "@/components/Avatar";
-import { AvailabilityCalendar } from "@/components/AvailabilityCalendar";
 import { ServiceTypeChip } from "@/components/ServiceTypeChip";
 import { BookingListRow } from "./BookingListRow";
 import { EmptyState } from "@/components/EmptyState";
-import { Button, ButtonLink } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { formatRange, formatCurrency } from "@/lib/utils";
+import { CalendarIcon, ClockIcon, WalletIcon } from "@/components/ui/icons";
+import { startOfTodayIso } from "@/lib/calendar";
+import { SERVICE_LABELS, formatCents, formatRange, formatCurrency } from "@/lib/utils";
+import { ProfileStrip } from "./schedule/ProfileStrip";
+import { ScheduleOverview } from "./schedule/ScheduleOverview";
+import { StatCards } from "./schedule/StatCards";
+import { caretakerSource } from "./schedule/sources";
 
+const NOUN = { one: "booking", many: "bookings" };
+
+/**
+ * The caretaker's dashboard — the vet's layout (the client's call): three
+ * cards, incoming requests and active bookings, the upcoming list beside an
+ * interactive calendar, history, and the listing small at the foot.
+ */
 export function CaretakerDashboard({ user }: { user: User }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
+  const refresh = () => setVersion((v) => v + 1);
 
   const { data: profile, loading: loadingProfile } = useAsync(
     () => getCaretakerProfileForUser(user.id),
     [user.id]
   );
-  const { data, loading, reload } = useAsync(async () => {
+  const { data, loading } = useAsync(async () => {
     if (!profile) return null;
-    // First page at the API's maximum — see OwnerDashboard for why.
+    // The request queue and the history read the newest hundred, as before.
+    // The cards and the calendar are counted and windowed by the API.
     const { items: bookings } = await listCaretakerBookings(profile.id, { limit: 100 });
     const owners = await getUsersByIds([...new Set(bookings.map((b) => b.ownerId))]);
     const map = new Map(owners.map((o) => [o.id, o]));
     return { bookings, map };
-  }, [profile?.id]);
+  }, [profile?.id, version]);
+
+  const stats = useAsync(
+    async () => (profile ? getCaretakerStats(profile.id, startOfTodayIso()) : null),
+    [profile?.id, version],
+  );
+
+  const sources = useMemo(() => (profile ? [caretakerSource(profile.id)] : []), [profile]);
 
   if (loadingProfile) {
     return <Skeleton className="h-64 w-full rounded-2xl" />;
@@ -63,7 +86,7 @@ export function CaretakerDashboard({ user }: { user: User }) {
     try {
       await updateBookingStatus(id, status);
       toast.success(msg);
-      reload();
+      refresh();
     } catch {
       toast.error("Couldn’t update. Try again.");
     } finally {
@@ -71,8 +94,60 @@ export function CaretakerDashboard({ user }: { user: User }) {
     }
   }
 
+  /** Accept and decline — the same buttons in the queue and on the calendar. */
+  function answer(b: Booking) {
+    if (b.status !== "requested") return null;
+    return (
+      <>
+        <Button
+          variant="cta"
+          size="sm"
+          onClick={() => act(b.id, "accepted", "Request accepted.")}
+          disabled={busyId === b.id}
+        >
+          Accept
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => act(b.id, "declined", "Request declined.")}
+          disabled={busyId === b.id}
+        >
+          Decline
+        </Button>
+      </>
+    );
+  }
+
   return (
     <RevealGroup className="space-y-10">
+      <RevealItem>
+        <StatCards
+          loading={stats.loading && !stats.data}
+          failed={!!stats.error}
+          cards={[
+            {
+              label: "Total bookings",
+              value: String(stats.data?.total ?? 0),
+              hint: "Every booking requested of you, less declined and cancelled",
+              icon: <CalendarIcon width={18} height={18} />,
+            },
+            {
+              label: "Upcoming",
+              value: String(stats.data?.upcoming ?? 0),
+              hint: "Requested, accepted or under way — today or later",
+              icon: <ClockIcon width={18} height={18} />,
+            },
+            {
+              label: "Earned",
+              value: formatCents(stats.data?.earnedCents ?? 0),
+              hint: "Completed bookings at the price quoted — settled with the owner, not through Leash",
+              icon: <WalletIcon width={18} height={18} />,
+            },
+          ]}
+        />
+      </RevealItem>
+
       {/* Incoming requests */}
       <RevealItem>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-ink">
@@ -83,7 +158,7 @@ export function CaretakerDashboard({ user }: { user: User }) {
             </span>
           )}
         </h2>
-        {loading ? (
+        {loading && !data ? (
           <Skeleton className="h-28 w-full rounded-2xl" />
         ) : requests.length === 0 ? (
           <EmptyState
@@ -121,22 +196,7 @@ export function CaretakerDashboard({ user }: { user: User }) {
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="cta"
-                    size="sm"
-                    onClick={() => act(b.id, "accepted", "Request accepted.")}
-                    disabled={busyId === b.id}
-                  >
-                    Accept
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => act(b.id, "declined", "Request declined.")}
-                    disabled={busyId === b.id}
-                  >
-                    Decline
-                  </Button>
+                  {answer(b)}
                   <Link
                     to={`/booking/${b.id}`}
                     className="ml-1 text-sm text-charcoal/60 hover:text-ink"
@@ -153,7 +213,7 @@ export function CaretakerDashboard({ user }: { user: User }) {
       {/* Active */}
       <RevealItem>
         <h2 className="mb-4 text-lg font-semibold text-ink">Active bookings</h2>
-        {loading ? (
+        {loading && !data ? (
           <Skeleton className="h-[76px] w-full rounded-[12px]" />
         ) : active.length === 0 ? (
           <EmptyState
@@ -174,24 +234,21 @@ export function CaretakerDashboard({ user }: { user: User }) {
         )}
       </RevealItem>
 
-      {/* Availability + profile */}
       <RevealItem>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-ink">Your availability</h2>
-          <ButtonLink
-            to="/dashboard/caretaker-profile"
-            variant="outline"
-            size="sm"
-          >
-            Edit profile
-          </ButtonLink>
-        </div>
-        <AvailabilityCalendar availability={profile.availability} />
+        <h2 className="mb-3 text-lg font-semibold text-ink">Calendar</h2>
+        <ScheduleOverview
+          sources={sources}
+          version={version}
+          availability={profile.availability}
+          noun={NOUN}
+          emptyUpcoming="Nothing coming up. New requests appear here as soon as they arrive."
+          renderActions={(e) => (e.booking ? answer(e.booking) : null)}
+        />
       </RevealItem>
 
       {/* History */}
       {history.length > 0 && (
-        <section>
+        <RevealItem>
           <h2 className="mb-4 text-lg font-semibold text-ink">History</h2>
           <div className="space-y-3">
             {history.map((b) => (
@@ -203,8 +260,19 @@ export function CaretakerDashboard({ user }: { user: User }) {
               />
             ))}
           </div>
-        </section>
+        </RevealItem>
       )}
+
+      <RevealItem>
+        <ProfileStrip
+          label="Your listing"
+          name={user.name}
+          place={[user.address.city, user.address.state].filter(Boolean).join(", ")}
+          tags={profile.servicesOffered.map((s) => SERVICE_LABELS[s])}
+          facts={[`${profile.serviceRadiusMiles} mi radius`]}
+          editHref="/dashboard/caretaker-profile"
+        />
+      </RevealItem>
     </RevealGroup>
   );
 }

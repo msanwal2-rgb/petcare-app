@@ -2,7 +2,7 @@
 
 Where the build is, and what to pick up next.
 
-Last updated: **2026-10-18**, end of M10. **Every module in the plan is built**; what remains is deploying it — see §4 and `NEXT_PROMPT.md`.
+Last updated: **2026-11-08**, the client's dashboard round (§3-D). **Every module in the plan is built**; what remains is deploying it — see §4 and `NEXT_PROMPT.md`.
 
 - `REQUIREMENTS.md` — what to build
 - `BUILD_PLAN.md` — when, and the decisions
@@ -30,6 +30,7 @@ Last updated: **2026-10-18**, end of M10. **Every module in the plan is built**;
 | **M9** | Admin console | ✅ Done — 14 endpoints, 8 screens, the audit log; 108 tests. See §3-M9 |
 | — | Release hardening | ✅ Done — CI, a vulnerability gate, M5/M6 endpoint suites, code splitting, the two-site publish script. **The redeploy itself needs an elevated shell** — see §3-H |
 | **M10** | Adoption | ✅ Done — 16 endpoints, 5 screens and the shelter dashboard; 81 tests, including the full port of `adoption-transfer`. See §3-M10 |
+| — | **Dashboards** (client, 2026-11-08) | ✅ Vet, caretaker and owner done — stats cards, an interactive calendar, the upcoming list, vet rescheduling; 4 endpoints, 66 tests. **Shelter not started.** See §3-D |
 
 **M0 → M1 → M2 are strictly sequential, and M2 comes before anything that
 touches data.**
@@ -117,7 +118,7 @@ GET    /vets/search              GET  /vets/{id}
 GET    /vets/{id}/appointments
 GET    /users/{id}/vet-profile          PATCH /users/{id}/vet-profile
 GET    /appointments             POST /appointments       GET /appointments/{id}
-PATCH  /appointments/{id}/status
+PATCH  /appointments/{id}/status POST /appointments/{id}/reschedule   → the vet only (§3-D)
 POST   /appointments/{id}/visit-summary
 GET    /appointments/{id}/reviews   POST /appointments/{id}/reviews
 
@@ -129,6 +130,9 @@ PATCH  /orders/{id}/status                                 → ops
 GET    /ops/orders                                         → ops
 
 GET    /notifications             POST /notifications      { ids } — marks exactly those
+
+GET    /vets/{id}/stats          GET /caretakers/{id}/stats   GET /me/stats   → the dashboards' cards (§3-D)
+       the four schedule lists also take ?from=&to=&status= — a calendar window, soonest first
 
 GET    /membership               POST /membership/checkout
 POST   /membership/cancel        POST /membership/resume
@@ -174,6 +178,7 @@ in `AddLeashCore`:
 | `IWebhookEventStore`, `IStripeWebhookHandler`, `IStripeWebhookIntake` | `IWebhookEventRepository` |
 | `IPaymentProvider`, `ISubscriptionProvider` — demo or Stripe, chosen by `Payments:Provider` | |
 | `IAdminUserService`, `IAdminProfessionalService`, `IAdminFinanceService`, `IAdminConsoleService`, `IAuditLog`, `StaffGate` | `IAdminRepository`, `IAuditRepository` |
+| `IDashboardService` (the cards, §3-D) | `IDashboardRepository` (read-only aggregates) |
 
 Cross-cutting, settled and inherited by every later module:
 
@@ -229,10 +234,12 @@ Shell, design system (`components/ui/`), session store, API client layer and the
 route guard are all in place. `web/src/types/index.ts` is the reference
 project's file, copied, with `PublicConfig.googleEnabled` added.
 
-### Tests — 970 passing
+### Tests — 1036 passing
 
 | File | Covers |
 |---|---|
+| `DashboardServiceTests` | The dashboards (§3-D): what each card counts (declined/cancelled are not work, "upcoming" is live and not yet over, earnings are completed work at the recorded price, spending is the ledger net of refunds), the viewer's "today" and its clamp, the window reads (overlap, soonest first, status filter, keyset paging across shared start times), and rescheduling — vet only, requested/confirmed only, legality before authority, future only, the owner told in-app and by email, the conditional write |
+| `DashboardEndpointTests` | The same over HTTP: every new route 401 anonymous, somebody else's figures and calendar 404, the wire shapes, the window's query string validated into the envelope (each list's own status vocabulary), the unchanged newest-first list, reschedule 200/403/404/409/400 and the owner's notification |
 | `AdoptionTransferTests` | **Port of `tests/adoption-transfer.test.ts`, every case** — the specification for R6: preconditions, live engagements and the forced handover, the one-statement transfer (owner and `ownedSince` together), the record staying with the animal, severed grants both ways, rivals closed, one of two concurrent completions winning, reversal, the post-approval refund. Plus: reversal is audited, never refunds, needs support staff |
 | `AdoptionServiceTests` | The rules in the reference's `listings.ts`, `applications.ts`, `payment.ts` and `shelters.ts`, which it had no suite for: the directory (available only, definite-yes filters, radius in the total, cursor), drafts, listing an animal and its machine, applying and its refusals, who decides what, one approval per animal, the fee through the ledger, the response rate |
 | `AdoptionEndpointTests` | Adoption over HTTP: what is public, every private route 401, the nested wire shapes, 400/403/404/409 per refusal, the `live_engagements` payload, reversal needs support staff, and one adoption walked end to end — apply, review, approve, pay, complete, reverse |
@@ -265,6 +272,32 @@ project's file, copied, with `PublicConfig.googleEnabled` added.
 | `AuthEndpointTests` | REQUIREMENTS §3.4 acceptance over HTTP, rate limits, revocation |
 | `UserEndpointTests` | The two projections, self-only patching, the privilege boundary |
 | `MobileTokenTests` | Dual auth, rotation, replay detection |
+
+---
+
+## 3-D. The dashboards — client round (2026-11-08)
+
+The client reviewed the dashboards and asked for the vet's and caretaker's to
+be one layout, with the owner's sharing its top half. Vet, caretaker and owner
+are done; **the shelter dashboard is untouched**, waiting on the client's
+brief. The defaults below were the owner's choices on 2026-11-08.
+
+| | |
+|---|---|
+| **Layout (vet and caretaker)** | Three cards → requests → schedule → **Calendar**: the upcoming list beside a month calendar (stacked on a phone, list first), the selected day's panel floating under the calendar → past → the listing, small, at the foot (`ProfileStrip`, replacing the "Your clinic" panel). The weekly availability grid is gone; published days are shaded on the calendar instead, and the day panel lists their hours |
+| **Layout (owner)** | Three cards → the same calendar with bookings and vet visits together → everything the owner had before (pets, visits and deliveries in flight, store picks, bookings) |
+| **The cards** | Counted by the API over every row (`GET /vets/{id}/stats`, `/caretakers/{id}/stats`, `/me/stats`), gated like the list beside them. **Total** = requested, confirmed/accepted, in progress, completed (declined and cancelled were never work). **Upcoming** = live and not over before the viewer's today — the client sends `from` (local midnight), clamped server-side to within 26 h so it cannot count history. **Earned** = the recorded price of *completed* work; bookings and visits are **not charged through Leash**, so the card says "settled with the owner, not through Leash". **Spent** (owner) = what the ledger captured less refunds — store, Leash Plus, adoption fees — never the quoted price of care |
+| **The calendar's reads** | The four list routes take `from`/`to`/`status`: with `from` they return the rows that *overlap* the window, soonest first, still keyset cursor pages (`ScheduleWindowSql`). Without `from` they are unchanged. `to` without `from`, `to ≤ from`, a status from the other vocabulary (`accepted` on appointments) or `status` without `from` is a 400 in the envelope. The calendar reads the visible six weeks, active statuses only (declined/cancelled are left off); the upcoming list merges sources across cursor pages without breaking order |
+| **Reschedule** | `POST /appointments/{id}/reschedule { startDateTime, endDateTime }`. **The vet only** (owner 403, anyone else 404); **requested or confirmed only** (409, checked before the actor); the new start must be in the future (400); no lead time (the clinic is choosing). The status does not change, so the owner can still cancel. Written conditionally on the status (a racing cancellation wins), and the owner's notice — new kind `appointment_rescheduled`, in-app and by email through the outbox — commits with it. The notice carries no time: the server does not know the owner's zone, and the appointment page shows it in theirs. Same time again is a no-op that tells nobody. A **Reschedule** button on the vet's rows, the day panel and the appointment page |
+| **No schema change** | `notifications.kind` is text. `db/changes` still ends at 005 |
+
+**Walked** (headless Chrome, `petapp_dev`): Dr Ruiz's cards, July 12 on the
+calendar showing a3 with Maya, Biscuit, the fee, the notes and her open hours;
+rescheduled a3 from the day panel to the 20th of next month → it appeared in
+her upcoming list and Maya's, and Maya's bell had "Your vet appointment has a
+new time". Elena's July 20 showed Tom's boarding that began on the 18th. Phone
+width: list above calendar. No console errors; the only failed calls were the
+expected signed-out `401 /me`. **a3 and the notice were restored afterwards.**
 
 ---
 
@@ -989,7 +1022,9 @@ because §4 requires the set ported in full, together, and reviewed once.
 | | ~~`verify.sh` cannot run in CI.~~ It can: the baseline is committed (the option chosen over a mode that skips the delta half, which would test nothing) |
 | | ~~One 847 kB bundle.~~ **Route-level splitting** (`web/src/lazyPages.ts`): the entry chunk is 404 kB (120 kB gzipped), every page but home/login/signup/404 loads on first visit, plus a 234 kB shared chunk (framer-motion) |
 | | **The parity pass's three API questions — decided 2026-10-10.** (1) **Clinic phone: yes.** `vet_profiles."clinicPhone"` (db/changes/003), on the wire as `clinic.phone`, set by the vet on their profile form, shown as a `tel:` link in the emergency panel. Not backfilled from `users.phone`, so a live database never publishes a vet's personal number; the dev seed carries clinic numbers. (2) **Allergen flags on store cards: no.** The product page and cart show the server's finding; the catalogue search takes no pet. (3) **Reviewer names for signed-out visitors: yes.** `GET /users?ids=` is public, like `GET /users/{id}` — the public projection only, capped at 50. The unfiltered listing still needs a session and a Development host. Both pinned by tests (`VetServiceTests`, `UserEndpointTests`) |
-| | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past" |
+| | **Dashboards read the first 100** bookings, appointments and orders (the API's page maximum), newest first, and split them client-side as the reference did with unpaginated arrays. Fine at demo scale; a user with more than 100 bookings would not see the oldest in "Past". **Since §3-D the cards, the calendar and the upcoming list no longer depend on this** — they are counted and windowed by the API; only the request/schedule/past lists still read the hundred |
+| | **The dev seed's bookings and appointments are all in June–July 2026**, so on `petapp_dev` today every "Upcoming" card reads 0 and the current month is empty; page back to July to see the calendar populated. Not changed, because the suites pin the seed's dates |
+| | **The header flickers if a page comes to rest at about 8px of scroll.** Found during the §3-D walk, there before it: `useScrolled(8)` shrinks the header past 8px, which shortens the page, which can pull the scroll back under the threshold — a 1px loop. Only at that exact resting point; a hysteresis (e.g. on at 16px, off at 4px) would end it |
 | | `web/src/assets/{hero.png,react.svg,vite.svg}` are Vite template leftovers. The landing page uses the reference's Unsplash hero (`HERO_PHOTO`), not `hero.png`, so all three can go |
 
 | ❓ | **R7 — who may override the live-engagement refusal.** Built as the reference: the shelter, explicitly, after the dashboard names what is in the way; and any live booking or vet appointment refuses, not only boarding. If R7's "staff override" meant support staff only, it is a check in `AdoptionTransferService.CompleteAsync` and a button in the console. §3-M10 has the reasoning |

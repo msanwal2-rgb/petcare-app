@@ -25,10 +25,18 @@ public sealed class BookingsController(
     IMessageService messages,
     IReviewService reviews) : ControllerBase
 {
+    /// <summary>
+    /// The caller's own bookings, newest first — or, with <c>from</c>, a window
+    /// of the calendar, soonest first (<see cref="ScheduleListQuery"/>).
+    /// </summary>
     [HttpGet("bookings")]
     public async Task<IActionResult> ListMine(
-        [FromQuery] string? cursor, [FromQuery] int? limit, CancellationToken ct)
-        => Ok(await bookings.ListMineAsync(User.RequireUserId(), cursor, limit ?? 24, ct));
+        [FromQuery] BookingListQuery query, CancellationToken ct)
+        => query.ToWindow() is { } window
+            ? Ok(await bookings.ListMyScheduleAsync(
+                User.RequireUserId(), window, query.Cursor, query.Limit ?? 24, ct))
+            : Ok(await bookings.ListMineAsync(
+                User.RequireUserId(), query.Cursor, query.Limit ?? 24, ct));
 
     [HttpGet("bookings/{id}")]
     public async Task<IActionResult> Get(string id, CancellationToken ct)

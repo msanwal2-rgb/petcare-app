@@ -101,6 +101,84 @@ public sealed class AppointmentService(
         return new AppointmentPage([.. rows.Select(a => a.ToDto())], next);
     }
 
+    public async Task<AppointmentPage> ListMyScheduleAsync(
+        string callerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default)
+    {
+        var (rows, next) = await appointments.ListByOwnerInWindowAsync(
+            callerId, window, cursor, limit, ct: ct);
+        return new AppointmentPage([.. rows.Select(a => a.ToDto())], next);
+    }
+
+    public async Task<AppointmentPage?> ListVetScheduleAsync(
+        string callerId, string vetId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default)
+    {
+        // The same gate as the clinic's list: this is the same diary, by date.
+        if (!await access.OwnsVetProfileAsync(callerId, vetId, ct: ct)) return null;
+
+        var (rows, next) = await appointments.ListByVetInWindowAsync(
+            vetId, window, cursor, limit, ct: ct);
+        return new AppointmentPage([.. rows.Select(a => a.ToDto())], next);
+    }
+
+    /// <summary>
+    /// The states an appointment can be moved out of: it has not started, and
+    /// it is still going to happen.
+    /// </summary>
+    private static readonly string[] Reschedulable =
+        [AppointmentStatuses.Requested, AppointmentStatuses.Confirmed];
+
+    /// <summary>
+    /// Move an appointment to a new time (see the interface for the rules).
+    ///
+    /// Checked in the same order as a status move — the shape of the input,
+    /// then legality, then authority — and written conditionally on the status
+    /// still being one it can move from, so a cancellation that lands between
+    /// the read and the write wins rather than leaving a cancelled visit at a
+    /// new time. The owner's notice is written in the same transaction (N1).
+    ///
+    /// No lead time: that rule protects a clinic from short-notice requests,
+    /// and here the clinic is the one choosing the time.
+    /// </summary>
+    public async Task<(AppointmentTimelineDto? Appointment, AppointmentFailure? Failure)>
+        RescheduleAsync(string callerId, string appointmentId,
+            RescheduleAppointmentRequest input, CancellationToken ct = default)
+    {
+        if (input.EndDateTime <= input.StartDateTime)
+            return (null, AppointmentFailure.BadDates);
+
+        if (input.StartDateTime <= Ids.Now())
+            return (null, AppointmentFailure.RescheduleInPast);
+
+        await using var scope = await unitOfWork.BeginAsync(ct);
+
+        var appointment = await appointments.GetByIdAsync(appointmentId, scope, ct);
+        if (appointment is null) return (null, AppointmentFailure.NotFound);
+
+        var actor = await ActorFor(callerId, appointment, scope, ct);
+        if (actor is null) return (null, AppointmentFailure.NotParticipant);
+
+        if (!Reschedulable.Contains(appointment.Status))
+            return (null, AppointmentFailure.NotReschedulable);
+
+        if (actor != AppointmentActor.Vet) return (null, AppointmentFailure.WrongActor);
+
+        if (appointment.StartDateTime == input.StartDateTime
+            && appointment.EndDateTime == input.EndDateTime)
+            return (appointment.ToDto(), null);
+
+        var moved = await appointments.RescheduleAsync(
+            appointmentId, input.StartDateTime, input.EndDateTime, Reschedulable, scope, ct);
+        if (moved is null) return (null, AppointmentFailure.NotReschedulable);
+
+        await notifier.NotifyAsync(
+            moved.OwnerId, Notices.AppointmentRescheduled(moved.Id, moved.Reason), scope, ct);
+
+        await scope.CommitAsync(ct);
+        return (moved.ToDto(), null);
+    }
+
     /// <summary>
     /// Book an appointment.
     ///

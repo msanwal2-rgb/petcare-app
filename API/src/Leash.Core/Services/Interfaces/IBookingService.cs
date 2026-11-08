@@ -78,6 +78,19 @@ public interface IBookingService
         string callerId, string caretakerId, string? cursor, int limit,
         CancellationToken ct = default);
 
+    /// <summary>The caller's own bookings that overlap a window, soonest first.</summary>
+    Task<BookingPage> ListMyScheduleAsync(
+        string callerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// A caretaker's bookings that overlap a window, soonest first. Null unless
+    /// the caller owns the caretaker profile.
+    /// </summary>
+    Task<BookingPage?> ListCaretakerScheduleAsync(
+        string callerId, string caretakerId, ScheduleWindow window, string? cursor, int limit,
+        CancellationToken ct = default);
+
     Task<(BookingDto? Booking, BookingFailure? Failure)> CreateAsync(
         string callerId, CreateBookingRequest input, CancellationToken ct = default);
 

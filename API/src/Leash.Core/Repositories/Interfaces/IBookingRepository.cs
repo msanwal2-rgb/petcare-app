@@ -1,3 +1,4 @@
+using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
 using Leash.Core.Persistence;
 
@@ -22,6 +23,19 @@ public interface IBookingRepository
 
     Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListByCaretakerAsync(
         string caretakerId, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// The bookings this person made that overlap <paramref name="window"/>,
+    /// soonest first — the owner's calendar.
+    /// </summary>
+    Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListByOwnerInWindowAsync(
+        string ownerId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>One caretaker's bookings that overlap <paramref name="window"/>, soonest first.</summary>
+    Task<(IReadOnlyList<BookingEntity> Rows, string? NextCursor)> ListByCaretakerInWindowAsync(
+        string caretakerId, ScheduleWindow window, string? cursor, int limit,
         ITransactionScope? scope = null, CancellationToken ct = default);
 
     Task<BookingEntity> CreateAsync(

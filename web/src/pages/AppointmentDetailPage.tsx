@@ -18,6 +18,7 @@ import { AuthRequired } from "@/components/AuthRequired";
 import { Avatar } from "@/components/Avatar";
 import { AppointmentStatusBadge } from "@/components/vet/AppointmentStatusBadge";
 import { VisitSummaryForm } from "@/components/vet/VisitSummaryForm";
+import { RescheduleDialog } from "@/components/dashboard/schedule/RescheduleDialog";
 import { MedicalRecordCard } from "@/components/vet/MedicalRecordCard";
 import { ReviewCard } from "@/components/ReviewCard";
 import { LeaveReview } from "@/components/reviews/LeaveReview";
@@ -62,6 +63,7 @@ export default function AppointmentDetailPage() {
   const { id = "" } = useParams();
   const { currentUser, hasHydrated } = useSession();
   const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const {
     data: appointment,
@@ -210,6 +212,11 @@ export default function AppointmentDetailPage() {
               Start visit
             </Button>
           )}
+          {isVet && (appointment.status === "requested" || appointment.status === "confirmed") && (
+            <Button variant="outline" disabled={busy} onClick={() => setMoving(true)}>
+              Reschedule
+            </Button>
+          )}
           {isVet && appointment.status === "in_progress" && (
             <p className="self-center text-sm text-charcoal/65">
               Write the visit summary below to complete the visit.
@@ -229,6 +236,18 @@ export default function AppointmentDetailPage() {
             </Button>
           )}
         </div>
+      )}
+
+      {moving && (
+        <RescheduleDialog
+          appointment={appointment}
+          ownerName={owner?.name ?? "The owner"}
+          onClose={() => setMoving(false)}
+          onDone={() => {
+            setMoving(false);
+            reload();
+          }}
+        />
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

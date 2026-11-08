@@ -68,11 +68,13 @@ public sealed class CaretakersController(
     [HttpGet("caretakers/{id}/bookings")]
     [Authorize]
     public async Task<IActionResult> ListBookings(
-        string id, [FromQuery] string? cursor, [FromQuery] int? limit,
-        CancellationToken ct)
+        string id, [FromQuery] BookingListQuery query, CancellationToken ct)
     {
-        var page = await bookings.ListForCaretakerAsync(
-            User.RequireUserId(), id, cursor, limit ?? 24, ct);
+        var page = query.ToWindow() is { } window
+            ? await bookings.ListCaretakerScheduleAsync(
+                User.RequireUserId(), id, window, query.Cursor, query.Limit ?? 24, ct)
+            : await bookings.ListForCaretakerAsync(
+                User.RequireUserId(), id, query.Cursor, query.Limit ?? 24, ct);
 
         return page is null
             ? ApiResults.NotFound($"Caretaker {id} not found")

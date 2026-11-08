@@ -1,5 +1,7 @@
 import { Link } from "react-router";
+import { useMemo } from "react";
 import type { User, Booking, Order, VetAppointment } from "@/types";
+import { getMyStats } from "@/api/dashboard";
 import { listMyPets } from "@/api/pets";
 import { listMyBookings } from "@/api/bookings";
 import { getCaretaker, type CaretakerWithUser } from "@/api/caretakers";
@@ -15,8 +17,20 @@ import { OrderStatusBadge } from "@/components/store/OrderStatusBadge";
 import { RecommendedForPet } from "@/components/store/RecommendedForPet";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { PlusIcon, PawIcon, StethoscopeIcon, TruckIcon } from "@/components/ui/icons";
+import {
+  CalendarIcon,
+  ClockIcon,
+  PlusIcon,
+  PawIcon,
+  StethoscopeIcon,
+  TruckIcon,
+  WalletIcon,
+} from "@/components/ui/icons";
+import { startOfTodayIso } from "@/lib/calendar";
 import { formatCents, formatDate, formatRange } from "@/lib/utils";
+import { ScheduleOverview } from "./schedule/ScheduleOverview";
+import { StatCards } from "./schedule/StatCards";
+import { ownerBookingSource, ownerVisitSource } from "./schedule/sources";
 
 const UPCOMING = new Set(["requested", "accepted", "in_progress"]);
 const APPOINTMENT_UPCOMING = new Set(["requested", "confirmed", "in_progress"]);
@@ -39,11 +53,28 @@ const ORDER_IN_FLIGHT = new Set([
  */
 const PAGE = { limit: 100 };
 
+const NOUN = { one: "booking", many: "bookings" };
+
+/**
+ * The owner's dashboard. The top matches the vet's and caretaker's (the
+ * client's call): three cards, then the upcoming list beside a calendar of
+ * bookings and vet visits together. Under that, what the owner had before —
+ * pets, visits and deliveries in flight, store picks, bookings.
+ */
 export function OwnerDashboard({ user }: { user: User }) {
   const { data: pets, loading: loadingPets } = useAsync(
     () => listMyPets(),
     [user.id]
   );
+
+  const stats = useAsync(() => getMyStats(startOfTodayIso()), [user.id]);
+
+  // Built once the pets are in, so every engagement can name its animal.
+  const sources = useMemo(() => {
+    if (!pets) return null;
+    const byId = new Map(pets.map((p) => [p.id, p]));
+    return [ownerVisitSource(byId), ownerBookingSource(byId)];
+  }, [pets]);
   const { data, loading: loadingBookings } = useAsync(async () => {
     const { items: bookings } = await listMyBookings(PAGE);
     const ids = [...new Set(bookings.map((b) => b.caretakerId))];
@@ -68,6 +99,47 @@ export function OwnerDashboard({ user }: { user: User }) {
 
   return (
     <RevealGroup className="space-y-10">
+      <RevealItem>
+        <StatCards
+          loading={stats.loading && !stats.data}
+          failed={!!stats.error}
+          cards={[
+            {
+              label: "Total spent",
+              value: formatCents(stats.data?.spentCents ?? 0),
+              hint: "Store orders, Leash Plus and adoption fees, after refunds",
+              icon: <WalletIcon width={18} height={18} />,
+            },
+            {
+              label: "Total requests",
+              value: String(stats.data?.requests ?? 0),
+              hint: "Bookings and vet visits, less declined and cancelled",
+              icon: <CalendarIcon width={18} height={18} />,
+            },
+            {
+              label: "Upcoming",
+              value: String(stats.data?.upcoming ?? 0),
+              hint: "Requested, confirmed or under way — today or later",
+              icon: <ClockIcon width={18} height={18} />,
+            },
+          ]}
+        />
+      </RevealItem>
+
+      <RevealItem>
+        <h2 className="mb-3 text-lg font-semibold text-ink">Calendar</h2>
+        {sources ? (
+          <ScheduleOverview
+            sources={sources}
+            version={0}
+            noun={NOUN}
+            emptyUpcoming="Nothing coming up. Book a caretaker or a vet and it will show here."
+          />
+        ) : (
+          <Skeleton className="h-80 w-full rounded-2xl" />
+        )}
+      </RevealItem>
+
       {/* Pets */}
       <RevealItem>
         <section>

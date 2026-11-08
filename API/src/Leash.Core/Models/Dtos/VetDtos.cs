@@ -157,6 +157,14 @@ public sealed record CreateAppointmentRequest(
 /// <summary>A status move. The actor is derived from the caller, never sent.</summary>
 public sealed record UpdateAppointmentStatusRequest(string Status);
 
+/// <summary>
+/// The vet moving an appointment to a new time. Only the window — the fee,
+/// the pet and the reason stay what the owner asked for.
+/// </summary>
+public sealed record RescheduleAppointmentRequest(
+    DateTimeOffset StartDateTime,
+    DateTimeOffset EndDateTime);
+
 /// <summary>A page of appointments plus the cursor for the next one.</summary>
 public sealed record AppointmentPage(AppointmentTimelineDto[] Items, string? NextCursor);
 

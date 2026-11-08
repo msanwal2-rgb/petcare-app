@@ -1,5 +1,6 @@
 using System.Text;
 using Dapper;
+using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
 using Leash.Core.Persistence;
 using Leash.Core.Repositories.Interfaces;
@@ -102,6 +103,61 @@ public sealed class AppointmentRepository(NpgsqlDataSource db) : IAppointmentRep
         }
 
         return (rows, nextCursor);
+    }
+
+    public Task<(IReadOnlyList<VetAppointmentEntity> Rows, string? NextCursor)> ListByOwnerInWindowAsync(
+        string ownerId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+        => ListWindowAsync("\"ownerId\"", ownerId, window, cursor, limit, scope, ct);
+
+    public Task<(IReadOnlyList<VetAppointmentEntity> Rows, string? NextCursor)> ListByVetInWindowAsync(
+        string vetId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+        => ListWindowAsync("\"vetId\"", vetId, window, cursor, limit, scope, ct);
+
+    private async Task<(IReadOnlyList<VetAppointmentEntity> Rows, string? NextCursor)> ListWindowAsync(
+        string column, string value, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope, CancellationToken ct)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        var (where, parameters) = ScheduleWindowSql.Build(column, value, window, cursor, limit);
+
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        var rows = (await session.Connection.QueryAsync<VetAppointmentEntity>(
+            new CommandDefinition(
+                $"""
+                 SELECT {Columns} FROM vet_appointments
+                 {where}
+                 {ScheduleWindowSql.OrderBy}
+                 """,
+                parameters, session.Transaction, cancellationToken: ct))).ToList();
+
+        string? nextCursor = null;
+        if (rows.Count > limit)
+        {
+            rows.RemoveAt(rows.Count - 1);
+            nextCursor = Cursor.Encode(rows[^1].StartDateTime, rows[^1].Id);
+        }
+
+        return (rows, nextCursor);
+    }
+
+    public async Task<VetAppointmentEntity?> RescheduleAsync(
+        string id, DateTimeOffset startDateTime, DateTimeOffset endDateTime,
+        IReadOnlyCollection<string> fromStatuses,
+        ITransactionScope? scope = null, CancellationToken ct = default)
+    {
+        await using var session = await DbSession.OpenAsync(db, scope, ct);
+        return await session.Connection.QuerySingleOrDefaultAsync<VetAppointmentEntity>(
+            new CommandDefinition(
+                $"""
+                 UPDATE vet_appointments
+                 SET "startDateTime" = @startDateTime, "endDateTime" = @endDateTime
+                 WHERE id = @id AND status = ANY(@fromStatuses)
+                 RETURNING {Columns}
+                 """,
+                new { id, startDateTime, endDateTime, fromStatuses = fromStatuses.ToArray() },
+                session.Transaction, cancellationToken: ct));
     }
 
     public async Task<VetAppointmentEntity> CreateAsync(

@@ -26,19 +26,31 @@ export interface CreateBookingInput {
   notes?: string;
 }
 
+/**
+ * A list read. Without `from` it is newest first by when it was requested.
+ * With `from` it is a window of the calendar, soonest first: everything not
+ * over before `from` and, given `to`, starting before it — so a stay that
+ * began yesterday is in today's window. `status` (comma-separated) filters it.
+ */
+export interface BookingListParams {
+  cursor?: string;
+  limit?: number;
+  from?: string;
+  to?: string;
+  status?: string;
+}
+
 /** GET /bookings -> the caller's own bookings as an owner, newest first. */
-export function listMyBookings(
-  params: { cursor?: string; limit?: number } = {},
-): Promise<BookingPage> {
-  return getJson<BookingPage>(`/bookings${qs(params)}`);
+export function listMyBookings(params: BookingListParams = {}): Promise<BookingPage> {
+  return getJson<BookingPage>(`/bookings${qs({ ...params })}`);
 }
 
 /** GET /caretakers/:id/bookings -> that caretaker's queue. Theirs alone. */
 export function listCaretakerBookings(
   caretakerId: string,
-  params: { cursor?: string; limit?: number } = {},
+  params: BookingListParams = {},
 ): Promise<BookingPage> {
-  return getJson<BookingPage>(`/caretakers/${caretakerId}/bookings${qs(params)}`);
+  return getJson<BookingPage>(`/caretakers/${caretakerId}/bookings${qs({ ...params })}`);
 }
 
 /** GET /bookings/:id -> either party only; 404 to anyone else. */

@@ -885,6 +885,7 @@ export type NotificationKind =
   | "appointment_confirmed"
   | "appointment_declined"
   | "appointment_completed"
+  | "appointment_rescheduled"
   | "order_shipped"
   | "order_out_for_delivery"
   | "order_delivered"

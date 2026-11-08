@@ -69,11 +69,13 @@ public sealed class VetsController(
     [HttpGet("vets/{id}/appointments")]
     [Authorize]
     public async Task<IActionResult> ListAppointments(
-        string id, [FromQuery] string? cursor, [FromQuery] int? limit,
-        CancellationToken ct)
+        string id, [FromQuery] AppointmentListQuery query, CancellationToken ct)
     {
-        var page = await appointments.ListForVetAsync(
-            User.RequireUserId(), id, cursor, limit ?? 24, ct);
+        var page = query.ToWindow() is { } window
+            ? await appointments.ListVetScheduleAsync(
+                User.RequireUserId(), id, window, query.Cursor, query.Limit ?? 24, ct)
+            : await appointments.ListForVetAsync(
+                User.RequireUserId(), id, query.Cursor, query.Limit ?? 24, ct);
 
         return page is null ? ApiResults.NotFound($"Vet {id} not found") : Ok(page);
     }

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { TONE_DOT } from "@/lib/statusTone";
 
 /**
  * One badge for every status in the app — booking, vet appointment, order.
@@ -24,15 +25,6 @@ const STYLES: Record<StatusTone, string> = {
   muted: "bg-charcoal/8 text-charcoal/70 border-charcoal/15",
 };
 
-const DOT: Record<StatusTone, string> = {
-  pending: "#F2A93B",
-  active: "#1B3B36",
-  progress: "#2F6F5E",
-  done: "#7d938a",
-  failed: "#E85C41",
-  muted: "#9aa0a2",
-};
-
 export function StatusBadge({
   tone,
   label,
@@ -55,7 +47,7 @@ export function StatusBadge({
           "h-1.5 w-1.5 rounded-full",
           tone === "progress" && "animate-pulse"
         )}
-        style={{ backgroundColor: DOT[tone] }}
+        style={{ backgroundColor: TONE_DOT[tone] }}
         aria-hidden
       />
       {label}

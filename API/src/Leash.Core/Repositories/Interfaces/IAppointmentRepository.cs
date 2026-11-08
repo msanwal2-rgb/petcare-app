@@ -1,3 +1,4 @@
+using Leash.Core.Models.Dtos;
 using Leash.Core.Models.Entities;
 using Leash.Core.Persistence;
 
@@ -47,8 +48,33 @@ public interface IAppointmentRepository
         string vetId, string? cursor, int limit,
         ITransactionScope? scope = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// The visits this person booked that overlap <paramref name="window"/>,
+    /// soonest first — the owner's calendar.
+    /// </summary>
+    Task<(IReadOnlyList<VetAppointmentEntity> Rows, string? NextCursor)> ListByOwnerInWindowAsync(
+        string ownerId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>One clinic's visits that overlap <paramref name="window"/>, soonest first.</summary>
+    Task<(IReadOnlyList<VetAppointmentEntity> Rows, string? NextCursor)> ListByVetInWindowAsync(
+        string vetId, ScheduleWindow window, string? cursor, int limit,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
     Task<VetAppointmentEntity> CreateAsync(
         VetAppointmentEntity appointment,
+        ITransactionScope? scope = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Move the visit's window, but only while its status is one of
+    /// <paramref name="fromStatuses"/>. Null when it is gone or has moved on —
+    /// a cancellation racing a reschedule wins cleanly rather than leaving a
+    /// cancelled visit at a new time. Whether the caller may do it is the
+    /// service's question.
+    /// </summary>
+    Task<VetAppointmentEntity?> RescheduleAsync(
+        string id, DateTimeOffset startDateTime, DateTimeOffset endDateTime,
+        IReadOnlyCollection<string> fromStatuses,
         ITransactionScope? scope = null, CancellationToken ct = default);
 
     /// <summary>

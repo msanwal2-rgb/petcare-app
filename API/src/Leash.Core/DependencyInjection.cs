@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddSingleton<IAuditRepository, AuditRepository>();
         services.AddSingleton<IShelterRepository, ShelterRepository>();
         services.AddSingleton<IAdoptionRepository, AdoptionRepository>();
+        services.AddSingleton<IDashboardRepository, DashboardRepository>();
 
         // ── Services ─────────────────────────────────────────────────────
         // Singletons: every one of these is stateless and holds only the data
@@ -103,6 +104,7 @@ public static class DependencyInjection
         services.AddSingleton<IOrderLifecycle, OrderLifecycle>();
         services.AddSingleton<IOrderService, OrderService>();
         services.AddSingleton<IFulfilmentService, FulfilmentService>();
+        services.AddSingleton<IDashboardService, DashboardService>();
 
         // ── Notifications ────────────────────────────────────────────────
         // INotifier is the one gate (N1) and is handed only to the status

@@ -12,6 +12,9 @@ public static class NotificationKinds
     public const string AppointmentConfirmed = "appointment_confirmed";
     public const string AppointmentDeclined = "appointment_declined";
     public const string AppointmentCompleted = "appointment_completed";
+
+    /// <summary>The vet moved the visit to a new time. New with the dashboard calendar.</summary>
+    public const string AppointmentRescheduled = "appointment_rescheduled";
     public const string OrderShipped = "order_shipped";
     public const string OrderOutForDelivery = "order_out_for_delivery";
     public const string OrderDelivered = "order_delivered";
