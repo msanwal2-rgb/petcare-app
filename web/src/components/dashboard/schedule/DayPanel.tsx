@@ -64,10 +64,13 @@ const INK = "#1B3B36";
 function Flight({
   from,
   target,
+  onLand,
   onDone,
 }: {
   from: DOMRect;
   target: RefObject<HTMLElement | null>;
+  /** The box is over the panel — time to show the real one under it. */
+  onLand: () => void;
   onDone: () => void;
 }) {
   const [scope, animate] = useAnimate<HTMLDivElement>();
@@ -77,6 +80,7 @@ function Flight({
     const el = scope.current;
     const to = target.current;
     if (!el || !to) {
+      onLand();
       onDone();
       return;
     }
@@ -101,8 +105,12 @@ function Flight({
         opacity: { duration: FLIGHT + 0.12, times: [0, 0.55, 0.8, 1], ease: "linear" },
       }
     );
+    const landing = window.setTimeout(onLand, FLIGHT * 600);
     controls.then(onDone);
-    return () => controls.stop();
+    return () => {
+      window.clearTimeout(landing);
+      controls.stop();
+    };
     // Runs once, for the flight it was mounted for.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -170,12 +178,35 @@ export function DayPanel({
   const sectionRef = useRef<HTMLElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number | "auto">("auto");
-  // The flight runs once, when the panel opens from a day box — not for
-  // anyone who asked their system for less motion.
+
+  // ── One flight per opening ──
+  //
+  // Every time the panel is opened from a day box, the box flies — not only
+  // the first time. A fresh mount starts with a flight; so does a panel that
+  // is reopened while it is still folding away, because AnimatePresence
+  // brings that same instance back rather than mounting a new one (which is
+  // why a flight set up once at mount flew only the first time). So this
+  // follows the `origin` prop: a new origin is a new opening. Switching days
+  // passes no origin and flies nothing. Not for anyone who asked their system
+  // for less motion.
   const reduceMotion = useReducedMotion();
-  const [openedByFlight] = useState(() => !!origin && !reduceMotion);
-  const [flying, setFlying] = useState(openedByFlight);
-  const flew = useRef(openedByFlight);
+  const [flight, setFlight] = useState<{ id: number; from: DOMRect } | null>(() =>
+    origin && !reduceMotion ? { id: 0, from: origin } : null
+  );
+  const [landed, setLanded] = useState(false);
+  const [seenOrigin, setSeenOrigin] = useState(origin);
+  if (origin !== seenOrigin) {
+    // React's "adjust state when a prop changes" pattern: during render, so
+    // the revived panel never paints a frame without its flight.
+    setSeenOrigin(origin);
+    if (origin && !reduceMotion) {
+      setFlight((f) => ({ id: (f?.id ?? 0) + 1, from: origin }));
+      setLanded(false);
+    }
+  }
+  const flying = flight !== null;
+  // The real panel stays out of sight until the box lands on it.
+  const hidePanel = flying && !landed;
 
   // The height follows the content, so switching to a busier or quieter day
   // grows or shrinks the panel smoothly instead of snapping.
@@ -202,10 +233,9 @@ export function DayPanel({
       if (r.top < header || r.bottom > window.innerHeight) {
         el.scrollIntoView({ behavior: "smooth", block: fits ? "nearest" : "start" });
       }
-    }, (flew.current ? FLIGHT + 0.1 : DURATION.base) * 1000 + 60);
-    flew.current = false;
+    }, (flying ? FLIGHT + 0.1 : DURATION.base) * 1000 + 60);
     return () => window.clearTimeout(id);
-  }, [day, loading]);
+  }, [day, loading, flying, flight?.id]);
 
   return (
     <motion.div
@@ -214,7 +244,7 @@ export function DayPanel({
       exit={{ height: 0, opacity: 0 }}
       transition={{
         // In step with the flight, so the page makes room as the box arrives.
-        height: { duration: openedByFlight ? FLIGHT : DURATION.base, ease: EASE_GLIDE },
+        height: { duration: flying ? FLIGHT : DURATION.base, ease: EASE_GLIDE },
         opacity: { duration: DURATION.fast, ease: EASE_OUT },
       }}
       // Room either side and below for the shadow, which the fold would clip.
@@ -224,9 +254,9 @@ export function DayPanel({
         <motion.section
           ref={sectionRef}
           // Under a flight, the real panel appears as the box lands on it.
-          initial={openedByFlight ? { opacity: 0 } : false}
-          animate={{ opacity: 1 }}
-          transition={{ delay: openedByFlight ? FLIGHT * 0.6 : 0, duration: 0.25, ease: EASE_OUT }}
+          initial={hidePanel ? { opacity: 0 } : false}
+          animate={{ opacity: hidePanel ? 0 : 1 }}
+          transition={hidePanel ? { duration: 0 } : { duration: 0.25, ease: EASE_OUT }}
           aria-label={`Schedule for ${relativeDayLabel(date)}`}
           aria-live="polite"
           className="relative mt-3 scroll-mt-24 scroll-mb-6 rounded-2xl border border-mist bg-white p-4 shadow-lg shadow-ink/5 [--pad:1rem] sm:p-5 sm:[--pad:1.25rem]"
@@ -300,8 +330,14 @@ export function DayPanel({
         </motion.section>
       </div>
       {/* After the panel, so its ref is attached by the time the flight measures it. */}
-      {flying && origin && (
-        <Flight from={origin} target={sectionRef} onDone={() => setFlying(false)} />
+      {flight && (
+        <Flight
+          key={flight.id}
+          from={flight.from}
+          target={sectionRef}
+          onLand={() => setLanded(true)}
+          onDone={() => setFlight(null)}
+        />
       )}
     </motion.div>
   );
